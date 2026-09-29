@@ -4,8 +4,9 @@ Open Meridian's plugin UI kit. A plugin's page links it and looks like Open
 Meridian with no design work: the brand's type, spacing, radii and shadows;
 the person's colour scheme, light or dark, and their market-direction
 convention (green-up or red-up), handed over by the dashboard's frame; the platform's components in CSS; and web components for what trading
-pages need: a data grid, charts, an as-of control, an instrument picker and a
-live feed that never misses a change.
+pages need: a data grid (with a high-rate mode for streams), charts, an as-of
+control, an instrument picker, a live feed that never misses a change, and
+resizable, rearrangeable panels.
 
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
@@ -15,7 +16,7 @@ from anywhere but itself. The design is meridian-design's
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
-- [Web components](#web-components): [om-grid](#om-grid), [om-chart](#om-chart), [om-asof](#om-asof), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live)
+- [Web components](#web-components): [om-grid](#om-grid) (and its [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The scheme contract](#the-scheme-contract)
 - [Building and checking](#building-and-checking)
@@ -148,6 +149,10 @@ conflated to one paint per frame.
 | `dense` | The dense table |
 | `sticky-head` | A scrolling body under a fixed head, `--om-grid-height` tall (default 28rem) |
 | `caption`, `empty` | The table's caption (for a screen reader), and what an empty grid says |
+| `high-rate` | [High-rate mode](#high-rate-mode), for streams: virtual scrolling, cell-level updates, a change flash |
+| `freeze-sort` | Hold the order while rows change; removing it sorts again |
+| `row-height` | High-rate mode's fixed row height in pixels (default 36, dense 28) |
+| `no-flash` | High-rate mode without the change flash |
 
 | Property or method | |
 |---|---|
@@ -158,11 +163,73 @@ conflated to one paint per frame.
 | `flush()` | Apply queued updates now |
 | `sortBy(key, "ascending" \| "descending")`, `sort` | Sort in script |
 | `getRow(key)` | A row by key |
+| `size` | How many rows it holds |
+| `highRate`, `freezeSort` | The `high-rate` and `freeze-sort` attributes, as booleans |
+| `scrollToRow(key, { focus })` | Bring a row into view (in high-rate mode, drawing it first), and the keyboard to it with `focus: true`. False for an unknown key |
 
 | Event | `detail` |
 |---|---|
 | `om-sort` | `{ key, direction }`, when a header is clicked. Cancel it (`preventDefault`) to sort on the server and `setRows` the result |
 | `om-row` | `{ key, row }`, when a row is clicked |
+
+#### High-rate mode
+
+For a stream: thousands of rows taking hundreds of changes a second, such as a
+quote board or a blotter. The same element and the same API, with
+`high-rate`:
+
+```html
+<om-grid id="quotes" row-key="symbol" high-rate dense sort="change:desc" caption="Quotes"
+         style="--om-grid-height: 32rem"></om-grid>
+<script type="module">
+  const quotes = document.getElementById("quotes");
+  quotes.columns = [
+    { key: "symbol", label: "Symbol", type: "code" },
+    { key: "last", label: "Last", type: "decimal", group: true },
+    { key: "change", label: "Change", type: "decimal", tone: "sign" },
+  ];
+  // om-live feeds it the same way (for="quotes"); upsert as deliveries arrive.
+</script>
+```
+
+- **Virtual scrolling.** Only the rows in view, and six either side, are in
+  the document; the rest are space, so 10,000 rows are a few dozen elements.
+  The row height is fixed (`row-height`, default 36 px, 28 dense), cells do
+  not wrap (long text ends in an ellipsis), and column widths are fixed
+  (`width` on a column, else equal) so they do not shift as rows scroll in.
+  The view is `--om-grid-height` tall (default 28rem) with the head held;
+  inside an [om-panels](#om-panels) panel it fills the panel.
+- **Cell-level updates.** An update touches only the cells whose value
+  changed, and only in rows in view; a row out of view costs no document
+  work. A `format` or badge `tone` that reads other fields of the row names
+  them in the column's `watch: ["field", …]`, so the cell redraws when they
+  change too.
+- **The change flash.** A changed cell flashes: a numeric column's rise in
+  `--buy-wash` and fall in `--sell-wash`, compared exactly, so it follows the
+  person's green-up or red-up convention; any other change in
+  `--accent-wash`. None under `prefers-reduced-motion: reduce`, or with
+  `no-flash`.
+- **Conflated, and sorted exactly.** Updates still apply once per animation
+  frame, the last state per key winning. The order is kept as it changes
+  rather than re-sorted each frame: a row whose sorted value changed is taken
+  out and put back by binary search, comparing decimals exactly, ties in
+  arrival order. With `freeze-sort` the order holds while streaming (a changed
+  row stays put, a new one goes last) so rows do not jump under the pointer; a
+  header click still sorts, as the person asked, and removing `freeze-sort`
+  sorts again.
+- **Keyboard and screen reader.** The grid is one tab stop, a scrolling
+  region named by `caption`. The arrow keys move from row to row, Page Up and
+  Page Down by a view, Home and End to the first and last row (drawn as they
+  are reached), and Enter or Space raises `om-row` for the row. The table
+  carries `aria-rowcount` (every row, and the head) and each drawn row its
+  `aria-rowindex`, so a screen reader says "row 5,002 of 10,001" of a row
+  that is one of thirty in the document.
+
+**The budget**, held by `make bench` in headless Chromium: 10,000 rows taking
+1,000 updates a second for 5 seconds, half of them to rows in view and every
+one moving the sorted column, each frame's main-thread time (the grid's frame,
+style, layout and paint) under 16.7 ms at the 95th percentile, with every
+update applied and the order exact; also while scrolling, and frozen.
 
 ### om-chart
 
@@ -310,6 +377,75 @@ anything in `data`.
 Properties and methods: `sequence` (the last applied, a string), `state`,
 `start()`, `stop()` (also on leaving the page), `resync()`.
 
+### om-panels
+
+Resizable, rearrangeable panels inside a page, each holding whatever the page
+puts in it, the arrangement remembered per person.
+
+```html
+<om-panels id="desk" layout-id="positions-page" style="--om-panels-height: 40rem">
+  <section data-panel="positions" data-title="Positions" data-min="320">
+    <om-grid id="positions" row-key="position_id" high-rate></om-grid>
+  </section>
+  <section data-panel="orders" data-title="Orders"><div class="panel-body">…</div></section>
+  <section data-panel="chart" data-title="Net asset value"><div class="panel-body"><om-chart id="nav"></om-chart></div></section>
+</om-panels>
+```
+
+Each child with a `data-panel` id is a panel, drawn as a card with a head (a
+grip and its `data-title`); a `.panel-body` inside is padded, and a high-rate
+grid placed directly in a panel fills it. By default the panels sit side by
+side (`direction="row"`, or `column`) in equal shares.
+
+A person **resizes** by dragging the gutter between two panels, or by focusing
+it (a `separator`, with `aria-valuenow`) and using the arrow keys (16 px, 64
+with Shift; Home and End to either side's minimum). A panel never goes below
+its `data-min` (pixels, default 120). A person **rearranges** by dragging a
+panel's grip onto another panel: onto an edge (the outer quarter) to dock
+beside it there, onto the middle to swap; the landing place is shown, and
+Escape cancels. From the keyboard, the grip's arrow keys swap the panel with
+its nearest neighbour that way. Each move is announced to a screen reader.
+
+The panels never move in the document: each is placed by style over one
+positioned box, so a grid, a live feed or a frame inside keeps its state when
+the arrangement changes. Tab order is the source order.
+
+| Attribute | |
+|---|---|
+| `layout-id` | The page's name for this arrangement, under which it is remembered |
+| `direction` | `row` (default) or `column`: the default arrangement's split |
+| `--om-panels-height`, `--om-panels-gap` | Its height (default 36rem) and the space between panels (default 8px) |
+
+| Property or method | |
+|---|---|
+| `layout` | The arrangement, serialisable (below). Setting it arranges the panels (a page restoring what it stored itself) and fires nothing |
+| `defaultLayout` | The arrangement for a person with none stored, and what `reset()` returns to |
+| `move(id, target, where)` | Move a panel: `"swap"`, or `"left"`, `"right"`, `"top"`, `"bottom"` of `target` |
+| `reset()` | The default arrangement, forgetting the stored one |
+| `panels` | The panels' ids, in source order |
+
+| Event | `detail` |
+|---|---|
+| `om-layout` | `{ id, layout, reason }` after a person's change (`resize`, `move`) or `reset`. Cancel it (`preventDefault`) to keep the arrangement somewhere else rather than in the browser |
+
+**The arrangement** is a tree of splits, each laying its children side by side
+(`row`) or one above another (`column`) in shares summing to one:
+
+```json
+{ "version": 1, "root": { "split": "row", "sizes": [0.6, 0.4], "children": [
+  { "panel": "positions" },
+  { "split": "column", "sizes": [0.5, 0.5], "children": [{ "panel": "orders" }, { "panel": "chart" }] } ] } }
+```
+
+It is remembered in the browser, in `localStorage` under
+`om-panels:<layout-id>` on the plugin's origin (with no `layout-id`, not at
+all). Storage that is refused (a private window, a blocked site) changes
+nothing but the remembering. An arrangement read back is fitted to the panels
+the page has: a panel it does not know is dropped, and one it lacks is added
+at the end, so a page can add a panel without breaking anyone's arrangement.
+To keep it per person on the plugin's server instead, cancel `om-layout`,
+store `detail.layout`, and set `layout` from it when the page loads.
+
 ## The theme: the frame's message
 
 The dashboard frames a plugin's page and hands it the person's colour scheme,
@@ -452,16 +588,18 @@ sample administrator's scheme, held to the contract by the build.
 ## Building and checking
 
 The host needs only Docker: the build, lint and tests run in a container
-(Node 22, and happy-dom for the tests; both pinned).
+(Node 22, and happy-dom for the tests; both pinned), and the benchmark in
+Playwright's (Chromium, pinned).
 
 | | |
 |---|---|
-| `make ci-local` | Every gate: `check-tokens`, then `build`, `lint`, `test`. The pre-push hook runs it |
-| `make ci-remote` | What CI runs: `build`, `lint`, `test` (meridian-design is private, so no `check-tokens`) |
+| `make ci-local` | Every gate: `check-tokens`, then `build`, `lint`, `test`, `bench`. The pre-push hook runs it |
+| `make ci-remote` | What CI runs: `build`, `lint`, `test`, `bench` (meridian-design is private, so no `check-tokens`) |
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave, the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap |
+| `make bench` | The high-rate grid's budget in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
 

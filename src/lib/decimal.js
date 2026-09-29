@@ -33,8 +33,11 @@ function compareMagnitude(a, b) {
 
 /** Compare two decimals exactly: -1, 0 or 1. A non-decimal sorts after any decimal. */
 export function compareDecimal(x, y) {
-  const a = parseDecimal(x);
-  const b = parseDecimal(y);
+  return compareParsed(parseDecimal(x), parseDecimal(y));
+}
+
+/** compareDecimal for values already parsed (parseDecimal), so a sort parses each once. */
+export function compareParsed(a, b) {
   if (!a || !b) return a ? -1 : b ? 1 : 0;
   if (a.sign !== b.sign) return a.sign < b.sign ? -1 : 1;
   if (a.sign === 0) return 0;

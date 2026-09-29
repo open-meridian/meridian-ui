@@ -20,7 +20,10 @@ const CLASSIC = new Set(["src/meridian.js", "src/gallery/stand-in.js"]);
 // Custom properties the kit uses that are neither a scheme's nor a token:
 // each has a fallback where it is used, and a reason.
 const LOCAL_PROPERTIES = {
-  "om-grid-height": "the height of an om-grid with sticky-head; a page may set it",
+  "om-grid-height": "the height of an om-grid with sticky-head or high-rate; a page may set it",
+  "om-grid-row-height": "a high-rate om-grid's fixed row height, set by the grid from row-height",
+  "om-panels-height": "the height of an om-panels; a page may set it",
+  "om-panels-gap": "the space between om-panels' panels; a page may set it",
 };
 const SVG_NS = "http://www.w3.org/2000/svg";
 // Files that handle colours as data, never as style: they are what checks them.

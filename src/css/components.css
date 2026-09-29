@@ -273,6 +273,37 @@ om-grid .om-grid-empty td { text-align: center; color: var(--ink-soft); padding:
 om-grid[sticky-head] .table-wrap { max-height: var(--om-grid-height, 28rem); overflow: auto; }
 om-grid[sticky-head] th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 
+/* High-rate: a view --om-grid-height tall with the head held, a fixed row
+ * height (--om-grid-row-height, set from row-height), fixed column widths so
+ * they do not shift as rows scroll in, and only the rows in view drawn. */
+om-grid[high-rate] .om-grid-viewport { max-height: var(--om-grid-height, 28rem); overflow: auto; overscroll-behavior: contain; }
+om-grid[high-rate] .om-grid-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+om-grid[high-rate] table { table-layout: fixed; }
+om-grid[high-rate] th { position: sticky; top: 0; background: var(--card); z-index: 1; overflow: hidden; text-overflow: ellipsis; }
+om-grid[high-rate] tbody tr[data-key] { height: var(--om-grid-row-height, 36px); }
+om-grid[high-rate] tbody tr[data-key] td { padding-top: 0; padding-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+om-grid[high-rate] tbody tr[data-key]:focus { outline: none; }
+om-grid[high-rate] tbody tr[data-key]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+om-grid[high-rate] tr.om-grid-spacer td { padding: 0; border: 0; }
+om-grid[high-rate] tbody tr.om-grid-spacer:hover td { background: none; }
+
+/* A changed cell flashes in the direction colours: up in --buy-wash, down in
+ * --sell-wash (so red-up swaps them), any other change in --accent-wash. Two
+ * names per direction, alternated by the grid, so a repeat restarts it. */
+om-grid td[data-flash="up-1"] { animation: om-flash-up-1 .9s ease-out; }
+om-grid td[data-flash="up-2"] { animation: om-flash-up-2 .9s ease-out; }
+om-grid td[data-flash="down-1"] { animation: om-flash-down-1 .9s ease-out; }
+om-grid td[data-flash="down-2"] { animation: om-flash-down-2 .9s ease-out; }
+om-grid td[data-flash="same-1"] { animation: om-flash-same-1 .9s ease-out; }
+om-grid td[data-flash="same-2"] { animation: om-flash-same-2 .9s ease-out; }
+@keyframes om-flash-up-1 { from { background-color: var(--buy-wash); } }
+@keyframes om-flash-up-2 { from { background-color: var(--buy-wash); } }
+@keyframes om-flash-down-1 { from { background-color: var(--sell-wash); } }
+@keyframes om-flash-down-2 { from { background-color: var(--sell-wash); } }
+@keyframes om-flash-same-1 { from { background-color: var(--accent-wash); } }
+@keyframes om-flash-same-2 { from { background-color: var(--accent-wash); } }
+@media (prefers-reduced-motion: reduce) { om-grid td[data-flash] { animation: none; } }
+
 /* ── om-chart ────────────────────────────────────────────────────────────── */
 
 om-chart { display: block; position: relative; }
@@ -341,3 +372,47 @@ om-live .badge .dot { animation: none; }
 om-live[state="live"] .badge .dot { animation: om-pulse 2s ease-in-out infinite; }
 @keyframes om-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { om-live[state="live"] .badge .dot { animation: none; } }
+
+/* ── om-panels ───────────────────────────────────────────────────────────── */
+
+/* One positioned box, --om-panels-height tall; each panel is placed over it
+ * by style, --om-panels-gap apart, and never moves in the document. */
+om-panels { display: block; position: relative; height: var(--om-panels-height, 36rem); min-height: 12rem; }
+om-panels[dragging], om-panels[resizing] { user-select: none; }
+om-panels > .om-panel {
+  position: absolute; margin: 0; overflow: auto; min-width: 0; min-height: 0;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+}
+om-panels > .om-panel + .om-panel { margin-top: 0; }
+/* A column, so a high-rate grid placed directly in a panel fills what the
+ * head leaves and scrolls itself. */
+om-panels > .om-panel { display: flex; flex-direction: column; }
+om-panels > .om-panel > * { flex: none; }
+om-panels > .om-panel > om-grid[high-rate] { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+om-panels > .om-panel > om-grid[high-rate] > .om-grid-viewport { flex: 1 1 0; min-height: 0; max-height: none; }
+om-panels > .om-panel.om-panel-lifted { opacity: .55; }
+om-panels > .om-panel > .panel-body { padding: var(--space-4); }
+om-panels .om-panel-head {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: .4rem;
+  padding: .3rem .6rem; background: var(--card); border-bottom: 1px solid var(--line-soft);
+}
+om-panels .om-panel-title { font-size: .84rem; font-weight: 600; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+om-panels button.om-panel-grip {
+  border: 0; background: none; padding: .15rem .3rem; line-height: 1; font-weight: 400;
+  color: var(--ink-soft); cursor: grab; touch-action: none;
+}
+om-panels button.om-panel-grip:hover { background: var(--hover); color: var(--ink); }
+om-panels[dragging] button.om-panel-grip { cursor: grabbing; }
+om-panels .om-panels-gutter { position: absolute; z-index: 3; touch-action: none; }
+om-panels .om-panels-gutter[aria-orientation="vertical"] { cursor: col-resize; }
+om-panels .om-panels-gutter[aria-orientation="horizontal"] { cursor: row-resize; }
+om-panels .om-panels-gutter::after { content: ""; position: absolute; border-radius: var(--radius-pill); background: transparent; }
+om-panels .om-panels-gutter[aria-orientation="vertical"]::after { top: var(--space-3); bottom: var(--space-3); left: calc(50% - 1px); width: 2px; }
+om-panels .om-panels-gutter[aria-orientation="horizontal"]::after { left: var(--space-3); right: var(--space-3); top: calc(50% - 1px); height: 2px; }
+om-panels .om-panels-gutter:hover::after { background: var(--line-strong); }
+om-panels .om-panels-gutter:focus { outline: none; }
+om-panels .om-panels-gutter:focus-visible::after, om-panels[resizing] .om-panels-gutter:active::after { background: var(--accent); }
+om-panels .om-panels-drop {
+  position: absolute; z-index: 4; pointer-events: none;
+  background: var(--accent-wash); border: 2px solid var(--accent); border-radius: var(--radius-lg);
+}

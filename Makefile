@@ -6,10 +6,11 @@ SHELL := /bin/bash
 unexport GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR \
          GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 
-.PHONY: help ci-local ci-local-deep ci-remote image build tokens check-tokens lint test serve install-hooks
+.PHONY: help ci-local ci-local-deep ci-remote image bench-image build tokens check-tokens lint test bench serve install-hooks
 
 DOCKER   := DOCKER_BUILDKIT=1 docker
 CHECK    := meridian-ui-check
+BENCH    := meridian-ui-bench
 DESIGN   ?= ../meridian-design
 TOKENS   := $(abspath $(DESIGN))/brand/tokens.json
 VERSION  := $(shell sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json | head -1)
@@ -22,12 +23,13 @@ MOUNT    := $(if $(HAVE_TOKENS),-v $(TOKENS):/tokens.json:ro,)
 TOKARG   := $(if $(HAVE_TOKENS),--tokens /tokens.json,)
 
 help:
-	@echo "  make ci-local       every gate: tokens fresh, build, lint, tests (the pre-push gate)"
-	@echo "  make ci-remote      what CI runs: build, lint, tests"
+	@echo "  make ci-local       every gate: tokens fresh, build, lint, tests, bench (the pre-push gate)"
+	@echo "  make ci-remote      what CI runs: build, lint, tests, bench"
 	@echo "  make build          generated/ from the tokens (when beside), then dist/$(VERSION)/"
 	@echo "  make check-tokens   fail when generated/ differs from meridian-design's tokens"
 	@echo "  make lint           scripts parse; no raw colour; nothing served reaches elsewhere"
 	@echo "  make test           the tests, in a container (happy-dom)"
+	@echo "  make bench          the high-rate grid's frame budget, in headless Chromium (Playwright)"
 	@echo "  make serve          serve dist/ at http://127.0.0.1:$(PORT)/.meridian/ui/$(VERSION)/gallery.html"
 	@echo "  make install-hooks  point git at hooks/ so push fires ci-local"
 
@@ -39,7 +41,7 @@ ci-local: check-tokens ci-remote
 
 ci-local-deep: ci-local
 
-ci-remote: build lint test
+ci-remote: build lint test bench
 	@echo
 	@echo "ci-remote: GREEN"
 
@@ -69,6 +71,20 @@ test: image
 		sh -c 'node tools/build.mjs $(TOKARG) >/dev/null && node --test --test-reporter=spec "tests/*.test.mjs"' >.test.log 2>&1 \
 		|| { echo "test FAILED. The last 60 lines, and the whole of it in .test.log:" >&2; tail -60 .test.log >&2; exit 1; }
 	@echo "test OK: $$(grep -E '^ℹ (tests|pass|fail|skipped) ' .test.log | tr '\n' ' ' | sed 's/ℹ //g')"
+
+# The high-rate grid's budget, in a real browser: 10,000 rows taking 1,000
+# updates a second for 5 seconds, frame time p95 under 16.7 ms (tools/bench.mjs).
+# Chromium wants more shared memory than a container's default 64 MB.
+bench-image:
+	@$(DOCKER) build -f Dockerfile.check --target bench -t $(BENCH) . >/dev/null 2>&1 \
+		|| { echo "bench-image FAILED; see it with:" >&2; \
+		     echo "  DOCKER_BUILDKIT=1 docker build -f Dockerfile.check --target bench --progress=plain ." >&2; exit 1; }
+
+bench: bench-image
+	@docker run --rm --init --shm-size=1g $(BENCH) \
+		sh -c 'node tools/build.mjs >/dev/null && node tools/bench.mjs' >.bench.log 2>&1 \
+		|| { echo "bench FAILED. What it measured, and the whole of it in .bench.log:" >&2; cat .bench.log >&2; exit 1; }
+	@grep -E '^bench OK' .bench.log
 
 # The kit under the base path the dashboard serves it at, so the gallery
 # proves every reference is relative. Python's server, as the host has it.

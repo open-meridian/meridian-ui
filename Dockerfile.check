@@ -15,3 +15,18 @@ COPY schemes schemes
 COPY src src
 COPY tools tools
 COPY tests tests
+
+# The benchmark's browser: Playwright's image, pinned by version and digest,
+# with the Chromium that playwright-core 1.63.0 (package-lock.json) drives.
+# The two move together. Chromium does not run on Alpine, hence a second base.
+FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 AS bench
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+WORKDIR /w
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
+COPY contract contract
+COPY generated generated
+COPY schemes schemes
+COPY src src
+COPY tools tools
+COPY tests tests

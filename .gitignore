@@ -4,6 +4,7 @@ dist/
 node_modules/
 .serve/
 .test.log
+.bench.log
 .DS_Store
 
 # One person's own.

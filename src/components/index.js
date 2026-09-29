@@ -5,3 +5,4 @@ import "./om-chart.js";
 import "./om-asof.js";
 import "./om-instrument-picker.js";
 import "./om-live.js";
+import "./om-panels.js";

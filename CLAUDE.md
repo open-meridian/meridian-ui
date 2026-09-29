@@ -3,13 +3,16 @@
 Open Meridian's plugin UI kit: the brand's tokens as CSS custom properties,
 component CSS, and web components, served by the dashboard at
 `/.meridian/ui/<version>/` on every plugin host. The design is
-meridian-design's `spec/plugin-pages-share-one-kit.md` (accepted, Q1 to Q6
+meridian-design's `spec/plugin-pages-share-one-kit.md` (accepted, Q1 to Q7
 ruled); read it before changing what the kit is.
 
 ## Rules with teeth
 
-- **Framework-free.** CSS and web components, usable from plain HTML, React,
-  Vue or Svelte. No framework, no bundler, no runtime dependency.
+- **Framework-free, and independent of the plugin's language**
+  (meridian-design decisions/025). Every component is HTML5, CSS and standard
+  JavaScript the browser runs natively, usable from plain HTML, React, Vue or
+  Svelte, from a plugin written in any language. No framework, no bundler or
+  transpiler in the page, no backend of its own, no runtime dependency.
 - **Nothing from elsewhere.** Everything works under the base path the
   dashboard serves it at, with relative references only: no CDN, no absolute
   path, no other origin. A component that reaches the network reaches only the

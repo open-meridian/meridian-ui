@@ -1,6 +1,6 @@
 // The sample page's own script: what a plugin writes to use the components.
 
-await Promise.all(["om-grid", "om-chart", "om-live", "om-instrument-picker"].map((n) => customElements.whenDefined(n)));
+await Promise.all(["om-grid", "om-chart", "om-live", "om-instrument-picker", "om-panels"].map((n) => customElements.whenDefined(n)));
 
 const positions = document.getElementById("positions");
 positions.columns = [
@@ -58,3 +58,58 @@ document.getElementById("picker").addEventListener("om-select", (e) => {
   const i = e.detail.instrument;
   picked.textContent = i ? `${i.instrument_id}: ${i.description}` : "No instrument chosen.";
 });
+
+// Panels, and a high-rate grid: two thousand quotes, a few dozen changes a
+// second. Prices are integer cents made into decimal strings, never floats.
+const cents = (c) => `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)}.${String(Math.abs(c) % 100).padStart(2, "0")}`;
+const quotes = document.getElementById("quotes");
+quotes.columns = [
+  { key: "symbol", label: "Symbol", type: "code" },
+  { key: "bid", label: "Bid", type: "decimal", group: true },
+  { key: "ask", label: "Ask", type: "decimal", group: true },
+  { key: "last", label: "Last", type: "decimal", group: true },
+  { key: "change", label: "Change", type: "decimal", tone: "sign" },
+  { key: "volume", label: "Volume", type: "decimal", group: true },
+];
+const book = [];
+let seed = 11;
+const rand = (n) => {
+  seed = (seed * 1103515245 + 12345) % 2147483648;
+  return seed % n;
+};
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+for (let i = 0; i < 2000; i++) {
+  const symbol = `${letters[i % 26]}${letters[Math.floor(i / 26) % 26]}${letters[Math.floor(i / 676) % 26]}${i}`;
+  const open = 1000 + rand(90000);
+  book.push({ symbol, open, last: open, volume: rand(50000) });
+}
+const quoteRow = (q) => ({
+  symbol: q.symbol, bid: cents(q.last - 1), ask: cents(q.last + 1), last: cents(q.last),
+  change: cents(q.last - q.open), volume: String(q.volume),
+});
+quotes.setRows(book.map(quoteRow));
+let sent = 0;
+setInterval(() => {
+  for (let n = 0; n < 2; n++) {
+    const q = book[rand(book.length)];
+    q.last = Math.max(1, q.last + rand(41) - 20);
+    q.volume += 1 + rand(500);
+    quotes.upsert(quoteRow(q));
+    sent++;
+  }
+}, 50);
+const rate = document.getElementById("rate");
+setInterval(() => {
+  rate.textContent = `${sent} updates a second`;
+  sent = 0;
+}, 1000);
+document.getElementById("freeze").addEventListener("change", (e) => (quotes.freezeSort = e.target.checked));
+document.getElementById("nav-small").series = [{ name: "Growth book", color: "accent", points: walk(1200000000, 0.08, 7) }];
+document.getElementById("desk").defaultLayout = {
+  version: 1,
+  root: { split: "row", sizes: [0.62, 0.38], children: [
+    { panel: "quotes" },
+    { split: "column", sizes: [0.5, 0.5], children: [{ panel: "depth" }, { panel: "notes" }] },
+  ] },
+};
+document.getElementById("desk-reset").addEventListener("click", () => document.getElementById("desk").reset());

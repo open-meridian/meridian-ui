@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>om-grid high-rate benchmark</title>
+<!-- Run by tools/bench.mjs in a real headless browser, with the built kit
+     served at /.meridian/ui/<version>/ beside this page (?kit=<version>). -->
+<script>
+  (function () {
+    var kit = "/.meridian/ui/" + new URLSearchParams(location.search).get("kit") + "/";
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = kit + "meridian.css";
+    document.head.append(link);
+    window.KIT = kit;
+  })();
+</script>
+<style>
+  body { margin: 0; }
+  main { padding: var(--space-4); }
+  om-grid { --om-grid-height: 600px; }
+</style>
+</head>
+<body>
+<main>
+  <p id="status">Loading.</p>
+  <om-grid id="grid" row-key="symbol" dense caption="Benchmark"></om-grid>
+</main>
+<script type="module">
+  const { compareDecimal } = await import(`${window.KIT}lib/decimal.js`);
+  await import(`${window.KIT}components/om-grid.js`);
+  await customElements.whenDefined("om-grid");
+
+  const grid = document.getElementById("grid");
+  const status = document.getElementById("status");
+  const COLUMNS = [
+    { key: "symbol", label: "Symbol", type: "code" },
+    { key: "bid", label: "Bid", type: "decimal", group: true },
+    { key: "ask", label: "Ask", type: "decimal", group: true },
+    { key: "last", label: "Last", type: "decimal", group: true },
+    { key: "change", label: "Change", type: "decimal", tone: "sign" },
+    { key: "volume", label: "Volume", type: "decimal", group: true },
+    { key: "trades", label: "Trades", type: "number" },
+  ];
+
+  // Money as integer cents, shown as decimal strings: never a float.
+  const cents = (c) => `${c < 0 ? "-" : ""}${Math.floor(Math.abs(c) / 100)}.${String(Math.abs(c) % 100).padStart(2, "0")}`;
+  let seed = 20260928;
+  const rand = (n) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % n;
+  };
+  const row = (q) => ({
+    symbol: q.symbol, bid: cents(q.last - 1), ask: cents(q.last + 1), last: cents(q.last),
+    change: cents(q.last - q.open), volume: String(q.volume), trades: String(q.trades),
+  });
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const pct = (xs, p) => {
+    if (!xs.length) return null;
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1))];
+  };
+  const round = (x) => (x === null ? null : Math.round(x * 100) / 100);
+
+  /**
+   * One run: `rows` rows, `rate` upserts a second for `seconds`, half of them
+   * to rows in view (the most document work) and half anywhere, each moving
+   * the sorted column. Measures every frame: its interval, and its
+   * main-thread time (the frame's start to the first task after it: the
+   * grid's frame callback, style, layout and paint).
+   */
+  window.runBench = async ({ name, rows = 10000, rate = 1000, seconds = 5, highRate = true, freeze = false, scroll = 0, sort = "last:desc" }) => {
+    status.textContent = `Running ${name}.`;
+    grid.toggleAttribute("high-rate", highRate);
+    grid.toggleAttribute("freeze-sort", freeze);
+    grid.setAttribute("sort", sort);
+    grid.columns = COLUMNS;
+    const book = [];
+    for (let i = 0; i < rows; i++) {
+      const open = 1000 + rand(900000);
+      book.push({ symbol: `S${String(i).padStart(5, "0")}`, open, last: open, volume: rand(100000), trades: rand(5000) });
+    }
+    const setStart = performance.now();
+    grid.setRows(book.map(row));
+    await frame();
+    const setRowsMs = performance.now() - setStart;
+    const viewport = grid.querySelector(".om-grid-viewport") || grid.querySelector(".table-wrap");
+    viewport.scrollTop = 0;
+    for (let i = 0; i < 30; i++) await frame(); // settle
+
+    const intervals = [];
+    const work = [];
+    let domRowsMax = 0;
+    let sent = 0;
+    let running = true;
+    let frameStart = null;
+    let lastTs = null;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      if (frameStart !== null) work.push(performance.now() - frameStart);
+      frameStart = null;
+    };
+    const loop = (ts) => {
+      if (!running) return;
+      if (lastTs !== null) intervals.push(ts - lastTs);
+      lastTs = ts;
+      frameStart = ts;
+      channel.port2.postMessage(0);
+      if (scroll) {
+        const max = viewport.scrollHeight - viewport.clientHeight;
+        viewport.scrollTop = viewport.scrollTop + scroll > max ? 0 : viewport.scrollTop + scroll;
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+
+    const start = performance.now();
+    const due = () => Math.min(rate * seconds, Math.floor(((performance.now() - start) * rate) / 1000));
+    const timer = rate
+      ? setInterval(() => {
+          const n = due() - sent;
+          if (n <= 0) return;
+          const inView = [...grid.querySelectorAll("tbody tr[data-key]")];
+          domRowsMax = Math.max(domRowsMax, inView.length);
+          for (let i = 0; i < n; i++) {
+            const q = i % 2 && inView.length ? book[Number(inView[rand(inView.length)].dataset.key.slice(1))] : book[rand(rows)];
+            q.last = Math.max(1, q.last + rand(41) - 20);
+            q.volume += 1 + rand(900);
+            q.trades += 1;
+            grid.upsert(row(q));
+            sent++;
+          }
+        }, 4)
+      : null;
+    await new Promise((r) => setTimeout(r, seconds * 1000));
+    if (timer) {
+      // What was due by the end is sent, then the run ends a frame later.
+      clearInterval(timer);
+      for (let i = sent; i < rate * seconds; i++) {
+        const q = book[rand(rows)];
+        q.last = Math.max(1, q.last + 1);
+        grid.upsert(row(q));
+        sent++;
+      }
+    }
+    await frame();
+    await frame();
+    running = false;
+    grid.flush();
+
+    // Correctness under load: every row holds its last state, in exact order.
+    const shown = grid.rows;
+    let ordered = true;
+    const dir = sort.endsWith(":desc") ? -1 : 1;
+    if (!freeze) {
+      for (let i = 1; i < shown.length; i++) {
+        if (compareDecimal(shown[i - 1].last, shown[i].last) * dir > 0) { ordered = false; break; }
+      }
+    }
+    const current = book.every((q) => grid.getRow(q.symbol)?.last === cents(q.last));
+    const elapsed = intervals.reduce((a, b) => a + b, 0) / 1000;
+    const result = {
+      name,
+      mode: highRate ? "high-rate" : "standard",
+      rows, rate, seconds, freeze, scroll,
+      updatesSent: sent,
+      setRowsMs: round(setRowsMs),
+      frames: intervals.length,
+      fps: round(intervals.length / elapsed),
+      intervalMs: { p50: round(pct(intervals, 50)), p95: round(pct(intervals, 95)), p99: round(pct(intervals, 99)), max: round(Math.max(...intervals)) },
+      frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },
+      framesOver16_7Ms: work.filter((w) => w > 16.7).length,
+      longIntervals: intervals.filter((w) => w > 25).length,
+      domRowsMax: domRowsMax || grid.querySelectorAll("tbody tr[data-key]").length,
+      size: grid.size,
+      current,
+      ordered,
+    };
+    status.textContent = `Done: ${name}.`;
+    return result;
+  };
+  /**
+   * The flash, as a browser draws it: a rise animates from --buy-wash and a
+   * fall from --sell-wash (swapped under red-up), and nothing animates under
+   * reduced motion.
+   */
+  window.checkFlash = async (direction) => {
+    document.documentElement.dataset.omDirection = direction;
+    grid.toggleAttribute("high-rate", true);
+    grid.removeAttribute("freeze-sort");
+    grid.setAttribute("sort", "");
+    grid.columns = COLUMNS;
+    const q = { symbol: "FLASH", open: 10000, last: 10000, volume: 1, trades: 1 };
+    grid.setRows([row(q)]);
+    await frame();
+    const cell = () => grid.querySelector('tr[data-key="FLASH"]').cells[3];
+    const probe = document.createElement("span");
+    document.body.append(probe);
+    const colour = (v) => {
+      probe.style.backgroundColor = `var(${v})`;
+      return getComputedStyle(probe).backgroundColor;
+    };
+    const seen = {};
+    for (const [name, step] of [["up", 5], ["down", -9]]) {
+      q.last += step;
+      grid.upsert(row(q));
+      grid.flush();
+      const td = cell();
+      const style = getComputedStyle(td);
+      // Held at its first frame, so the colour read is the flash's own.
+      for (const anim of td.getAnimations()) {
+        anim.pause();
+        anim.currentTime = 0;
+      }
+      seen[name] = { flash: td.dataset.flash || null, animation: style.animationName, background: getComputedStyle(td).backgroundColor };
+    }
+    const washes = { buyWash: colour("--buy-wash"), sellWash: colour("--sell-wash") };
+    probe.remove();
+    return { ...seen, ...washes, reduced: matchMedia("(prefers-reduced-motion: reduce)").matches };
+  };
+  window.benchReady = true;
+  status.textContent = "Ready.";
+</script>
+</body>
+</html>

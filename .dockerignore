@@ -3,5 +3,6 @@ node_modules
 dist
 .serve
 .test.log
+.bench.log
 .claude
 CLAUDE.local.md
