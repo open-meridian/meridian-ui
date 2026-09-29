@@ -24,7 +24,7 @@ if (!files.length) {
 let failed = false;
 for (const file of files) {
   const text = readFileSync(file, "utf8");
-  const shape = file.endsWith(".json") ? { scheme: JSON.parse(text), problems: [] } : parseSchemeCss(text);
+  const shape = file.endsWith(".json") ? { scheme: JSON.parse(text), problems: [] } : parseSchemeCss(text, contract);
   const result = checkScheme(shape.scheme, contract);
   const problems = [...shape.problems, ...result.problems];
   if (problems.length) {

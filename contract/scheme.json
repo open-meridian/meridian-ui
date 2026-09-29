@@ -1,11 +1,19 @@
 {
   "about": "The scheme contract: the colour custom properties every scheme defines for light and dark, what each means, the text/background pairs a scheme must pass, and the thresholds. Read by the kit's build and contrast check (src/lib/contrast.js) and by the dashboard's scheme editor, which checks the same pairs server-side before a scheme saves. 'brand' is the token in meridian-design/brand/tokens.json the brand default scheme takes each property from, one token for both modes or one per mode. Type, spacing, radii and shadows are the brand's and are not in a scheme.",
-  "version": 1,
+  "version": 2,
   "modes": ["light", "dark"],
   "selectors": {
     "light": ":root",
     "dark": "@media (prefers-color-scheme: dark) { :root:not([data-om-mode=\"light\"]) } and :root[data-om-mode=\"dark\"]",
-    "note": "A scheme stylesheet declares its light values on :root, and its dark values twice: once inside a prefers-color-scheme: dark block (mode 'system' on a dark system) and once on :root[data-om-mode=\"dark\"] (mode 'dark'). src/lib/scheme.js renders exactly this; the dashboard renders the same template."
+    "red-up": ":root[data-om-direction=\"red-up\"]; in dark, @media (prefers-color-scheme: dark) { :root[data-om-direction=\"red-up\"]:not([data-om-mode=\"light\"]) } and :root[data-om-mode=\"dark\"][data-om-direction=\"red-up\"]",
+    "note": "A scheme stylesheet declares its light values on :root, and its dark values twice: once inside a prefers-color-scheme: dark block (mode 'system' on a dark system) and once on :root[data-om-mode=\"dark\"] (mode 'dark'). Then the red-up convention's blocks, in the same three places, declaring only the direction properties, swapped (see 'direction'). src/lib/scheme.js renders exactly this; the dashboard renders the same template."
+  },
+  "direction": {
+    "about": "Which colour means up is a convention, not a scheme: green-up (a rise, a gain and a buy are green) or red-up (they are red, as markets in China, Japan, Korea and Taiwan draw them). A deployment sets a default and each person may override it; the frame hands it to the page (om-direction, and the theme message's direction) and the kit sets data-om-direction on the root. A scheme defines its direction colours for green-up; red-up swaps each pair below and nothing else, so the status colours (good, danger, warning) never flip. A buy and a rise share a colour under both conventions, so buy and sell are the direction colours: there are no separate up and down properties. The contrast check measures a scheme under both conventions.",
+    "attribute": "data-om-direction",
+    "conventions": ["green-up", "red-up"],
+    "default": "green-up",
+    "swap": [["buy", "sell"], ["buy-wash", "sell-wash"]]
   },
   "thresholds": {
     "text": 4.5,
@@ -15,9 +23,10 @@
   "groups": {
     "surface": "What the page and its panels are drawn on.",
     "ink": "Text on a surface.",
-    "line": "Borders and dividers. Decorative: they are not held to a ratio (see the README).",
+    "line": "Borders and dividers. line and line-soft are decorative and not held to a ratio; line-strong, a field's or a control's edge, is held to 3:1 (WCAG 1.4.11).",
     "accent": "Links, focus, selection and the primary action.",
-    "semantic": "What a colour says: buy and sell, good, danger, warning, and a second category colour."
+    "direction": "Market direction: a buy and a sell, and up and down in price and P&L. Swapped under the red-up convention.",
+    "status": "What a colour says about a state: good, danger and warning, which never flip with the market convention; and violet, a second category colour."
   },
   "properties": [
     { "name": "page", "group": "surface", "meaning": "The ground of the page.", "brand": "page" },
@@ -29,27 +38,28 @@
     { "name": "ink-soft", "group": "ink", "meaning": "Secondary text: descriptions, cells, metadata, a neutral badge.", "brand": "ink-soft" },
     { "name": "ink-faint", "group": "ink", "meaning": "Tertiary text: captions, hints, timestamps, table heads. Never on hover.", "brand": "ink-faint" },
 
-    { "name": "line", "group": "line", "meaning": "Borders of cards, inputs and table heads.", "brand": "line" },
+    { "name": "line", "group": "line", "meaning": "Borders of cards and table heads; dividers.", "brand": "line" },
     { "name": "line-soft", "group": "line", "meaning": "Row dividers inside a card; the neutral badge's fill.", "brand": "line-soft" },
+    { "name": "line-strong", "group": "line", "meaning": "The edge of a field or a control: inputs, selects, text areas, secondary buttons. 3:1 on card and page.", "brand": "line-strong" },
 
     { "name": "accent", "group": "accent", "meaning": "Links, focus rings, the selected tab, chart's first series, selected states.", "brand": "accent" },
     { "name": "accent-wash", "group": "accent", "meaning": "Tinted fill behind accent text or ink: selected rows, accent badges, the info notice.", "brand": "accent-wash" },
     { "name": "accent-ink", "group": "accent", "meaning": "Text on an accent fill (a selected segment, a count on accent).", "brand": "accent-ink" },
-    { "name": "primary", "group": "accent", "meaning": "The primary button's fill.", "brand": { "light": "accent", "dark": "accent-bright" } },
-    { "name": "primary-ink", "group": "accent", "meaning": "Text on the primary button.", "brand": { "light": "accent-ink", "dark": "paper" } },
+    { "name": "primary", "group": "accent", "meaning": "The primary button's fill.", "brand": "primary" },
+    { "name": "primary-ink", "group": "accent", "meaning": "Text on the primary button.", "brand": "primary-ink" },
 
-    { "name": "buy", "group": "semantic", "meaning": "A buy, a gain, a positive change, as text or a chart series.", "brand": { "light": "good", "dark": "buy" } },
-    { "name": "buy-wash", "group": "semantic", "meaning": "Fill behind buy text. May be translucent: seen over card.", "brand": { "light": "good-wash", "dark": "buy-wash" } },
-    { "name": "sell", "group": "semantic", "meaning": "A sell, a loss, a negative change, as text or a chart series.", "brand": { "light": "danger", "dark": "sell" } },
-    { "name": "sell-wash", "group": "semantic", "meaning": "Fill behind sell text. May be translucent: seen over card.", "brand": { "light": "danger-wash", "dark": "sell-wash" } },
-    { "name": "good", "group": "semantic", "meaning": "Success, healthy, current.", "brand": "good" },
-    { "name": "good-wash", "group": "semantic", "meaning": "Fill behind good text.", "brand": "good-wash" },
-    { "name": "danger", "group": "semantic", "meaning": "Errors and destructive actions.", "brand": "danger" },
-    { "name": "danger-wash", "group": "semantic", "meaning": "Fill behind danger text: error notices, the danger button, bad badges.", "brand": "danger-wash" },
-    { "name": "warn-ink", "group": "semantic", "meaning": "Warnings and things needing attention.", "brand": "warn-ink" },
-    { "name": "warn-wash", "group": "semantic", "meaning": "Fill behind warning text.", "brand": "warn-wash" },
-    { "name": "violet", "group": "semantic", "meaning": "A second category colour: special roles, informational badges.", "brand": "violet" },
-    { "name": "violet-wash", "group": "semantic", "meaning": "Fill behind violet text.", "brand": "violet-wash" }
+    { "name": "buy", "group": "direction", "meaning": "A buy, and up: a rise, a gain, a positive change, as text or a chart series. Red under red-up.", "brand": "buy" },
+    { "name": "buy-wash", "group": "direction", "meaning": "Fill behind buy text. May be translucent: seen over card.", "brand": "buy-wash" },
+    { "name": "sell", "group": "direction", "meaning": "A sell, and down: a fall, a loss, a negative change, as text or a chart series. Green under red-up.", "brand": "sell" },
+    { "name": "sell-wash", "group": "direction", "meaning": "Fill behind sell text. May be translucent: seen over card.", "brand": "sell-wash" },
+    { "name": "good", "group": "status", "meaning": "Success, healthy, current.", "brand": "good" },
+    { "name": "good-wash", "group": "status", "meaning": "Fill behind good text.", "brand": "good-wash" },
+    { "name": "danger", "group": "status", "meaning": "Errors and destructive actions.", "brand": "danger" },
+    { "name": "danger-wash", "group": "status", "meaning": "Fill behind danger text: error notices, the danger button, bad badges.", "brand": "danger-wash" },
+    { "name": "warn-ink", "group": "status", "meaning": "Warnings and things needing attention.", "brand": "warn-ink" },
+    { "name": "warn-wash", "group": "status", "meaning": "Fill behind warning text.", "brand": "warn-wash" },
+    { "name": "violet", "group": "status", "meaning": "A second category colour: special roles, informational badges.", "brand": "violet" },
+    { "name": "violet-wash", "group": "status", "meaning": "Fill behind violet text.", "brand": "violet-wash" }
   ],
   "pairs": [
     { "fg": "ink", "bg": "page", "kind": "text", "where": "body text on the page" },
@@ -83,12 +93,16 @@
     { "fg": "accent", "bg": "page", "kind": "ui", "where": "the focus ring on the page" },
     { "fg": "accent", "bg": "card", "kind": "ui", "where": "the focus ring, a chart's first series" },
     { "fg": "violet", "bg": "card", "kind": "ui", "where": "a chart series" },
-    { "fg": "warn-ink", "bg": "card", "kind": "ui", "where": "a chart series" }
+    { "fg": "warn-ink", "bg": "card", "kind": "ui", "where": "a chart series" },
+    { "fg": "line-strong", "bg": "card", "kind": "ui", "where": "a field's or a control's edge in a panel" },
+    { "fg": "line-strong", "bg": "page", "kind": "ui", "where": "a field's or a control's edge on the page" }
   ],
   "distinct": [
     { "a": "buy", "b": "sell", "over": "card", "min": 20, "why": "buy and sell must stay distinguishable" },
     { "a": "good", "b": "danger", "over": "card", "min": 20, "why": "good and danger must stay distinguishable" },
     { "a": "good", "b": "warn-ink", "over": "card", "min": 20, "why": "good and warning must stay distinguishable" },
-    { "a": "danger", "b": "warn-ink", "over": "card", "min": 20, "why": "danger and warning must stay distinguishable" }
+    { "a": "danger", "b": "warn-ink", "over": "card", "min": 20, "why": "danger and warning must stay distinguishable" },
+    { "a": "buy", "b": "good", "over": "card", "min": 20, "why": "a buy or a rise must not read as success" },
+    { "a": "sell", "b": "danger", "over": "card", "min": 20, "why": "a sell or a fall must not read as an error" }
   ]
 }

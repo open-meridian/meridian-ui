@@ -10,6 +10,7 @@ const contract = await (await fetch("scheme-contract.json")).json();
 const schemes = contract.schemes;
 const select = document.getElementById("scheme");
 const layout = document.getElementById("layout");
+const direction = document.getElementById("direction");
 const frames = document.getElementById("frames");
 const sent = document.getElementById("sent");
 
@@ -17,6 +18,7 @@ for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
 const start = new URLSearchParams(location.search);
 if (schemes.some((s) => s.id === start.get("scheme"))) select.value = start.get("scheme");
 if (start.get("layout")) layout.value = start.get("layout");
+if (start.get("direction")) direction.value = start.get("direction");
 
 function modes() {
   return layout.value === "both" ? ["light", "dark"] : [layout.value];
@@ -28,11 +30,11 @@ function build() {
   for (const mode of modes()) {
     const fig = document.createElement("figure");
     const cap = document.createElement("figcaption");
-    cap.innerHTML = `<strong>${mode[0].toUpperCase()}${mode.slice(1)}</strong><span class="faint">?om-scheme=${select.value}&amp;om-mode=${mode}</span>`;
+    cap.innerHTML = `<strong>${mode[0].toUpperCase()}${mode.slice(1)}</strong><span class="faint">?om-scheme=${select.value}&amp;om-mode=${mode}&amp;om-direction=${direction.value}</span>`;
     const frame = document.createElement("iframe");
     frame.title = `Sample page, ${mode}`;
     frame.dataset.mode = mode;
-    frame.src = `gallery/sample.html?om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}`;
+    frame.src = `gallery/sample.html?om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
     frame.addEventListener("load", () => fit(frame));
     fig.append(cap, frame);
     frames.append(fig);
@@ -50,17 +52,20 @@ function fit(frame) {
   new ResizeObserver(size).observe(doc.body);
 }
 
-// A scheme change is the frame's theme message, as the dashboard sends it.
-select.addEventListener("change", () => {
+// A scheme or direction change is the frame's theme message, as the dashboard sends it.
+function send() {
   for (const frame of frames.querySelectorAll("iframe")) {
-    frame.previousElementSibling.querySelector(".faint").textContent = `then the message: scheme "${select.value}", mode "${frame.dataset.mode}"`;
+    frame.previousElementSibling.querySelector(".faint").textContent =
+      `then the message: scheme "${select.value}", mode "${frame.dataset.mode}", direction "${direction.value}"`;
     frame.contentWindow.postMessage(
-      { type: "meridian:theme", version: 1, scheme: select.value, mode: frame.dataset.mode },
+      { type: "meridian:theme", version: 2, scheme: select.value, mode: frame.dataset.mode, direction: direction.value },
       location.origin,
     );
   }
-  sent.textContent = `Sent { type: "meridian:theme", scheme: "${select.value}" } to each frame.`;
-});
+  sent.textContent = `Sent { type: "meridian:theme", version: 2, scheme: "${select.value}", direction: "${direction.value}" } to each frame.`;
+}
+select.addEventListener("change", send);
+direction.addEventListener("change", send);
 layout.addEventListener("change", build);
 build();
 
@@ -68,7 +73,7 @@ build();
 const parsed = {};
 for (const s of schemes) {
   const css = await (await fetch(`schemes/${s.id}.css`)).text();
-  parsed[s.id] = parseSchemeCss(css).scheme;
+  parsed[s.id] = parseSchemeCss(css, contract).scheme;
 }
 const results = Object.fromEntries(schemes.map((s) => [s.id, checkScheme(parsed[s.id], contract).results]));
 
@@ -100,7 +105,7 @@ pairs.setRows(
     const row = { id: String(i), pair: `--${p.fg} on --${p.bg}`, kind: p.kind, min: String(contract.thresholds[p.kind]) };
     for (const s of schemes) {
       for (const mode of contract.modes) {
-        row[`${s.id}-${mode}`] = results[s.id].find((r) => r.mode === mode && r.fg === p.fg && r.bg === p.bg && r.kind === p.kind);
+        row[`${s.id}-${mode}`] = results[s.id].find((r) => r.mode === mode && r.fg === p.fg && r.bg === p.bg && r.kind === p.kind && r.convention === contract.direction.default);
       }
     }
     return row;

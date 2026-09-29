@@ -26,10 +26,15 @@ ruled); read it before changing what the kit is.
   dashboard also renders. Every text/background pair in the contract passes
   WCAG AA (4.5:1 text, 3:1 large text and UI) or the scheme is refused. Type,
   spacing, radii and shadows are the brand's, never a scheme's.
-- **The frame owns the theme.** The dashboard hands the page its scheme and
-  mode by query (`om-scheme`, `om-mode`) and by a `meridian:theme` message
-  from the parent window; `src/meridian.js` applies them and accepts a message
-  from the parent only. A plugin writes no theme code and cannot override it.
+- **The frame owns the theme.** The dashboard hands the page its scheme, mode
+  and market-direction convention by query (`om-scheme`, `om-mode`,
+  `om-direction`) and by a `meridian:theme` message from the parent window;
+  `src/meridian.js` applies them and accepts a message from the parent only.
+  A plugin writes no theme code and cannot override it.
+- **Direction apart from status.** Red-up swaps only the direction colours
+  (buy and sell, and their washes, per the contract's `direction`); good,
+  danger and warning never flip. The check measures a scheme under both
+  conventions.
 - **Exact decimal for money.** A price or quantity is shown as the string the
   plugin sent and sorted exactly (`src/lib/decimal.js`); never `parseFloat`
   it. A chart places points as numbers; its tooltip shows the given string.

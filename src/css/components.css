@@ -111,7 +111,7 @@ button, .button {
   font: inherit; font-weight: 550; line-height: 1.4;
   padding: .48rem .9rem;
   border-radius: var(--radius);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong); /* a control's edge: 3:1 (WCAG 1.4.11) */
   background: var(--card);
   color: var(--ink);
   cursor: pointer;
@@ -198,7 +198,7 @@ input[type="url"], input[type="password"], input:not([type]), select, textarea {
   font: inherit;
   color: var(--ink);
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong); /* a field's edge: 3:1 (WCAG 1.4.11) */
   border-radius: var(--radius);
   padding: .5rem .65rem;
 }
@@ -217,7 +217,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--da
 .tile, .tile-card { padding: .8rem 1rem; }
 .tile-label { color: var(--ink-faint); font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
 .tile-value { font-size: 1.25rem; font-weight: 650; letter-spacing: -.01em; margin: .15rem 0; font-variant-numeric: tabular-nums; }
-.tile-delta { font-size: .84rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* :where, so a text class (.buy-ink, .sell-ink, …) on the delta wins. */
+:where(.tile-delta) { font-size: .84rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 @media (max-width: 52rem) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ── Menus and dialogs ───────────────────────────────────────────────────── */

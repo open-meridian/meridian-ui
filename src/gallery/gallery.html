@@ -24,8 +24,8 @@
     <div>
       <h1>Open Meridian UI kit <span class="faint mono">__KIT_VERSION__</span></h1>
       <p>Every component in light and dark, in each scheme the kit ships. This page stands in for the
-        dashboard's frame: it hands each framed page its scheme and mode, first as query parameters and
-        then, when you change them here, as the frame's theme message.</p>
+        dashboard's frame: it hands each framed page its scheme, mode and market-direction convention, first
+        as query parameters and then, when you change them here, as the frame's theme message.</p>
     </div>
   </header>
 
@@ -34,6 +34,9 @@
       <label class="field" style="margin: 0"><span>Scheme</span><select id="scheme"></select></label>
       <label class="field" style="margin: 0"><span>Layout</span>
         <select id="layout"><option value="both">Light and dark, side by side</option><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
+      </label>
+      <label class="field" style="margin: 0"><span>Market direction</span>
+        <select id="direction"><option value="green-up">Green up</option><option value="red-up">Red up</option></select>
       </label>
       <span class="spacer"></span>
       <span class="faint" id="sent">Frames loaded with query parameters.</span>

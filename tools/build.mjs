@@ -178,7 +178,7 @@ function main() {
   rmSync(out, { recursive: true, force: true });
 
   // Every scheme the kit ships is held to the contract before it is written.
-  const parsed = parseSchemeCss(defaultCss);
+  const parsed = parseSchemeCss(defaultCss, contract);
   const checked = checkScheme(parsed.scheme, contract);
   if (parsed.problems.length || !checked.ok) {
     fail(`the brand default scheme fails the contract:\n  ${[...parsed.problems, ...checked.problems].join("\n  ")}`);

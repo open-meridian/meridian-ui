@@ -8,6 +8,12 @@
 // Only #rgb, #rgba, #rrggbb, #rrggbbaa, rgb() and rgba() are read: a scheme is
 // data an administrator typed, and a colour the check cannot read is refused
 // rather than guessed at.
+//
+// Which colour means up is a convention (the contract's "direction"): a scheme
+// defines its direction colours for green-up, and red-up swaps them. The check
+// measures a scheme under each convention, so it is readable under both.
+
+import { directionSwaps, underConvention } from "./scheme.js";
 
 /** Parse a colour to [r, g, b, a], r/g/b in 0..255 and a in 0..1, or null. */
 export function parseColour(text) {
@@ -85,12 +91,20 @@ export function deltaE(a, b) {
 /**
  * Check a scheme against the contract. Returns { ok, problems, results }:
  * problems are sentences naming each failing pair (or missing or unreadable
- * property); results carry every pair's ratio, passing or not.
+ * property); results carry every pair's ratio, passing or not, with the
+ * convention it was measured under. Under the default convention every pair
+ * and rule is measured. Under each other one, a pair or rule is measured only
+ * when the swap makes it new: "buy on card" under red-up is sell's colour on
+ * card, which "sell on card" has measured already, but "buy and good" becomes
+ * sell's colour against good, which nothing has. Its problems name the
+ * convention: "light, red-up: ...".
  */
 export function checkScheme(scheme, contract) {
   const problems = [];
   const results = [];
   const names = contract.properties.map((p) => p.name);
+  const d = contract.direction;
+  const conventions = d ? [d.default, ...d.conventions.filter((c) => c !== d.default)] : [null];
   for (const mode of contract.modes) {
     const values = (scheme && scheme[mode]) || {};
     const colours = {};
@@ -103,6 +117,29 @@ export function checkScheme(scheme, contract) {
       if (!c) problems.push(`${mode}: --${name} is ${JSON.stringify(values[name])}, not a colour the check reads (hex, rgb() or rgba())`);
       else colours[name] = c;
     }
+    const applies = (x) => !x.modes || x.modes.includes(mode);
+    const pairKey = (fg, bg, over, kind) => [fg, bg, over || "", kind].join("|");
+    const ruleKey = (a, b, over, min) => [[a, b].sort().join("|"), over || "", min].join("|");
+    const measured = {
+      pairs: new Set(contract.pairs.filter(applies).map((p) => pairKey(p.fg, p.bg, p.over, p.kind))),
+      rules: new Set((contract.distinct || []).filter(applies).map((r) => ruleKey(r.a, r.b, r.over, r.min))),
+    };
+    for (const convention of conventions) {
+      const swaps = convention ? directionSwaps(contract, convention) : [];
+      if (!swaps.length) {
+        measure(mode, mode, convention, colours, () => true, () => true);
+        continue;
+      }
+      const other = Object.fromEntries(swaps.flatMap(([a, b]) => [[a, b], [b, a]]));
+      const s = (n) => (n && other[n]) || n;
+      measure(mode, `${mode}, ${convention}`, convention, underConvention(colours, contract, convention),
+        (p) => !measured.pairs.has(pairKey(s(p.fg), s(p.bg), s(p.over), p.kind)),
+        (r) => !measured.rules.has(ruleKey(s(r.a), s(r.b), s(r.over), r.min)));
+    }
+  }
+  return { ok: problems.length === 0, problems, results };
+
+  function measure(mode, label, convention, colours, newPair, newRule) {
     const ground = (name, over) => {
       // A translucent background is seen over the surface the contract names.
       const c = colours[name];
@@ -113,6 +150,7 @@ export function checkScheme(scheme, contract) {
     };
     for (const pair of contract.pairs) {
       if (pair.modes && !pair.modes.includes(mode)) continue;
+      if (!newPair(pair)) continue;
       const bg = ground(pair.bg, pair.over);
       const fgRaw = colours[pair.fg];
       if (!bg || !fgRaw) continue; // already reported as missing or unreadable
@@ -121,22 +159,23 @@ export function checkScheme(scheme, contract) {
       const min = contract.thresholds[pair.kind];
       const pass = ratio >= min;
       const over = pair.over && colours[pair.bg][3] < 1 ? ` over --${pair.over}` : "";
-      results.push({ mode, fg: pair.fg, bg: pair.bg, kind: pair.kind, ratio, min, pass, where: pair.where });
+      results.push({ mode, convention, fg: pair.fg, bg: pair.bg, kind: pair.kind, ratio, min, pass, where: pair.where });
       if (!pass) {
         problems.push(
-          `${mode}: --${pair.fg} on --${pair.bg}${over} is ${ratio.toFixed(2)}:1, below ${min}:1 for ${pair.kind} (${pair.where})`,
+          `${label}: --${pair.fg} on --${pair.bg}${over} is ${ratio.toFixed(2)}:1, below ${min}:1 for ${pair.kind} (${pair.where})`,
         );
       }
     }
-    for (const d of contract.distinct || []) {
-      const [a, b] = [colours[d.a], colours[d.b]];
+    for (const r of contract.distinct || []) {
+      if (r.modes && !r.modes.includes(mode)) continue;
+      if (!newRule(r)) continue;
+      const [a, b] = [colours[r.a], colours[r.b]];
       if (!a || !b) continue;
-      const bg = colours[d.over] || [255, 255, 255, 1];
+      const bg = colours[r.over] || [255, 255, 255, 1];
       const diff = deltaE(composite(a, bg), composite(b, bg));
-      if (diff < d.min) {
-        problems.push(`${mode}: --${d.a} and --${d.b} differ by ${diff.toFixed(1)} (CIE76), below ${d.min}: ${d.why}`);
+      if (diff < r.min) {
+        problems.push(`${label}: --${r.a} and --${r.b} differ by ${diff.toFixed(1)} (CIE76), below ${r.min}: ${r.why}`);
       }
     }
   }
-  return { ok: problems.length === 0, problems, results };
 }

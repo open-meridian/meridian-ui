@@ -30,7 +30,7 @@ function readTokensCss(css) {
 function assertReproduces(tokens, label) {
   const c = contract();
   const { css, scheme } = renderDefaultScheme(tokens, c);
-  const back = parseSchemeCss(css);
+  const back = parseSchemeCss(css, c);
   assert.deepEqual(back.problems, [], `${label}: the default scheme is in the template's shape`);
   for (const mode of c.modes) {
     for (const p of c.properties) {
@@ -76,8 +76,8 @@ test("the generator reproduces a tokens file exactly (synthetic fixture)", () =>
 
 test("a property mapped to a token tokens.json lacks is an error, not a gap", () => {
   const tokens = JSON.parse(readFileSync(join(ROOT, "tests/fixtures/tokens.json"), "utf8"));
-  tokens.color.tokens = tokens.color.tokens.filter((t) => t.name !== "accent-bright");
-  assert.throws(() => renderDefaultScheme(tokens, contract()), /accent-bright/);
+  tokens.color.tokens = tokens.color.tokens.filter((t) => t.name !== "line-strong");
+  assert.throws(() => renderDefaultScheme(tokens, contract()), /line-strong/);
 });
 
 const brand = brandTokensPath();
@@ -92,6 +92,6 @@ test("the generator reproduces meridian-design's tokens.json exactly", { skip: b
 
 test("the committed generated files exist and are in the template's shape", () => {
   for (const f of ["generated/tokens.css", "generated/schemes/default.css"]) assert.ok(existsSync(join(ROOT, f)), f);
-  const back = parseSchemeCss(readFileSync(join(ROOT, "generated/schemes/default.css"), "utf8"));
+  const back = parseSchemeCss(readFileSync(join(ROOT, "generated/schemes/default.css"), "utf8"), contract());
   assert.deepEqual(back.problems, []);
 });

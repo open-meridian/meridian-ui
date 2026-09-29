@@ -7,12 +7,21 @@
  *   <link rel="stylesheet" href="/.meridian/ui/__KIT_VERSION__/meridian.css">
  *   <script src="/.meridian/ui/__KIT_VERSION__/meridian.js"></script>
  *
- * The dashboard's frame hands the page the person's colour scheme and mode:
+ * The dashboard's frame hands the page the person's colour scheme, mode and
+ * market-direction convention (which colour means up):
  *
  * - on first load, as query parameters on the page's URL:
- *     ?om-scheme=<id>&om-mode=<light|dark|system>
+ *     ?om-scheme=<id>&om-mode=<light|dark|system>&om-direction=<green-up|red-up>
  * - on change, as a message from the parent window (the dashboard's frame):
- *     { "type": "meridian:theme", "version": 1, "scheme": "<id>", "mode": "<light|dark|system>" }
+ *     { "type": "meridian:theme", "version": 2, "scheme": "<id>", "mode": "<light|dark|system>",
+ *       "direction": "<green-up|red-up>" }
+ *   Version 2 adds direction; a version 1 message (no direction) is still
+ *   taken, and any field left out keeps its current value. A kit that knows
+ *   only version 1 ignores direction and follows the rest.
+ *
+ * The direction is set as data-om-direction on <html>; each scheme's
+ * stylesheet swaps only its direction colours (buy and sell, and their
+ * washes) under red-up, so status colours never flip.
  *
  * A message is accepted only when its source is this window's parent, and
  * never when the page is not framed. The scheme's stylesheet is loaded from
@@ -29,6 +38,7 @@
   var doc = win.document;
   var root = doc.documentElement;
   var MODES = { light: 1, dark: 1, system: 1 };
+  var DIRECTIONS = { "green-up": 1, "red-up": 1 };
   var SCHEME_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
   var STORE = "om-theme";
   var LINK_ID = "om-scheme";
@@ -37,12 +47,13 @@
   var script = doc.currentScript;
   var base = (script && script.src) ? new URL(".", script.src).href : new URL("./", win.location.href).href;
 
-  var current = { scheme: "default", mode: "system" };
+  var current = { scheme: "default", mode: "system", direction: "green-up" };
 
-  function valid(scheme, mode) {
+  function valid(scheme, mode, direction) {
     return {
       scheme: typeof scheme === "string" && SCHEME_ID.test(scheme) ? scheme : null,
       mode: typeof mode === "string" && MODES[mode] ? mode : null,
+      direction: typeof direction === "string" && DIRECTIONS[direction] ? direction : null,
     };
   }
 
@@ -61,7 +72,7 @@
   }
 
   function announce() {
-    var detail = { scheme: current.scheme, mode: current.mode, resolved: resolved(current.mode) };
+    var detail = { scheme: current.scheme, mode: current.mode, resolved: resolved(current.mode), direction: current.direction };
     win.dispatchEvent(new win.CustomEvent("om-theme", { detail: detail }));
   }
 
@@ -91,17 +102,20 @@
     else doc.head.appendChild(next);
   }
 
-  /** Apply a scheme and a mode; an invalid part is ignored, not guessed. */
-  function apply(scheme, mode) {
-    var v = valid(scheme, mode);
+  /** Apply a scheme, a mode and a direction convention; a part left out or
+   * invalid keeps its current value, never guessed. */
+  function apply(scheme, mode, direction) {
+    var v = valid(scheme, mode, direction);
     if (v.scheme) current.scheme = v.scheme;
     if (v.mode) current.mode = v.mode;
+    if (v.direction) current.direction = v.direction;
     root.setAttribute("data-om-mode", current.mode);
     root.setAttribute("data-om-scheme", current.scheme);
+    root.setAttribute("data-om-direction", current.direction);
     setScheme(current.scheme);
     remember();
     announce();
-    return { scheme: current.scheme, mode: current.mode };
+    return { scheme: current.scheme, mode: current.mode, direction: current.direction };
   }
 
   function onMessage(event) {
@@ -110,7 +124,7 @@
     if (!parent || parent === win || event.source !== parent) return;
     var d = event.data;
     if (!d || typeof d !== "object" || d.type !== "meridian:theme") return;
-    apply(d.scheme, d.mode);
+    apply(d.scheme, d.mode, d.direction);
   }
 
   // First load: the query, else what this tab last had, else the default.
@@ -118,7 +132,8 @@
   var saved = recall() || {};
   apply(
     query.get("om-scheme") || saved.scheme || "default",
-    query.get("om-mode") || saved.mode || "system"
+    query.get("om-mode") || saved.mode || "system",
+    query.get("om-direction") || saved.direction || "green-up"
   );
   win.addEventListener("message", onMessage);
 
@@ -132,7 +147,9 @@
   win.Meridian.kit = { version: "__KIT_VERSION__", base: base };
   win.Meridian.theme = {
     apply: apply,
-    current: function () { return { scheme: current.scheme, mode: current.mode, resolved: resolved(current.mode) }; },
+    current: function () {
+      return { scheme: current.scheme, mode: current.mode, resolved: resolved(current.mode), direction: current.direction };
+    },
   };
 
   // The components, as modules beside this file. Custom elements upgrade in

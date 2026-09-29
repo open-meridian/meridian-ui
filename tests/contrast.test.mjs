@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseColour, contrastRatio, composite, checkScheme } from "../src/lib/contrast.js";
-import { parseSchemeCss, renderSchemeCss, validSchemeId } from "../src/lib/scheme.js";
+import { parseSchemeCss, renderSchemeCss, validSchemeId, underConvention } from "../src/lib/scheme.js";
 import { read, json, contract } from "./helpers.mjs";
 
 test("colours parse, and anything else is refused", () => {
@@ -47,11 +47,11 @@ test("the contract is consistent: every pair names properties, every kind has a 
 
 test("the brand default scheme passes every pair, in both modes", () => {
   const c = contract();
-  const { scheme, problems } = parseSchemeCss(read("generated/schemes/default.css"));
+  const { scheme, problems } = parseSchemeCss(read("generated/schemes/default.css"), c);
   assert.deepEqual(problems, []);
   const result = checkScheme(scheme, c);
   assert.deepEqual(result.problems, [], result.problems.join("\n"));
-  assert.equal(result.results.length, c.pairs.length * c.modes.length, "every pair was measured in each mode");
+  assert.equal(result.results.length, c.pairs.length * c.modes.length, "every pair was measured in each mode, once: red-up adds no pair the swap has not measured");
   assert.ok(result.results.every((r) => r.pass));
 });
 
@@ -59,7 +59,7 @@ test("the sample scheme passes, and renders to the same template", () => {
   const c = contract();
   const harbour = json("schemes/harbour.json");
   assert.ok(checkScheme(harbour, c).ok);
-  const round = parseSchemeCss(renderSchemeCss("harbour", harbour, c));
+  const round = parseSchemeCss(renderSchemeCss("harbour", harbour, c), c);
   assert.deepEqual(round.problems, []);
   for (const mode of c.modes) for (const p of c.properties) assert.equal(round.scheme[mode][p.name], harbour[mode][p.name]);
 });
@@ -91,6 +91,76 @@ test("a stylesheet out of the template's shape is reported", () => {
   assert.match(parseSchemeCss(drifted).problems.join("\n"), /--ink differs between the two dark blocks/);
   const noMedia = css.replace(/@media[\s\S]*?\n\}\n/, "");
   assert.match(parseSchemeCss(noMedia).problems.join("\n"), /prefers-color-scheme: dark/);
+});
+
+// The market-direction convention (the contract's "direction"): which colour
+// means up. A scheme is written for green-up; red-up swaps buy and sell (and
+// their washes) and nothing else.
+
+const block = (css, selector) => {
+  const at = css.indexOf(`${selector} {`);
+  assert.ok(at >= 0, `${selector} is in the stylesheet`);
+  const body = css.slice(css.indexOf("{", at) + 1, css.indexOf("}", at));
+  return Object.fromEntries([...body.matchAll(/--([a-z-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+};
+
+test("red-up swaps only the direction properties, in every place a mode is declared", () => {
+  const c = contract();
+  assert.deepEqual(c.direction.conventions, ["green-up", "red-up"]);
+  assert.equal(c.direction.default, "green-up");
+  const harbour = json("schemes/harbour.json");
+  const css = renderSchemeCss("harbour", harbour, c);
+  const swapped = { buy: "sell", sell: "buy", "buy-wash": "sell-wash", "sell-wash": "buy-wash" };
+  const places = [
+    [':root[data-om-direction="red-up"]', "light"],
+    [':root[data-om-direction="red-up"]:not([data-om-mode="light"])', "dark"],
+    [':root[data-om-mode="dark"][data-om-direction="red-up"]', "dark"],
+  ];
+  for (const [selector, mode] of places) {
+    const got = block(css, selector);
+    assert.deepEqual(Object.keys(got).sort(), Object.keys(swapped).sort(), `${selector} declares only buy, sell and their washes`);
+    for (const [name, from] of Object.entries(swapped)) assert.equal(got[name], harbour[mode][from], `${selector}: --${name} is ${mode} --${from}`);
+  }
+  // Status colours never flip: nothing but direction is redeclared under red-up.
+  assert.doesNotMatch(css.slice(css.indexOf("data-om-direction")), /--(good|danger|warn-ink|violet|accent|ink)\b/);
+  // The underlying swap, as data.
+  const red = underConvention(harbour.light, c, "red-up");
+  assert.equal(red.buy, harbour.light.sell);
+  assert.equal(red.good, harbour.light.good);
+  assert.deepEqual(underConvention(harbour.light, c, "green-up"), harbour.light);
+  assert.throws(() => underConvention(harbour.light, c, "blue-up"), /not a direction convention/);
+});
+
+test("a red-up block that is missing, or not the swap, is reported", () => {
+  const c = contract();
+  const css = renderSchemeCss("harbour", json("schemes/harbour.json"), c);
+  assert.deepEqual(parseSchemeCss(css, c).problems, []);
+  const wrong = css.replace(/(:root\[data-om-direction="red-up"\] \{\s*--buy: )#[0-9a-f]+/, "$1#0a7768");
+  assert.match(parseSchemeCss(wrong, c).problems.join("\n"), /:root\[data-om-direction="red-up"\]: --buy is #0a7768, not the red-up swap/);
+  const gone = css.slice(0, css.indexOf(':root[data-om-direction="red-up"]'));
+  const problems = parseSchemeCss(gone, c).problems.join("\n");
+  assert.match(problems, /block is missing: the red-up convention would not swap buy, buy-wash, sell, sell-wash/);
+  // Without the contract, only the light and dark shape is read.
+  assert.deepEqual(parseSchemeCss(gone).problems, []);
+});
+
+test("the check holds a scheme readable under both conventions", () => {
+  const c = contract();
+  const { scheme } = parseSchemeCss(read("generated/schemes/default.css"), c);
+  // A sell drawn in the good colour passes green-up (sell is not good's
+  // neighbour there) but fails red-up, where it is the colour of a buy.
+  const asGood = (m) => ({ ...scheme[m], sell: scheme[m].good, "sell-wash": scheme[m]["good-wash"] });
+  const result = checkScheme({ light: asGood("light"), dark: asGood("dark") }, c);
+  assert.deepEqual(result.problems, [
+    "light, red-up: --buy and --good differ by 0.0 (CIE76), below 20: a buy or a rise must not read as success",
+    "dark, red-up: --buy and --good differ by 0.0 (CIE76), below 20: a buy or a rise must not read as success",
+  ]);
+  // The direction-versus-status rules hold in both modes.
+  for (const r of c.distinct) assert.equal(r.modes, undefined, `${r.a} and ${r.b} hold in every mode`);
+  // Every result says which convention it was measured under.
+  assert.ok(result.results.every((r) => c.direction.conventions.includes(r.convention)));
+  // And the brand default passes both.
+  assert.deepEqual(checkScheme(scheme, c).problems, []);
 });
 
 test("scheme ids are safe as a path segment", () => {

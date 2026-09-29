@@ -11,15 +11,16 @@
   --ink-faint: #676e93;
   --line: #e3e6f0;
   --line-soft: #eef0f6;
+  --line-strong: #7e89ad;
   --accent: #4353f0;
   --accent-wash: #eceeff;
   --accent-ink: #ffffff;
   --primary: #4353f0;
   --primary-ink: #ffffff;
-  --buy: #127c5c;
-  --buy-wash: #e3f6ef;
-  --sell: #cb2d3f;
-  --sell-wash: #fdecee;
+  --buy: #0e7c32;
+  --buy-wash: #ecf5ef;
+  --sell: #d31b0d;
+  --sell-wash: #fbedec;
   --good: #127c5c;
   --good-wash: #e3f6ef;
   --danger: #cb2d3f;
@@ -41,13 +42,14 @@
     --ink-faint: #7a82af;
     --line: #222c5a;
     --line-soft: #1a2350;
+    --line-strong: #5b6bb0;
     --accent: #8f9bff;
     --accent-wash: #1c2562;
     --accent-ink: #0a0f2c;
     --primary: #4e61ff;
     --primary-ink: #ffffff;
-    --buy: #1fbf8f;
-    --buy-wash: rgba(31, 191, 143, 0.14);
+    --buy: #22bf6b;
+    --buy-wash: rgba(34, 191, 107, 0.14);
     --sell: #ff5d6c;
     --sell-wash: rgba(255, 93, 108, 0.14);
     --good: #5fdcb0;
@@ -71,13 +73,14 @@
   --ink-faint: #7a82af;
   --line: #222c5a;
   --line-soft: #1a2350;
+  --line-strong: #5b6bb0;
   --accent: #8f9bff;
   --accent-wash: #1c2562;
   --accent-ink: #0a0f2c;
   --primary: #4e61ff;
   --primary-ink: #ffffff;
-  --buy: #1fbf8f;
-  --buy-wash: rgba(31, 191, 143, 0.14);
+  --buy: #22bf6b;
+  --buy-wash: rgba(34, 191, 107, 0.14);
   --sell: #ff5d6c;
   --sell-wash: rgba(255, 93, 108, 0.14);
   --good: #5fdcb0;
@@ -88,4 +91,27 @@
   --warn-wash: #33291a;
   --violet: #c2b3ff;
   --violet-wash: #2a2352;
+}
+
+:root[data-om-direction="red-up"] {
+  --buy: #d31b0d;
+  --buy-wash: #fbedec;
+  --sell: #0e7c32;
+  --sell-wash: #ecf5ef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-om-direction="red-up"]:not([data-om-mode="light"]) {
+    --buy: #ff5d6c;
+    --buy-wash: rgba(255, 93, 108, 0.14);
+    --sell: #22bf6b;
+    --sell-wash: rgba(34, 191, 107, 0.14);
+  }
+}
+
+:root[data-om-mode="dark"][data-om-direction="red-up"] {
+  --buy: #ff5d6c;
+  --buy-wash: rgba(255, 93, 108, 0.14);
+  --sell: #22bf6b;
+  --sell-wash: rgba(34, 191, 107, 0.14);
 }
