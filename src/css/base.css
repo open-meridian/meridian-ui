@@ -1,0 +1,37 @@
+/* The ground: elements before any component. Built into meridian.css inside
+ * @layer meridian.base, so a plugin's own rules win without a specificity
+ * contest. Type sizes come from the tokens (generated/tokens.css); colours
+ * only from the scheme's custom properties. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--page);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { margin: 0; color: var(--ink); }
+h3 { font-size: .95rem; font-weight: 650; }
+p { margin: .4rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+code, kbd, samp { overflow-wrap: anywhere; }
+time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+strong, b { font-weight: 650; }
+hr { border: 0; border-top: 1px solid var(--line-soft); margin: var(--space-4) 0; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+[hidden] { display: none !important; }
+
+/* For a label only a screen reader needs. */
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

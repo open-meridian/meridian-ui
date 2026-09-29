@@ -1,0 +1,7 @@
+// Every component of the kit. meridian.js loads this; a page may instead
+// import a single component module beside it.
+import "./om-grid.js";
+import "./om-chart.js";
+import "./om-asof.js";
+import "./om-instrument-picker.js";
+import "./om-live.js";

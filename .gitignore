@@ -1,0 +1,11 @@
+# What the build and the tests leave behind. generated/ is committed: it is
+# what builds the kit where meridian-design (private) is not beside it.
+dist/
+node_modules/
+.serve/
+.test.log
+.DS_Store
+
+# One person's own.
+CLAUDE.local.md
+.claude/settings.local.json

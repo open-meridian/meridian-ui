@@ -1,0 +1,9 @@
+meridian-ui
+Copyright 2026 Societal Lab Inc.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+The kit vendors no third-party code: its charts are its own SVG, and it loads
+nothing from any other origin at run time. Its tests use happy-dom and
+@happy-dom/global-registrator (MIT), as development dependencies only; they
+are not part of what the kit serves.

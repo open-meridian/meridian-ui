@@ -1,0 +1,17 @@
+# The kit's build, lint and tests, in a container, because the host has no
+# toolchain to rely on (meridian-python and meridian-snaptrade do the same).
+# `make` runs this image with `docker run`, so the design repository's tokens
+# can be mounted where they exist, and streams dist/ and generated/ back out
+# as a tar rather than writing through a bind mount.
+ARG NODE_VERSION=22.23.3
+FROM node:${NODE_VERSION}-alpine AS base
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+WORKDIR /w
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
+COPY contract contract
+COPY generated generated
+COPY schemes schemes
+COPY src src
+COPY tools tools
+COPY tests tests

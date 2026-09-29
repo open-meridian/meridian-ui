@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample plugin page</title>
+<link rel="stylesheet" href="../meridian.css">
+<!-- The gallery's stand-in for a plugin's server: search, snapshot and events.
+     A real page has no such script; its own server answers these URLs. -->
+<script src="stand-in.js"></script>
+<script src="../meridian.js"></script>
+<script type="module" src="sample.js"></script>
+</head>
+<body>
+<main class="page">
+
+  <header class="page-head">
+    <div>
+      <h1>Positions</h1>
+      <p>A plugin's page built only from the kit. <span class="faint">Every colour is the scheme's.</span></p>
+    </div>
+    <div class="actions">
+      <om-live id="feed" src="events" snapshot="snapshot.json" for="positions"></om-live>
+      <button type="button">Export</button>
+      <button type="button" class="danger">Close all</button>
+      <button type="button" class="primary">New order</button>
+    </div>
+  </header>
+
+  <div class="notice info">The frame hands this page its scheme and mode. Links look <a href="#top">like this</a>.</div>
+  <div class="notice bad">The last read failed: the venue answered 503.</div>
+  <div class="notice warn">Two accounts have not synced for a day.</div>
+  <div class="notice good">Every account is current.</div>
+  <details class="notice quiet"><summary>Waiting for the account-side contract</summary><p>Held here until the SDK carries it.</p></details>
+
+  <section class="tiles">
+    <div class="panel tile"><div class="tile-label">Net asset value</div><div class="tile-value">12,480,112.50</div><div class="tile-delta buy-ink">+84,210.00 today</div></div>
+    <div class="panel tile"><div class="tile-label">Day P&amp;L</div><div class="tile-value sell-ink">-3,120.75</div><div class="tile-delta">-0.02%</div></div>
+    <div class="panel tile"><div class="tile-label">Open orders</div><div class="tile-value">14</div><div class="tile-delta">3 working</div></div>
+    <div class="panel tile"><div class="tile-label">Accounts</div><div class="tile-value">6</div><div class="tile-delta"><span class="badge good">All current</span></div></div>
+  </section>
+
+  <nav class="tabs" aria-label="Views">
+    <a class="tab on" href="#positions" aria-current="page">Positions <span class="count">8</span></a>
+    <a class="tab" href="#orders">Orders <span class="count">14</span></a>
+    <a class="tab" href="#history">History</a>
+  </nav>
+
+  <section class="panel padded">
+    <div class="filters">
+      <om-asof id="asof" name="as_of"></om-asof>
+      <om-instrument-picker id="picker" src="search" asof="asof" style="flex: 1 1 18rem"></om-instrument-picker>
+      <span class="faint" id="picked">No instrument chosen.</span>
+    </div>
+    <om-grid id="positions" row-key="position_id" sort="market_value:desc" caption="Positions" empty="No positions."></om-grid>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel padded">
+      <h2>Net asset value</h2>
+      <om-chart id="nav" type="line" height="220" label="Net asset value, two books"></om-chart>
+    </section>
+    <section class="panel padded">
+      <h2>Daily flows</h2>
+      <om-chart id="flows" type="bar" height="220" label="Daily buys and sells"></om-chart>
+    </section>
+  </div>
+
+  <section class="panel padded">
+    <div class="row"><h2>Orders</h2><span class="badge">dense</span><span class="spacer"></span><button type="button" class="small">Refresh</button></div>
+    <om-grid id="orders" row-key="order_id" dense></om-grid>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel padded">
+      <h2>Badges</h2>
+      <div class="chips">
+        <span class="badge">Neutral</span>
+        <span class="badge good">Current</span>
+        <span class="badge warn">Stale</span>
+        <span class="badge bad">Needs sign-in</span>
+        <span class="badge accent">Selected</span>
+        <span class="badge info">Delayed by design</span>
+        <span class="badge buy">Buy</span>
+        <span class="badge sell">Sell</span>
+      </div>
+      <h2 style="margin-top: 1rem">Buttons</h2>
+      <div class="row">
+        <button type="button">Default</button>
+        <button type="button" class="primary">Primary</button>
+        <button type="button" class="danger">Danger</button>
+        <button type="button" class="link">Link button</button>
+        <button type="button" class="small">Small</button>
+        <button type="button" disabled>Disabled</button>
+      </div>
+      <h2 style="margin-top: 1rem">Chips and a menu</h2>
+      <div class="row">
+        <span class="chip">ticker:AAPL <button type="button" aria-label="Remove">×</button></span>
+        <span class="chip">currency:USD <button type="button" aria-label="Remove">×</button></span>
+        <details class="menu"><summary aria-label="More">…</summary>
+          <div class="menu-pop"><button type="button">Rename</button><button type="button">Reconnect</button><hr><button type="button" class="danger">Remove</button></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel padded">
+      <h2>Fields</h2>
+      <label class="field"><span>Account name</span><input type="text" placeholder="Main brokerage"><span class="hint">Shown to people granted the account.</span></label>
+      <div class="grid-2">
+        <label class="field"><span>Currency</span><select><option>USD</option><option>EUR</option></select></label>
+        <label class="field"><span>Quantity</span><input type="text" value="-12" aria-invalid="true"><span class="hint bad-ink">A quantity is at least 1.</span></label>
+      </div>
+      <label class="field"><span>Note</span><textarea rows="2">Rebalanced at the close.</textarea></label>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="list-row"><div class="grow"><div class="title">Interactive Brokers</div><div class="meta">3 accounts · read-only</div></div><span class="badge good">Current</span></div>
+    <div class="list-row"><div class="grow"><div class="title">Fidelity</div><div class="meta">1 account · trading</div></div><span class="badge warn">Stale</span></div>
+    <div class="list-row"><div class="grow"><div class="title">Schwab</div><div class="meta">Needs the person to sign in again</div></div><span class="badge bad">Needs sign-in</span></div>
+  </section>
+
+  <section class="panel padded">
+    <h2>A plain table</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Account</th><th>ID</th><th class="num">Cash</th><th>As of</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Main</strong><div class="hint">Margin</div></td><td><code>ACC-7b20c1e5</code></td><td class="num">1,204,500.00</td><td><time datetime="2026-09-28">2026-09-28</time></td></tr>
+        <tr class="picked"><td><strong>Retirement</strong><div class="hint">Cash</div></td><td><code>ACC-19fe03aa</code></td><td class="num">88,020.13</td><td><time datetime="2026-09-27">2026-09-27</time></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <div class="empty-state"><strong>No brokerage connections yet</strong><p>Connect one to begin.</p><button type="button" class="primary">Connect a brokerage</button></div>
+  </section>
+
+</main>
+</body>
+</html>
