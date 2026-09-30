@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
-import { read } from "./helpers.mjs";
+import { read, settle } from "./helpers.mjs";
 
 const SOURCE = read("src/meridian.js");
 const KIT = "https://plugin.example/.meridian/ui/0.2.0/";
@@ -22,8 +22,9 @@ function host() {
 /** A page at `url`, framed by `parent` unless it is null, with the kit's
  * script run in it; its ResizeObserver, its animation frames and its height
  * are the test's to drive. */
-function page(url, { parent = host(), storage, height = 600 } = {}) {
+function page(url, { parent = host(), storage, height = 600, body } = {}) {
   const win = new Window({ url, settings: SETTINGS });
+  if (body !== undefined) win.document.body.innerHTML = body;
   const framedBy = parent === null ? win : parent;
   Object.defineProperty(win, "parent", { value: framedBy, configurable: true });
   Object.defineProperty(win.document, "currentScript", {
@@ -204,6 +205,174 @@ test("a navigation inside the frame that drops the query stays framed; the query
   assert.equal(page("https://plugin.example/admin/next?om-framed=0", { storage }).root.hasAttribute("data-om-framed"), false);
 });
 
+// ── Header actions ───────────────────────────────────────────────────────────
+
+// A head as a plugin writes one: a plain form with its token and a marked
+// submit button, a marked button of the page's own, and one it leaves alone.
+const HEAD = `
+<main class="page">
+  <header class="page-head">
+    <div><h1>Brokerage connections</h1><p>Reading SnapTrade.</p></div>
+    <div class="actions">
+      <form method="post" action="/admin/read" class="inline" id="read-form"><input type="hidden" name="csrf" value="t0ken"><input type="hidden" name="back" value="/admin/connections"><button data-om-action="refresh" id="refresh">
+        Refresh
+      </button></form>
+      <button type="button" class="primary" data-om-action="connect" id="connect">Connect a brokerage</button>
+      <button type="button" id="plain">Export</button>
+    </div>
+  </header>
+  <section class="panel padded"><button type="button" data-om-action="content" id="content">In the content</button></section>
+</main>`;
+
+const actions = (list) => ({ data: { type: "meridian:actions", version: 1, actions: list }, targetOrigin: HOST });
+const offered = (p) => p.parent.posted.filter((m) => m.data.type === "meridian:actions");
+const REFRESH = { id: "refresh", label: "Refresh" };
+const CONNECT = { id: "connect", label: "Connect a brokerage", tone: "primary" };
+const action = (id, extra = {}) => ({ type: "meridian:action", version: 1, id, ...extra });
+
+test("framed, the head's marked buttons go to the host's origin with its first theme message, and nothing before", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  p.resize(700);
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p), [], "nothing before the host's origin is known");
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(offered(p), [actions([REFRESH, CONNECT])], "the label is the button's text; only the head's; never '*'");
+  assert.deepEqual(p.win.Meridian.frame.actions(), [REFRESH, CONNECT]);
+});
+
+test("in a frame but not framed, and on its own, nothing is offered", async () => {
+  const p = page("https://plugin.example/admin", { body: HEAD });
+  message(p.win, theme(), p.parent, HOST);
+  p.win.document.getElementById("connect").disabled = true;
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p), [], "not framed: the buttons are the page's");
+
+  const alone = page("https://plugin.example/admin?om-framed=1", { parent: null, body: HEAD });
+  const posted = [];
+  alone.win.postMessage = (...args) => posted.push(args);
+  message(alone.win, theme({ framed: true }), alone.win, HOST);
+  await settle();
+  alone.frame();
+  assert.deepEqual(posted, []);
+});
+
+test("a button the kit cannot offer stays in the page, marked kept", () => {
+  const long = "A label that goes on far longer than any header's button";
+  const p = page("https://plugin.example/admin?om-framed=1", { body: `
+    <header class="pagehead"><div><h1>Orders</h1></div><div class="actions">
+      <button data-om-action="one">One</button>
+      <button data-om-action="Bad Id" id="bad">Bad</button>
+      <button data-om-action="one" id="again">Again</button>
+      <button data-om-action="blank" id="blank">   </button>
+      <button data-om-action="long" id="long">${long}</button>
+      <input type="submit" data-om-action="two" value="Two">
+      <button data-om-action="three" class="danger" disabled>Three</button>
+      <fieldset disabled><button data-om-action="four">Four</button></fieldset>
+      <button data-om-action="five" id="fifth">Five</button>
+    </div></header>` });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(offered(p), [actions([
+    { id: "one", label: "One" },
+    { id: "two", label: "Two" },
+    { id: "three", label: "Three", tone: "danger", disabled: true },
+    { id: "four", label: "Four", disabled: true },
+  ])], "at most four, each id once, a short label; a disabled fieldset disables");
+  const kept = [...p.win.document.querySelectorAll("[data-om-kept]")].map((el) => el.id);
+  assert.deepEqual(kept, ["bad", "again", "blank", "long", "fifth"]);
+});
+
+test("a change to the set is offered again, at most once a frame, and only a change", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  const doc = p.win.document;
+  p.parent.posted.length = 0;
+
+  doc.getElementById("plain").textContent = "Export all";
+  doc.querySelector("#content").disabled = true;
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p), [], "a change outside the offered set is not sent");
+
+  doc.getElementById("refresh").disabled = true;
+  doc.getElementById("connect").textContent = "Connect";
+  await settle();
+  assert.equal(p.frames.length, 1, "two changes ask for one frame");
+  p.frame();
+  assert.deepEqual(offered(p), [actions([{ ...REFRESH, disabled: true }, { ...CONNECT, label: "Connect" }])]);
+
+  doc.getElementById("refresh").disabled = false;
+  doc.getElementById("plain").setAttribute("data-om-action", "export");
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p).at(-1), actions([REFRESH, { ...CONNECT, label: "Connect" }, { id: "export", label: "Export all" }]), "one marked later");
+
+  doc.getElementById("connect").remove();
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p).at(-1), actions([REFRESH, { id: "export", label: "Export all" }]), "one removed");
+  assert.equal(offered(p).length, 3);
+});
+
+test("framed: false tells the host there are none, and framed: true offers them again", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(offered(p), [actions([REFRESH, CONNECT]), actions([]), actions([REFRESH, CONNECT])]);
+});
+
+/** Every submit and click on the page, so a test sees what the host's word did. */
+function watch(p) {
+  const seen = [];
+  const doc = p.win.document;
+  doc.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const form = new p.win.FormData(e.target);
+    seen.push({ submit: e.target.id, by: e.submitter && e.submitter.id, csrf: form.get("csrf"), back: form.get("back") });
+  });
+  doc.addEventListener("click", (e) => seen.push({ click: e.target.id }), true);
+  return seen;
+}
+
+test("the host's meridian:action clicks the page's own button: its form posts with its own token", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  const seen = watch(p);
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  message(p.win, action("refresh"), p.parent, HOST);
+  assert.deepEqual(seen, [{ click: "refresh" }, { submit: "read-form", by: "refresh", csrf: "t0ken", back: "/admin/connections" }]);
+  message(p.win, action("connect"), p.parent, HOST);
+  assert.deepEqual(seen.at(-1), { click: "connect" }, "a button of the page's own script");
+});
+
+test("meridian:action is taken only from the parent, at the learned origin, while framed, for a button offered", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  const seen = watch(p);
+  message(p.win, action("refresh"), p.parent, HOST);
+  assert.deepEqual(seen, [], "not before the host's origin is known");
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  message(p.win, action("refresh"), {}, HOST);
+  message(p.win, action("refresh"), p.win, HOST);
+  message(p.win, action("refresh"), p.parent, "https://elsewhere.example");
+  message(p.win, action("refresh", { version: 2 }), p.parent, HOST);
+  message(p.win, { type: "meridian:action", id: "refresh" }, p.parent, HOST);
+  message(p.win, action("content"), p.parent, HOST);
+  message(p.win, action("plain"), p.parent, HOST);
+  message(p.win, action(["refresh"]), p.parent, HOST);
+  message(p.win, action("toString"), p.parent, HOST);
+  p.win.document.getElementById("connect").disabled = true;
+  message(p.win, action("connect"), p.parent, HOST);
+  assert.deepEqual(seen, [], "another window, another origin, another version, no id, a button not offered, a disabled one");
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  message(p.win, action("refresh"), p.parent, HOST);
+  assert.deepEqual(seen, [], "not framed: the page's buttons are its own to press");
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  message(p.win, action("refresh"), p.parent, HOST);
+  assert.equal(seen[0].click, "refresh", "the host's word, from the parent at its origin, framed");
+});
+
 // ── The framed look ──────────────────────────────────────────────────────────
 
 const BASE = read("src/css/base.css");
@@ -330,4 +499,18 @@ test("every framed rule is under the attribute, so nothing of it reaches a page 
   for (const s of selectors) assert.match(s, /^:root\[data-om-framed\] /, s);
   // And no rule anywhere else names it.
   assert.doesNotMatch(COMPONENTS.replace(FRAMED_SECTION, "") + BASE, /data-om-framed/);
+});
+
+test("framed, the head's offered buttons go with their one-button forms; one kept, or not in the head, stays", () => {
+  const { style } = styled(`${HEAD}
+    <header class="page-head"><div><h1>Orders</h1></div><div class="actions">
+      <button data-om-action="bad id" data-om-kept id="kept">Kept</button></div></header>`, { framed: true });
+  assert.equal(style("#refresh").display, "none", "the offered button");
+  assert.equal(style("#read-form").display, "none", "and its form, so no gap is left");
+  assert.equal(style("#connect").display, "none");
+  assert.notEqual(style("#plain").display, "none", "a button not marked");
+  assert.notEqual(style("#content").display, "none", "a marked button outside the head");
+  assert.notEqual(style("#kept").display, "none", "one the kit could not offer");
+  const alone = styled(HEAD);
+  for (const id of ["#refresh", "#read-form", "#connect"]) assert.notEqual(alone.style(id).display, "none", `${id} on its own`);
 });

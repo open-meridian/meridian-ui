@@ -11,7 +11,7 @@
   /* The stand-in's own layout; colours are still only the scheme's. The
    * frame has no border and no background: the page is drawn on this one. */
   #plugin { display: block; width: 100%; height: 12rem; border: 0; }
-  #said { margin-top: var(--space-4); font: .8rem var(--mono); }
+  #said, #offered { margin-top: var(--space-4); font: .8rem var(--mono); }
 </style>
 </head>
 <body>
@@ -21,8 +21,11 @@
       <h1>Sample plugin <span class="faint mono">sample-1</span></h1>
       <p>A stand-in for the dashboard's view of one plugin. This page draws the heading and the tab row, and
         frames the plugin's page seamlessly: the page drops its own, and the frame takes its height from the
-        page's <code>meridian:size</code> messages.</p>
+        page's <code>meridian:size</code> messages. The buttons beside this heading are the page's header
+        actions, drawn here from its <code>meridian:actions</code>; pressing one sends <code>meridian:action</code>
+        back, and the page presses its own.</p>
     </div>
+    <div class="actions" id="actions" aria-label="The page's actions"></div>
   </header>
   <nav class="tabs" aria-label="The plugin's admin">
     <a class="tab" href="#overview">Overview</a>
@@ -32,6 +35,7 @@
   </nav>
   <div id="slot"></div>
   <p class="faint" id="said">Waiting for the page's first size.</p>
+  <p class="faint" id="offered">No header actions from the page yet.</p>
 </main>
 </body>
 </html>

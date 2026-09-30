@@ -113,3 +113,14 @@ document.getElementById("desk").defaultLayout = {
   ] },
 };
 document.getElementById("desk-reset").addEventListener("click", () => document.getElementById("desk").reset());
+
+// The header actions: the page's own buttons, whether pressed here or, framed,
+// in the host's header (the kit clicks them). Refresh is a plain form, so the
+// page it posts to says so.
+const acted = document.getElementById("acted");
+const said = (text) => {
+  acted.textContent = text;
+  acted.hidden = false;
+};
+if (new URLSearchParams(location.search).get("refreshed") === "1") said("Refreshed: the Refresh form was sent, and this is the page it answered with.");
+document.querySelector('[data-om-action="new-order"]').addEventListener("click", () => said(`New order pressed at ${new Date().toLocaleTimeString()}.`));

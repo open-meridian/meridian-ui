@@ -73,6 +73,11 @@ ul.plain li + li { margin-top: .2rem; }
 :root[data-om-framed] .page > :is(.page-head, .pagehead) { margin-bottom: 1.25rem; }
 :root[data-om-framed] .page > :is(.page-head, .pagehead) + *,
 :root[data-om-framed] .page > :is(.page-head, .pagehead) + .tabs + * { margin-top: 0; }
+/* The head's header actions (data-om-action) are the host's to draw: the
+ * page's own button goes, and the one-button form holding it with it. One
+ * the kit could not offer the host (data-om-kept) stays. */
+:root[data-om-framed] :is(.page-head, .pagehead) .actions [data-om-action]:not([data-om-kept]),
+:root[data-om-framed] :is(.page-head, .pagehead) .actions form.inline:has([data-om-action]:not([data-om-kept])) { display: none; }
 
 /* ── Panels and cards ────────────────────────────────────────────────────── */
 

@@ -23,9 +23,15 @@
       <om-live id="feed" src="events" snapshot="snapshot.json" for="positions"></om-live>
       <button type="button">Export</button>
       <button type="button" class="danger">Close all</button>
-      <button type="button" class="primary">New order</button>
+      <!-- Header actions: framed, the host draws these in its own header and
+           the page's go; a click there clicks them here. "Refresh" is a plain
+           form of the page's own; "New order" a button of its script's. -->
+      <form method="get" action="" class="inline"><input type="hidden" name="refreshed" value="1"><button data-om-action="refresh">Refresh</button></form>
+      <button type="button" class="primary" data-om-action="new-order">New order</button>
     </div>
   </header>
+
+  <p class="notice good" id="acted" role="status" hidden></p>
 
   <div class="notice info">The frame hands this page its scheme and mode. Links look <a href="#top">like this</a>.</div>
   <div class="notice bad">The last read failed: the venue answered 503.</div>

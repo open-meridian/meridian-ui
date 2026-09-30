@@ -37,8 +37,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.3.0/meridian.css">
-  <script src="/.meridian/ui/0.3.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.4.0/meridian.css">
+  <script src="/.meridian/ui/0.4.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -100,7 +100,9 @@ JSON and what it shows without the kit there, which the element replaces).
 pinned to an earlier 0.x keeps working on the newest, which the dashboard
 serves to any 0.x request. 0.3.0 added `om-account-map`, `om-moment`, the
 grid's declared JSON, rich cells and narrow layouts, list rows that wrap,
-options, the field row and a select as tall as an input.
+options, the field row and a select as tall as an input. 0.4.0 added header
+actions: a framed page's head buttons drawn in the host's header (see
+[the frame: seamless](#the-frame-seamless)).
 
 ## Never raw colours
 
@@ -680,6 +682,9 @@ has `data-om-framed` on `<html>`, and `window.Meridian.frame.framed()` says so.
 - makes the body's background transparent, so the dashboard's page colour
   shows through;
 
+- hides the head's header actions (below), and the one-button
+  `form.inline` holding one;
+
 and nothing else. A page not framed looks exactly as it did.
 
 So a page benefits by drawing its heading and its tab row with the kit, in
@@ -721,6 +726,66 @@ pixel, so a fraction never leaves a scrollbar. It is posted
 This holds framed or not: a host that sends the theme message gets the size.
 A page on its own posts nothing.
 
+**Header actions.** A page's head may hand its buttons to the host, which
+draws them in its own header, where the dashboard's own buttons are. The page
+marks each one declaratively, and writes no script for it:
+`data-om-action="<id>"` on a `button` (or an `input type="submit"`) inside
+the head's `.actions`, most often a plain form's submit button:
+
+```html
+<header class="page-head">
+  <div><h1>Connections</h1><p>Reading SnapTrade.</p></div>
+  <div class="actions">
+    <form method="post" action="/admin/read" class="inline">
+      <input type="hidden" name="csrf" value="…"><button data-om-action="refresh">Refresh</button>
+    </form>
+  </div>
+</header>
+```
+
+The id is lower-case letters, digits and hyphens, at most 32; the label is
+the button's text (an input's value), its whitespace collapsed, at most 40
+characters; `class="primary"` or `class="danger"` is its tone, and a
+disabled button (or one in a disabled `fieldset`) is disabled. At most four
+are offered, each id once, in the page's order. A button the kit cannot
+offer (an id that is not one, a repeat, a fifth, no label or a long one) is
+marked `data-om-kept` and stays in the page. A marked button anywhere but the
+head's `.actions` is the page's own.
+
+Framed, the kit's CSS hides the offered buttons in the page, and the kit
+posts them to the host:
+
+```json
+{ "type": "meridian:actions", "version": 1,
+  "actions": [{ "id": "refresh", "label": "Refresh" }, { "id": "connect", "label": "Connect a brokerage", "tone": "primary" }] }
+```
+
+`tone` is there only as `"primary"` or `"danger"`, and `disabled` only as
+`true`. It is posted
+
+- only to the origin learned from the host's first theme message, as the size
+  is, never to `"*"`, and only while the page is framed;
+- with that first theme message (the whole set, even when it is empty);
+- then again whenever the set, a label, a tone or a disabled state changes
+  (a `MutationObserver`), at most once an animation frame, and only when what
+  it would say differs from what it last said. A theme message with
+  `"framed": false` sends an empty set, and `"framed": true` the set again.
+
+The host answers a click with
+
+```json
+{ "type": "meridian:action", "version": 1, "id": "refresh" }
+```
+
+The kit takes it only when `event.source` is its own `window.parent`,
+`event.origin` is exactly the learned host origin, the page is framed, and
+`id` names a button it offers now that is not disabled. It then clicks the
+page's own button: a form posts to the page's own server with its own fields
+and token, and a button of the page's script gets its `click`. The host
+never sees the form, its token or its answer. On its own, a page's buttons
+stay where they are, and nothing is posted. `window.Meridian.frame.actions()`
+returns what would be offered.
+
 **The host's half.** For each framed page, the host:
 
 1. Frames it with `om-framed=1` beside the theme on its address, and no
@@ -742,6 +807,16 @@ A page on its own posts nothing.
    `dark`, or `light dark` for the system's): where a frame's colour scheme
    differs from its document's, a browser paints the frame opaque, and the
    transparent page would show a white or black box.
+6. Takes a message as the page's header actions only under the size's
+   guards (`event.source`, the exact origin), with `data.type`
+   `"meridian:actions"` and `data.version` `1`, and only in the shape above:
+   at most four, each an `id` as above and unique, a `label` string of 1 to
+   40 characters, `tone` absent or `"primary"` or `"danger"`, `disabled`
+   absent or a boolean. Anything else is refused whole. It draws each as a
+   button in its header, the label as text (never as HTML), and drops them
+   on each `load` of the frame, until the new page offers its own.
+7. On a click, posts `{ "type": "meridian:action", "version": 1, "id" }` to
+   the frame's window with `postMessage(message, pluginOrigin)`, never `"*"`.
 
 `gallery/host.html` is that host, and `gallery/host.js` all of its script.
 

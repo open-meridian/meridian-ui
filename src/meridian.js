@@ -44,6 +44,19 @@
  *     { "type": "meridian:size", "version": 1, "height": <CSS pixels> }
  * Before that message it sends nothing, and it never sends to "*".
  *
+ * Header actions. A button (or a form's submit button) in the page head's
+ * .actions marked data-om-action="<id>" is one the host may draw in its own
+ * header, labelled with the button's text. Framed, the kit's CSS hides it in
+ * the page, and the kit posts the set to the learned host origin alone: with
+ * the host's first theme message, then whenever the set, a label, a tone or a
+ * disabled state changes (a MutationObserver, at most once a frame):
+ *     { "type": "meridian:actions", "version": 1,
+ *       "actions": [{ "id", "label", "tone"?: "primary"|"danger", "disabled"?: true }] }
+ * The host answers a click with { "type": "meridian:action", "version": 1, "id" },
+ * taken only from the parent window and the learned origin while framed; the
+ * kit then clicks the page's own button, so its form posts with its own
+ * token. On its own, a page's buttons stay where they are.
+ *
  * No plugin code is needed: the page follows the theme by linking this file.
  */
 (function (win) {
@@ -170,18 +183,107 @@
     else win.setTimeout(report, 16);
   }
 
+  // Header actions: buttons in the head's .actions the host draws for the
+  // page when it is framed. One the kit cannot offer (an id that is not one,
+  // a repeat, past the fourth, no label or a long one) is marked kept, and
+  // stays in the page.
+  var ACTION = "data-om-action";
+  var KEPT = "data-om-kept";
+  var ACTION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+  var MAX_ACTIONS = 4;
+  var MAX_LABEL = 40;
+  var ACTION_SELECTOR = [".page-head", ".pagehead"].map(function (head) {
+    return ["button", "input[type=submit]", "input[type=button]"].map(function (el) {
+      return head + " .actions " + el + "[" + ACTION + "]";
+    }).join(", ");
+  }).join(", ");
+  var offered = null;
+  var offerPending = false;
+
+  /** Disabled, by its own attribute or a disabled fieldset around it. */
+  function inert(el) {
+    if (el.disabled || el.closest("fieldset[disabled]")) return true;
+    try { return el.matches(":disabled"); } catch (e) { return false; }
+  }
+
+  /** The header actions the page declares, as the host is told them, and
+   * the button behind each id. */
+  function declared() {
+    var list = [];
+    var buttons = Object.create(null);
+    var found = doc.querySelectorAll(ACTION_SELECTOR);
+    for (var i = 0; i < found.length; i++) {
+      var el = found[i];
+      var id = el.getAttribute(ACTION);
+      var text = el.localName === "input" ? el.value : el.textContent;
+      var label = String(text || "").replace(/\s+/g, " ").trim();
+      var ok = list.length < MAX_ACTIONS && ACTION_ID.test(id) && !buttons[id] && label !== "" && label.length <= MAX_LABEL;
+      if (!ok) {
+        if (!el.hasAttribute(KEPT)) el.setAttribute(KEPT, "");
+        continue;
+      }
+      if (el.hasAttribute(KEPT)) el.removeAttribute(KEPT);
+      buttons[id] = el;
+      var action = { id: id, label: label };
+      if (el.classList.contains("danger")) action.tone = "danger";
+      else if (el.classList.contains("primary")) action.tone = "primary";
+      if (inert(el)) action.disabled = true;
+      list.push(action);
+    }
+    return { list: list, buttons: buttons };
+  }
+
+  /** Tell the host the page's header actions, when they differ from what it
+   * was last told. Framed only; unframed, a host once told is told none. */
+  function offer() {
+    offerPending = false;
+    if (!framed && offered === null) return;
+    var list = framed ? declared().list : [];
+    if (!host) return;
+    var said = JSON.stringify(list);
+    if (said === offered) return;
+    try {
+      win.parent.postMessage({ type: "meridian:actions", version: 1, actions: list }, host);
+      offered = said;
+    } catch (e) { /* the parent went away: nobody to draw them */ }
+  }
+
+  function scheduleOffer() {
+    if (offerPending || (!framed && offered === null)) return;
+    offerPending = true;
+    if (win.requestAnimationFrame) win.requestAnimationFrame(offer);
+    else win.setTimeout(offer, 16);
+  }
+
+  /** The host's click on one of the page's header actions: the page's own
+   * button is clicked, so its own form posts with its own token. */
+  function act(event, d) {
+    if (!host || event.origin !== host || !framed) return;
+    if (d.version !== 1 || typeof d.id !== "string") return;
+    var el = declared().buttons[d.id];
+    if (!el || inert(el)) return;
+    el.click();
+  }
+
   function onMessage(event) {
     var parent = win.parent;
     // Only the frame this page is in: never itself, never another window.
     if (!parent || parent === win || event.source !== parent) return;
     var d = event.data;
-    if (!d || typeof d !== "object" || d.type !== "meridian:theme") return;
+    if (!d || typeof d !== "object") return;
+    if (d.type === "meridian:action") return act(event, d);
+    if (d.type !== "meridian:theme") return;
+    var was = framed;
     if (typeof d.framed === "boolean") frame(d.framed);
     apply(d.scheme, d.mode, d.direction);
     if (!host && typeof event.origin === "string" && ORIGIN.test(event.origin)) {
       host = event.origin;
-      // The first size now, measured after this message's changes.
+      // The first size now, measured after this message's changes, and the
+      // page's header actions with it.
       report();
+      offer();
+    } else if (framed !== was) {
+      offer();
     }
   }
 
@@ -197,6 +299,15 @@
   );
   win.addEventListener("message", onMessage);
   if (inFrame && win.ResizeObserver) new win.ResizeObserver(schedule).observe(root);
+  // The header actions follow the page: a button added, removed, relabelled
+  // or disabled is told again (only what differs is sent).
+  if (inFrame && win.MutationObserver) {
+    new win.MutationObserver(scheduleOffer).observe(root, {
+      childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: [ACTION, "disabled", "class", "value"],
+    });
+    doc.addEventListener("DOMContentLoaded", scheduleOffer);
+  }
 
   // A system change matters to anything drawing with the resolved mode.
   if (win.matchMedia) {
@@ -215,6 +326,8 @@
   win.Meridian.frame = {
     /** Whether the host frames this page seamlessly (data-om-framed). */
     framed: function () { return framed; },
+    /** The header actions the page declares (data-om-action), as the host is told them. */
+    actions: function () { return declared().list; },
   };
 
   // The components, as modules beside this file. Custom elements upgrade in

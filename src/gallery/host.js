@@ -9,6 +9,12 @@
 // - It takes meridian:size only from that frame's window and the plugin's
 //   origin, and sets the frame's height from it: no inner scrollbar, and the
 //   frame grows and shrinks with the page.
+// - It takes meridian:actions under the same guards, and a valid shape: at
+//   most four actions, each an id, a short label drawn as text (never HTML),
+//   a tone it knows and a disabled flag. It draws them as buttons in its own
+//   header, and a click posts meridian:action to the plugin's origin alone;
+//   the page presses its own button, which posts its own form. A new load of
+//   the frame is a new page, so its buttons go until it offers its own.
 //
 // Here the plugin's page is beside this one, so its origin is this one's; on
 // the dashboard it is the plugin's own host.
@@ -40,14 +46,63 @@ function tell() {
   const { scheme, mode, direction } = theme();
   frame.contentWindow.postMessage({ type: "meridian:theme", version: 3, scheme, mode, direction, framed: true }, ORIGIN);
 }
-frame.addEventListener("load", tell);
+frame.addEventListener("load", () => {
+  draw([]);
+  tell();
+});
 // This page follows its own frame's theme (the gallery's); the plugin's page follows this one.
 window.addEventListener("om-theme", tell);
+
+// The page's header actions, drawn in this header.
+const ACTIONS = document.getElementById("actions");
+const offeredLine = document.getElementById("offered");
+const ACTION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const TONES = new Set(["primary", "danger"]);
+
+/** The actions a meridian:actions message carries, or null when it is not
+ * exactly the shape the kit sends: then nothing it says is drawn. */
+function validActions(list) {
+  if (!Array.isArray(list) || list.length > 4) return null;
+  const ids = new Set();
+  for (const a of list) {
+    if (!a || typeof a !== "object" || Array.isArray(a)) return null;
+    if (typeof a.id !== "string" || !ACTION_ID.test(a.id) || ids.has(a.id)) return null;
+    if (typeof a.label !== "string" || a.label.trim() === "" || a.label.length > 40) return null;
+    if (a.tone !== undefined && !TONES.has(a.tone)) return null;
+    if (a.disabled !== undefined && typeof a.disabled !== "boolean") return null;
+    ids.add(a.id);
+  }
+  return list;
+}
+
+function draw(list) {
+  ACTIONS.replaceChildren(...list.map((a) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = a.label;
+    if (a.tone) button.className = a.tone;
+    button.disabled = a.disabled === true;
+    button.addEventListener("click", () => {
+      if (!frame.contentWindow) return;
+      frame.contentWindow.postMessage({ type: "meridian:action", version: 1, id: a.id }, ORIGIN);
+      offeredLine.textContent = `Sent { type: "meridian:action", version: 1, id: "${a.id}" } to ${ORIGIN}.`;
+    });
+    return button;
+  }));
+}
 
 window.addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow || event.origin !== ORIGIN) return;
   const d = event.data;
-  if (!d || typeof d !== "object" || d.type !== "meridian:size" || d.version !== 1) return;
+  if (!d || typeof d !== "object" || d.version !== 1) return;
+  if (d.type === "meridian:actions") {
+    const list = validActions(d.actions);
+    if (!list) return;
+    draw(list);
+    offeredLine.textContent = `Received meridian:actions from ${event.origin}: ${list.map((a) => a.label).join(", ") || "none"}.`;
+    return;
+  }
+  if (d.type !== "meridian:size") return;
   if (!Number.isInteger(d.height) || d.height < 0) return;
   const height = Math.min(d.height, TALLEST);
   frame.style.height = `${height}px`;
