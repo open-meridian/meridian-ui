@@ -12,7 +12,9 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`.
+`spec/plugin-pages-share-one-kit.md`. This is release 0.5.0; the guide to
+building a plugin's page with it is at
+[open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
@@ -22,6 +24,7 @@ from anywhere but itself. The design is meridian-design's
 - [The frame: seamless](#the-frame-seamless)
 - [The scheme contract](#the-scheme-contract)
 - [Building and checking](#building-and-checking)
+- [Releasing](#releasing)
 
 ## Linking the kit
 
@@ -98,7 +101,8 @@ JSON and what it shows without the kit there, which the element replaces).
 
 **Versions.** A 0.x release only adds: nothing is removed or renamed, so a page
 pinned to an earlier 0.x keeps working on the newest, which the dashboard
-serves to any 0.x request. 0.3.0 added `om-account-map`, `om-moment`, the
+serves to any 0.x request. 0.2.0 added the seamless frame (see
+[the frame: seamless](#the-frame-seamless)). 0.3.0 added `om-account-map`, `om-moment`, the
 grid's declared JSON, rich cells and narrow layouts, list rows that wrap,
 options, the field row and a select as tall as an input. 0.4.0 added header
 actions: a framed page's head buttons drawn in the host's header (see
@@ -1008,3 +1012,13 @@ and `generated/schemes/default.css` (the brand default scheme), which are
 committed: meridian-design is private, so CI and the dashboard's image build
 the kit from them, and meridian-design's check-brand holds them to the tokens.
 Never edit them by hand; change the token and run `make build`.
+
+## Releasing
+
+The version is `package.json`'s, and the build writes the kit to
+`dist/<version>/`. Nothing is published from here: meridian-core's image
+builds the kit from this repository at the commit its `Dockerfile` pins
+(`MERIDIAN_UI_REV`), and the dashboard serves it at `/.meridian/ui/<version>/`,
+answering a request for any 0.x with the newest 0.x it carries. So a release is
+a version raised here, then that pin moved in meridian-core; a deployment has
+it once it runs a runtime image carrying it.
