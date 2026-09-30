@@ -8,3 +8,4 @@ import "./om-live.js";
 import "./om-panels.js";
 import "./om-account-map.js";
 import "./om-moment.js";
+import "./om-status.js";

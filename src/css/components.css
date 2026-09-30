@@ -453,6 +453,65 @@ om-moment .om-moment-label { color: var(--ink-soft); }
 om-moment time { font-variant-numeric: tabular-nums; }
 om-moment .om-moment-empty { color: var(--ink-faint); }
 
+/* ── om-status ───────────────────────────────────────────────────────────── */
+
+/* A small dot saying how something the page reads is doing, its note shown on
+ * hover, focus or a press. Colour is never the only signal: ok is a disc with
+ * a check, error a disc with an exclamation, warn a triangle with one, busy a
+ * turning ring. Each mark is
+ * drawn in the card's colour on the status colour, the pair the contract
+ * holds for status text on a card, read the other way round. Without the
+ * kit's script, the same dot is drawn before the page's own words. */
+om-status { position: relative; display: inline-flex; align-items: center; gap: .4rem; vertical-align: middle; line-height: 1.2; }
+om-status:not(:defined)::before,
+om-status .om-status-dot::before {
+  content: ""; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  box-sizing: border-box; width: .95rem; height: .95rem; border-radius: 50%;
+  background: var(--ink-faint); color: var(--card);
+  font-family: var(--sans); font-size: .62rem; font-weight: 800; line-height: 1;
+}
+om-status[state="ok"]:not(:defined)::before,
+om-status[state="ok"] .om-status-dot::before { background: var(--good); content: "\2713"; content: "\2713" / ""; }
+om-status[state="error"]:not(:defined)::before,
+om-status[state="error"] .om-status-dot::before { background: var(--danger); content: "!"; content: "!" / ""; }
+om-status[state="warn"]:not(:defined)::before,
+om-status[state="warn"] .om-status-dot::before {
+  background: var(--warn-ink); content: "!"; content: "!" / "";
+  width: 1.05rem; border-radius: 0; padding-top: .2rem; clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+om-status[state="busy"]:not(:defined)::before,
+om-status[state="busy"] .om-status-dot::before {
+  background: transparent; border: 2px solid var(--warn-ink); border-top-color: transparent;
+  animation: om-status-turn 1.4s linear infinite;
+}
+@keyframes om-status-turn { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  om-status[state="busy"]:not(:defined)::before,
+  om-status[state="busy"] .om-status-dot::before { animation: none; }
+}
+/* The dot is a button, so a keyboard reaches it and a tap opens its note; a
+ * target 1.5rem square round a .95rem mark. */
+om-status button.om-status-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.5rem; min-height: 1.5rem; padding: 0; margin: -.275rem;
+  border: 0; border-radius: 50%; background: none; cursor: help; transition: none;
+}
+om-status button.om-status-dot:hover { background: none; }
+om-status .om-status-note {
+  display: none; position: absolute; z-index: 20; top: calc(100% + .4rem); left: 0;
+  width: max-content; max-width: min(22rem, calc(100vw - 2rem));
+  padding: .45rem .65rem; background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
+  font-size: .8rem; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; overflow-wrap: anywhere;
+}
+/* Over the gap between the dot and its note, so the pointer can move onto it. */
+om-status .om-status-note::before { content: ""; position: absolute; left: 0; right: 0; top: -.5rem; height: .5rem; }
+om-status:is(:hover, :focus-within, [open]):not([dismissed]) .om-status-note { display: block; }
+om-status .om-status-label { display: block; font-weight: 650; color: var(--ink); }
+om-status[state="error"] .om-status-label { color: var(--danger); }
+om-status :is(.om-status-detail, .om-status-at) { display: block; color: var(--ink-soft); }
+om-status[state="error"] .om-status-detail { color: var(--ink); }
+
 /* ── om-instrument-picker ────────────────────────────────────────────────── */
 
 om-instrument-picker { display: block; position: relative; }
@@ -514,6 +573,11 @@ om-account-map .om-account-map-table { table-layout: fixed; }
 om-account-map .om-account-map-table thead th:not(.om-account-map-actions) { width: 42%; }
 om-account-map .om-account-map-table thead th.om-account-map-actions { width: 16%; text-align: right; }
 om-account-map .om-account-map-table td { padding: .5rem 1rem; vertical-align: top; overflow-wrap: anywhere; }
+om-account-map .om-account-map-table.om-account-map-with-state thead th:not(.om-account-map-actions) { width: 30%; }
+om-account-map .om-account-map-table.om-account-map-with-state thead th.om-account-map-state { width: 24%; }
+om-account-map .om-account-map-state-line { display: flex; align-items: center; gap: .45rem; }
+om-account-map .om-account-map-state-label { font-weight: 550; }
+om-account-map .om-account-map-value-label { color: var(--ink-faint); }
 om-account-map .om-account-map-row .title { font-weight: 550; }
 om-account-map .meta { color: var(--ink-soft); font-size: .84rem; }
 om-account-map .om-account-map-row .hint { font-size: .82rem; }

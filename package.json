@@ -1,6 +1,6 @@
 {
   "name": "@open-meridian/ui",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Open Meridian's plugin UI kit: the brand's tokens as CSS custom properties, component CSS, and framework-free web components, served by the dashboard at /.meridian/ui/<version>/ on every plugin host.",
   "license": "Apache-2.0",
   "private": true,

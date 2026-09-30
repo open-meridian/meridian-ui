@@ -588,3 +588,93 @@ test("the map is a table where it is wide, and each row stacks where it is narro
   assert.equal(phone("thead").position, "absolute", "the head is for a screen reader only");
   assert.match(CSS, /om-account-map \{ display: block; container: om-account-map \/ inline-size; \}/, "by the map's own width");
 });
+
+// ── Status: each account's state, and a filter by it (0.6.0) ─────────────────
+
+const STATED = {
+  ...DATA,
+  external_accounts: [
+    { ...DATA.external_accounts[0], status: { state: "ok", label: "Current", detail: "", at: "2026-09-30T12:04:00Z", at_label: "Holdings as of" }, values: [{ label: "Last statement", value: "42 rows" }] },
+    { ...DATA.external_accounts[1], status: { state: "warn", label: "Stale", detail: "Holdings are a day old. <b>Refresh</b> it.", at: "2026-09-29T09:30:00Z", at_label: "Holdings as of" }, values: [{ label: "Last statement", value: "Stopped at 3 of 9 rows", tone: "bad" }, { label: "History as of", value: "not reported", tone: "purple" }] },
+    { ...DATA.external_accounts[2], status: { state: "error", label: "Needs sign-in", detail: "Sign in again." } },
+  ],
+};
+const stateSelect = (m) => m.querySelector(".om-account-map-by-state select");
+function chooseState(m, value) {
+  const s = stateSelect(m);
+  s.value = value;
+  s.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+test("a Status column: each account's dot, its label beside it, its values under it", async () => {
+  const m = await map(STATED, `${ATTRS} status-heading="Sync state"`);
+  show(m, "all");
+  assert.deepEqual([...m.querySelectorAll("thead th")].map((th) => th.textContent), ["External account", "Sync state", "Deployment account", "Actions"]);
+  const cell = row(m, "st-2").querySelector("td.om-account-map-state");
+  assert.equal(row(m, "st-2").children[1], cell, "beside the external account");
+  const dot = cell.querySelector("om-status");
+  assert.equal(dot.getAttribute("state"), "warn");
+  assert.equal(dot.querySelector(".visually-hidden").textContent, "Stale");
+  assert.equal(dot.querySelector(".om-status-detail").textContent, "Holdings are a day old. <b>Refresh</b> it.", "as text");
+  assert.equal(dot.querySelector(".om-status-at").textContent, "Holdings as of 2026-09-29 09:30 UTC");
+  const said = cell.querySelector(".om-account-map-state-label");
+  assert.equal(said.textContent, "Stale");
+  assert.equal(said.getAttribute("aria-hidden"), "true", "the dot's name already says it");
+  const values = [...cell.querySelectorAll(".hint")];
+  assert.deepEqual(values.map((v) => v.textContent), ["Last statement: Stopped at 3 of 9 rows", "History as of: not reported"]);
+  assert.equal(values[0].lastElementChild.className, "bad-ink");
+  assert.equal(values[1].lastElementChild.className, "", "a tone that is not a status tone is none");
+  // A row's choices and a group's head span every column.
+  edit(m, "st-2");
+  assert.equal(editor(m).querySelector("td").colSpan, 4);
+});
+
+test("without a status on any account, the table is as it was", async () => {
+  const m = await map();
+  assert.equal(m.querySelector(".om-account-map-state"), null);
+  assert.equal(stateSelect(m), null, "no filter by state");
+  assert.equal(m.querySelectorAll("thead th").length, 3);
+});
+
+test("the filter by state: Needs attention first, then each state, counted, with the search and the link filter", async () => {
+  const m = await map(STATED);
+  show(m, "all");
+  const options = () => [...stateSelect(m).options].map((o) => [o.value, o.textContent]);
+  assert.deepEqual(options(), [
+    ["", "All states (3)"],
+    ["attention", "Needs attention (2)"],
+    ["=Needs sign-in", "Needs sign-in (1)"],
+    ["=Stale", "Stale (1)"],
+    ["=Current", "Current (1)"],
+  ]);
+  chooseState(m, "attention");
+  assert.deepEqual(ids(m), ["st-2", "st-3"]);
+  assert.equal(m.querySelector(".om-account-map-said").textContent, "2 accounts needing attention");
+  assert.deepEqual(counts(m), { unlinked: "2", linked: "0", all: "2" }, "the link filter counts within the state");
+  chooseState(m, "=Current");
+  assert.deepEqual(ids(m), ["st-1"]);
+  show(m, "unlinked");
+  assert.equal(m.querySelector("tr.om-account-map-none td").textContent, "No unlinked account in Current.");
+  show(m, "all");
+  chooseState(m, "");
+  search(m, "stale");
+  m.flush();
+  assert.deepEqual(ids(m), ["st-2"], "the search reads the state too");
+  assert.equal(options()[1][1], "Needs attention (1)", "the counts follow the search");
+});
+
+test("a status is held to its shape: an unknown state is none, and one with no label is left out", async () => {
+  const m = await map({
+    ...DATA,
+    external_accounts: [
+      { ...DATA.external_accounts[0], status: { state: "sideways", label: "Odd" } },
+      { ...DATA.external_accounts[1], status: { state: "ok" } },
+      { ...DATA.external_accounts[2], status: "broken" },
+    ],
+  });
+  show(m, "all");
+  assert.equal(row(m, "st-1").querySelector("om-status").getAttribute("state"), "");
+  assert.equal(row(m, "st-2").querySelector(".om-account-map-state-label").textContent, "Up to date", "the state's own name");
+  assert.equal(row(m, "st-3").querySelector("om-status"), null);
+  assert.equal(m.data.external_accounts[2].status, null);
+});

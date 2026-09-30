@@ -5,21 +5,21 @@ Meridian with no design work: the brand's type, spacing, radii and shadows;
 the person's colour scheme, light or dark, and their market-direction
 convention (green-up or red-up), handed over by the dashboard's frame; the platform's components in CSS; and web components for what trading
 pages need: a data grid (with a high-rate mode for streams, and a layout for a
-phone), charts, an as-of control and an as-of moment, an instrument picker, a
+phone), charts, an as-of control and an as-of moment, a status dot, an instrument picker, a
 live feed that never misses a change, resizable, rearrangeable panels, and the
 map a plugin links its external accounts with.
 
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.5.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.6.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
-- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map)
+- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
 - [The scheme contract](#the-scheme-contract)
@@ -40,8 +40,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.5.0/meridian.css">
-  <script src="/.meridian/ui/0.5.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.6.0/meridian.css">
+  <script src="/.meridian/ui/0.6.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -110,7 +110,9 @@ actions: a framed page's head buttons drawn in the host's header (see
 dense table for thousands of accounts: search, filters, grouping, pages, a
 chooser found by typing, suggestions, and several links in one form
 (`link-several`), with the data's new fields `number`, `connection` and
-`connection_id` (all optional).
+`connection_id` (all optional). 0.6.0 added `om-status`, a status dot with
+its note on hover, focus or a tap, and to `om-account-map` each account's
+optional `status` and `values`, a Status column and a filter by state.
 
 ## Never raw colours
 
@@ -363,6 +365,39 @@ script read it exactly. An empty or unreadable value shows `empty` (default
 the moment it names is not known. `label` goes before it. What the page puts
 inside is shown until the kit draws it.
 
+### om-status
+
+How something the page reads is doing, as a small coloured dot: green when
+the last update succeeded, amber while it is updating or when it needs
+attention, red when it failed.
+Hovering or focusing the dot, or tapping it, shows a note with what it is,
+the detail (an error's message) and when it last updated.
+
+```html
+<om-status state="ok" label="SnapTrade read" at="2026-09-30T13:12:00Z" at-label="Last read">
+  SnapTrade read. Last read 2026-09-30 13:12 UTC
+</om-status>
+<om-status state="error" label="The last read failed" detail="SnapTrade answered 503.">
+  The last read failed. SnapTrade answered 503.
+</om-status>
+```
+
+| Attribute | |
+|---|---|
+| `state` | `ok` (`--good`, a disc with a check), `busy` (`--warn-ink`, a turning ring, still under `prefers-reduced-motion`), `warn` (`--warn-ink`, a triangle with an exclamation: it needs attention) or `error` (`--danger`, a disc with an exclamation). Anything else is a neutral dot, never a guess |
+| `label` | What the state means, the dot's accessible name (visually hidden) and the note's first line. Default "Up to date", "Updating", "Needs attention" or "Failed" |
+| `detail` | A line under it: an error's message, say |
+| `at` | The moment of the last update, as `om-moment`'s `value` and shown as it shows it, after `at-label` (default "Updated"); `zone="local"` as `om-moment`'s. Left out, or unreadable, no moment is shown |
+
+Colour is never the only signal: each state has its own mark, and the label
+is the dot's name. The dot is a button, so a keyboard reaches it; the detail
+and the moment are its description (`aria-describedby`), so a screen reader
+reads them with it. Pressing it holds the note open, pressing again or Escape
+hides it until the pointer or focus leaves. Every word is set as text, never
+as markup. What the page puts inside is shown, beside the dot the kit's CSS
+draws from `state`, until the kit's script draws it: so without script the
+label, detail and moment show as plain text. `state` is also a property.
+
 ### om-instrument-picker
 
 Find an instrument by any identifier or its name, as of a date.
@@ -548,7 +583,9 @@ custody connector) to one of the deployment's accounts, on its admin page
 (meridian-design W6.4). Built for an industrial deployment's hundreds or
 thousands of accounts: a dense table, one row per external account, with its
 name and detail, its link (the account it is linked to, or Not linked), and
-its actions. Each row stacks under 40rem (by the map's own width).
+its actions; since 0.6.0, where the plugin gives one, its status (its sync
+state, say) and a few values beside it, so one page shows both. Each row
+stacks under 40rem (by the map's own width).
 
 ```html
 <om-account-map action="/admin/accounts/link" token-name="csrf" token="3f9c…"
@@ -557,7 +594,10 @@ its actions. Each row stacks under 40rem (by the map's own width).
     "external_accounts": [
       { "external_account_id": "st-19fe03aa", "name": "Roth IRA", "detail": "Fidelity · IRA",
         "custodian": "Fidelity", "account_type": "IRA", "note": "",
-        "number": "Z12345678", "connection": "Fidelity · Individual", "connection_id": "c-2" }],
+        "number": "Z12345678", "connection": "Fidelity · Individual", "connection_id": "c-2",
+        "status": { "state": "warn", "label": "Stale", "detail": "Holdings are a day old.",
+                    "at": "2026-09-29T09:30:00Z", "at_label": "Holdings as of" },
+        "values": [{ "label": "Last statement", "value": "42 rows" }] }],
     "accounts": [
       { "account_id": "ACC-7b20c1e5", "name": "Main", "custodian": "Interactive Brokers", "account_type": "Margin", "open": true }],
     "links": [
@@ -569,7 +609,7 @@ its actions. Each row stacks under 40rem (by the map's own width).
 
 | Data | |
 |---|---|
-| `external_accounts` | The plugin's accounts: `external_account_id` (required), `name`, `detail` (a line under it, such as the brokerage and type), `custodian` and `account_type` (a new account's, prefilled), `note` (a hint); since 0.5.0, optionally `number` (the venue's account number, for matching and shown; leave out one the venue masks), `connection` and `connection_id` (the connection it is reached through, to group by) |
+| `external_accounts` | The plugin's accounts: `external_account_id` (required), `name`, `detail` (a line under it, such as the brokerage and type), `custodian` and `account_type` (a new account's, prefilled), `note` (a hint); since 0.5.0, optionally `number` (the venue's account number, for matching and shown; leave out one the venue masks), `connection` and `connection_id` (the connection it is reached through, to group by); since 0.6.0, optionally `status` and `values` (below) |
 | `accounts` | The deployment's accounts, read for the admin viewing the page (`read_accounts_for_linking`): `account_id`, `name`, `custodian`, `account_type`, `open` (default true), and since 0.5.0 an optional `number`. Only open ones are offered. `null` or missing says they could not be read |
 | `links` | The plugin's links as the SDK gives them (`AccountScope.links`: `external_account_id`, `account_id`, `account_name`). An external account in it is linked, naming that account; one not in it is not linked. There is no third state |
 
@@ -581,7 +621,17 @@ its actions. Each row stacks under 40rem (by the map's own width).
 | `group-by` | `connection` or `custodian`: the grouping to start with (the person may change it) |
 | `page-size` | Rows on a page, 50 by default |
 | `link-several` | The handler at `action` takes several links in one form (below): "Link N suggested…" is offered |
+| `status-heading` | The Status column's heading (default "Status"), such as "Sync state" |
 
+**Status, since 0.6.0.** An external account may carry `status`, `{ state,
+label, detail, at, at_label }`: [om-status](#om-status)'s `state` (`ok`,
+`busy`, `warn` or `error`), `label` (required unless the state's own name
+will do), `detail`, `at` and `at-label`; and `values`, a few
+`{ label, value, tone }` (`tone` `good`, `warn` or `bad`) shown under it,
+such as the last statement. Where any account carries either, the table has
+a Status column after the external account: the dot, its label beside it,
+its detail and moment in its note, and the values under it. A status of
+another shape is left out, never guessed.
 **Finding one among thousands.** Above the table, a search, the filters and
 the grouping; under it, the pages.
 
@@ -593,6 +643,11 @@ the grouping; under it, the pages.
 - *Unlinked, Linked and All*, each with its count under the search. The map
   opens on Unlinked when any account is unlinked, because that is the work,
   and on All otherwise.
+- *State*, where any account carries a status: All states, Needs attention
+  (`warn` or `error`), then each status by its label, what needs acting on
+  first (`error`, `warn`, `busy`, `ok`), each with how many of what the
+  search finds are in it. The link filter's counts are within the state
+  chosen, and the search reads each status's label and detail and each value.
 - *Group by* connection or custodian (offered only where the data has at
   least two), each group's head saying how many it holds (and, under All,
   how many are not linked), folded and unfolded by its head.
@@ -1001,7 +1056,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment` |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state |
 | `make bench` | The high-rate grid's budget, and the account map's at 2,000 and 1,500 accounts, in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |

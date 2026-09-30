@@ -9,11 +9,22 @@
 // have a deployment account named as they are, or named by their number, or
 // carrying their number, so the map suggests them; some names are shared by
 // two deployment accounts, so those are not suggested; some deployment
-// accounts are closed.
+// accounts are closed. Each carries a sync status (0.6.0): most current, some
+// stale, a few needing a sign-in or disabled, set by position so the sequence
+// above is drawn exactly as before.
 
 const CUSTODIANS = ["Interactive Brokers", "Fidelity", "Schwab", "Vanguard", "Pershing", "Northern Trust", "State Street", "BNY"];
 const TYPES = ["Margin", "Cash", "IRA", "Roth IRA", "Trust", "Joint", "Custody", "Fund"];
 const CLIENTS = ["Harbour", "Aster", "Linden", "Meridian", "Calder", "Wren", "Solent", "Kestrel", "Juniper", "Tamar", "Fenwick", "Orrin"];
+
+/** A sync status by position: the same every time, and no draw from the sequence. */
+function statusAt(i) {
+  const at = `2026-09-${String(30 - (i % 3)).padStart(2, "0")}T${String(8 + (i % 9)).padStart(2, "0")}:15:00Z`;
+  if (i % 97 === 5) return { state: "error", label: "Disabled", detail: "Reconnect it through the venue's portal.", at, at_label: "Holdings as of" };
+  if (i % 41 === 3) return { state: "error", label: "Needs sign-in", detail: "Somebody signs in to the brokerage again.", at, at_label: "Holdings as of" };
+  if (i % 13 === 7) return { state: "warn", label: "Stale", detail: "Holdings are more than a day old.", at, at_label: "Holdings as of" };
+  return { state: "ok", label: "Current", detail: "", at, at_label: "Holdings as of" };
+}
 
 function sequence(seed) {
   let s = seed >>> 0;
@@ -47,6 +58,8 @@ export function manyAccounts({ externals = 2000, accounts = 1500, seed = 2026093
       connection: c.name,
       connection_id: c.id,
       note: rand(40) === 0 ? "No stable ID from the venue: after a reconnect it appears as a new account." : "",
+      status: statusAt(i),
+      values: [{ label: "Last statement", value: `${10 + (i % 60)} rows` }],
     });
   }
 

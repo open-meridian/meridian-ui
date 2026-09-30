@@ -6,7 +6,10 @@
 //     <script type="application/json">
 //       { "external_accounts": [{ "external_account_id": "…", "name": "…", "detail": "…",
 //                                 "custodian": "…", "account_type": "…", "note": "…",
-//                                 "number": "…", "connection": "…", "connection_id": "…" }],
+//                                 "number": "…", "connection": "…", "connection_id": "…",
+//                                 "status": { "state": "ok|busy|warn|error", "label": "…",
+//                                             "detail": "…", "at": "…ISO…", "at_label": "…" },
+//                                 "values": [{ "label": "…", "value": "…", "tone": "good|warn|bad" }] }],
 //         "accounts": [{ "account_id": "…", "name": "…", "custodian": "…", "account_type": "…",
 //                        "open": true, "number": "…" }],
 //         "links":    [{ "external_account_id": "…", "account_id": "…", "account_name": "…" }] }
@@ -23,6 +26,11 @@
 // - Unlinked, Linked and All, with counts; Unlinked first where there are any,
 //   because that is the work;
 // - grouping by connection or custodian, each group collapsible, with counts;
+// - where an account carries a `status` (0.6.0), a Status column: om-status's
+//   dot, its label beside it and its detail and moment in the dot's note, and
+//   the account's `values` under it; and a filter by state, with "Needs
+//   attention" (warn or error) first, so the accounts to act on are found
+//   among thousands;
 // - pages (`page-size`, 50 by default), so the document holds a page of rows
 //   however many accounts there are, and each row, once drawn, is kept and
 //   moved rather than drawn again;
@@ -45,6 +53,7 @@
 // cancel it to send the link itself.
 
 import { declaredJson, whenParsed } from "../lib/declared.js";
+import { STATES } from "./om-status.js";
 
 let instances = 0;
 
@@ -57,6 +66,9 @@ const FILTERS = [
   ["linked", "Linked"],
   ["all", "All"],
 ];
+// A state's order in the state filter: what needs acting on first.
+const SEVERITY = { error: 0, warn: 1, busy: 2, ok: 3, "": 4 };
+const TONES = new Set(["good", "warn", "bad"]);
 const GROUPINGS = [
   ["", "None"],
   ["connection", "Connection"],
@@ -90,6 +102,22 @@ function button(label, className = "", type = "button") {
   return b;
 }
 
+/** An account's status, held to om-status's shape, or null. */
+function statusOf(v) {
+  if (!v || typeof v !== "object") return null;
+  const state = Object.hasOwn(STATES, text(v.state)) ? text(v.state) : "";
+  const label = text(v.label).trim() || STATES[state] || "";
+  if (!label) return null;
+  return { state, label, detail: text(v.detail), at: text(v.at), at_label: text(v.at_label) };
+}
+
+/** An account's values to show under its status: a label, a value and a status tone. */
+function valuesOf(v) {
+  return (Array.isArray(v) ? v : [])
+    .filter((x) => x && typeof x === "object" && (text(x.label) || text(x.value)))
+    .map((x) => ({ label: text(x.label), value: text(x.value), tone: TONES.has(text(x.tone)) ? text(x.tone) : "" }));
+}
+
 /** The page's data, held to its shape: anything else is left out, never guessed. */
 function normalise(data) {
   const d = data && typeof data === "object" ? data : {};
@@ -107,6 +135,8 @@ function normalise(data) {
       number: text(x.number),
       connection: text(x.connection),
       connection_id: text(x.connection_id),
+      status: statusOf(x.status),
+      values: valuesOf(x.values),
     }));
   const accounts = Array.isArray(d.accounts)
     ? d.accounts
@@ -195,15 +225,26 @@ function model(data) {
       link,
       account,
       suggestion,
+      attention: x.status?.state === "warn" || x.status?.state === "error",
       hay: hayOf(
         x.name, x.external_account_id, x.custodian, x.account_type, x.detail, x.number, x.connection,
         link?.account_name, link?.account_id, account?.name, account?.custodian, account?.account_type, account?.number,
         s?.name, s?.account_id, s?.custodian, s?.account_type,
+        x.status?.label, x.status?.detail, ...x.values.map((v) => `${v.label} ${v.value}`),
       ),
     };
   });
+  // Each status the accounts are in, by its label, what needs acting on first.
+  const states = new Map();
+  for (const r of rows) {
+    const st = r.x.status;
+    if (st && !states.has(st.label)) states.set(st.label, st.state);
+  }
   return {
     rows,
+    shows: rows.some((r) => r.x.status || r.x.values.length),
+    states: [...states].sort((a, b) => SEVERITY[a[1]] - SEVERITY[b[1]]).map(([label]) => label),
+    attention: rows.some((r) => r.attention),
     byId: new Map(rows.map((r) => [r.x.external_account_id, r])),
     accounts,
     open: open.map((a) => ({ a, hay: hayOf(a.name, a.account_id, a.custodian, a.account_type, a.number), label: described(a) })),
@@ -227,7 +268,7 @@ const tokensOf = (q) => fold(q).split(" ").filter(Boolean);
 
 export class OmAccountMap extends HTMLElement {
   static get observedAttributes() {
-    return ["action", "token", "token-name", "empty", "link-several", "page-size"];
+    return ["action", "token", "token-name", "empty", "link-several", "page-size", "status-heading"];
   }
 
   #data = normalise(null);
@@ -240,6 +281,7 @@ export class OmAccountMap extends HTMLElement {
   // What the person has asked to see.
   #q = "";
   #filter = "all";
+  #state = "";
   #groupBy = "";
   #page = 0;
   #collapsed = new Set();
@@ -342,6 +384,7 @@ export class OmAccountMap extends HTMLElement {
     } else if (!m.groupings.some(([g]) => g === this.#groupBy)) {
       this.#groupBy = "";
     }
+    if (this.#state && !(this.#state === "attention" ? m.attention : m.states.includes(this.#state.slice(1)))) this.#state = "";
     if (!m.rows.length) {
       this.#parts = null;
       this.replaceChildren(el("div", "om-account-map-empty", this.getAttribute("empty") || "No external accounts yet."));
@@ -390,6 +433,31 @@ export class OmAccountMap extends HTMLElement {
     filters.append(...filterButtons);
     bar.append(search, filters);
 
+    // By state, where the accounts carry one: "Needs attention" first.
+    let state = null;
+    if (m.states.length) {
+      const wrap = el("label", "om-account-map-grouping om-account-map-by-state");
+      state = el("select");
+      state.id = `${id}-state`;
+      const options = [["", "All states"]];
+      if (m.attention) options.push(["attention", "Needs attention"]);
+      for (const label of m.states) options.push([`=${label}`, label]);
+      for (const [value, label] of options) {
+        const o = el("option", "", label);
+        o.value = value;
+        o.dataset.label = label;
+        state.append(o);
+      }
+      state.value = this.#state;
+      state.addEventListener("change", () => {
+        this.#state = state.value;
+        this.#page = 0;
+        this.#draw();
+      });
+      wrap.append(el("span", "", "State"), state);
+      bar.append(wrap);
+    }
+
     let grouping = null;
     if (m.groupings.length > 1) {
       const wrap = el("label", "om-account-map-grouping");
@@ -431,12 +499,14 @@ export class OmAccountMap extends HTMLElement {
     const pagerTop = this.#pager();
     status.append(said, pagerTop.nav);
 
-    const table = el("table", "om-account-map-table");
+    const table = el("table", `om-account-map-table${m.shows ? " om-account-map-with-state" : ""}`);
     table.id = `${id}-table`;
     const caption = el("caption", "visually-hidden", "External accounts, each with the deployment's account it is linked to");
     const head = el("thead");
     const tr = el("tr");
-    for (const [label, cls] of [["External account", ""], ["Deployment account", ""], ["Actions", "om-account-map-actions"]]) {
+    const columns = [["External account", ""], ["Deployment account", ""], ["Actions", "om-account-map-actions"]];
+    if (m.shows) columns.splice(1, 0, [this.getAttribute("status-heading") || "Status", "om-account-map-state"]);
+    for (const [label, cls] of columns) {
       const th = el("th", cls, label);
       th.scope = "col";
       tr.append(th);
@@ -450,7 +520,7 @@ export class OmAccountMap extends HTMLElement {
     const pagerBottom = this.#pager();
     foot.append(pagerBottom.nav);
 
-    this.#parts = { search, filterButtons, grouping, several, review, said, pagers: [pagerTop, pagerBottom], foot, body };
+    this.#parts = { search, filterButtons, state, grouping, several, review, said, pagers: [pagerTop, pagerBottom], foot, body, span: columns.length };
     this.replaceChildren(bar, review, status, table, foot);
     this.#draw();
   }
@@ -487,10 +557,18 @@ export class OmAccountMap extends HTMLElement {
    * only when one of them (or the data) changes: turning a page only slices it. */
   #matched() {
     const m = this.#model;
-    const key = [this.#q, this.#filter, this.#groupBy, ...this.#collapsed].join("\u0000");
+    const key = [this.#q, this.#filter, this.#state, this.#groupBy, ...this.#collapsed].join("\u0000");
     if (this.#memo && this.#memo.model === m && this.#memo.key === key) return this.#memo;
     const tokens = tokensOf(this.#q);
-    const matched = tokens.length ? m.rows.filter((r) => tokens.every((t) => r.hay.includes(t))) : m.rows;
+    const searched = tokens.length ? m.rows.filter((r) => tokens.every((t) => r.hay.includes(t))) : m.rows;
+    // How many of what the search leaves are in each state, then those in the one chosen.
+    const states = new Map([["", searched.length], ["attention", 0]]);
+    for (const r of searched) {
+      if (r.attention) states.set("attention", states.get("attention") + 1);
+      if (r.x.status) states.set(`=${r.x.status.label}`, (states.get(`=${r.x.status.label}`) || 0) + 1);
+    }
+    const st = this.#state;
+    const matched = !st ? searched : st === "attention" ? searched.filter((r) => r.attention) : searched.filter((r) => r.x.status && `=${r.x.status.label}` === st);
     const counts = { unlinked: 0, linked: 0, all: matched.length };
     const suggested = [];
     for (const r of matched) {
@@ -520,12 +598,12 @@ export class OmAccountMap extends HTMLElement {
     // How many rows come before each entry, for "showing 51–100".
     const before = new Int32Array(entries.length + 1);
     for (let i = 0; i < entries.length; i++) before[i + 1] = before[i] + (entries[i].group ? 0 : 1);
-    this.#memo = { model: m, key, tokens, counts, rows, suggested, entries, groups, before };
+    this.#memo = { model: m, key, tokens, counts, states, rows, suggested, entries, groups, before };
     return this.#memo;
   }
 
   #view() {
-    const { tokens, counts, rows, suggested, entries, groups, before } = this.#matched();
+    const { tokens, counts, states, rows, suggested, entries, groups, before } = this.#matched();
     const size = this.#pageSize();
     const pages = Math.max(1, Math.ceil(entries.length / size));
     this.#page = Math.min(Math.max(0, this.#page), pages - 1);
@@ -536,7 +614,7 @@ export class OmAccountMap extends HTMLElement {
       const g = groups.get(groupOf(page[0], this.#groupBy).key);
       page.unshift({ group: g, continued: true });
     }
-    return { tokens, counts, rows, page, pages, before: before[start], suggested };
+    return { tokens, counts, states, rows, page, pages, before: before[start], suggested };
   }
 
   #draw() {
@@ -549,6 +627,10 @@ export class OmAccountMap extends HTMLElement {
       b.querySelector(".count").textContent = count(v.counts[b.dataset.filter]);
     }
     if (p.grouping) p.grouping.value = this.#groupBy;
+    if (p.state) {
+      for (const o of p.state.options) o.textContent = `${o.dataset.label} (${count(v.states.get(o.value) || 0)})`;
+      p.state.value = this.#state;
+    }
 
     // Several links: offered only where the page's handler takes them.
     const offerSeveral = this.hasAttribute("link-several") && v.suggested.length > 0;
@@ -567,7 +649,7 @@ export class OmAccountMap extends HTMLElement {
     if (this.#editing !== null && !v.page.some((e) => e.x && e.x.external_account_id === this.#editing)) this.#close(false);
 
     const noun = f === "all" ? "account" : `${f} account`;
-    const matching = v.tokens.length ? ` matching “${this.#q.trim()}”` : "";
+    const matching = (v.tokens.length ? ` matching “${this.#q.trim()}”` : "") + this.#inState();
     const rowsHere = v.page.filter((e) => !e.group).length;
     let said = `${plural(v.rows.length, noun)}${matching}`;
     if (v.pages > 1 && rowsHere) said += `; showing ${count(v.before + 1)}–${count(v.before + rowsHere)}`;
@@ -592,7 +674,7 @@ export class OmAccountMap extends HTMLElement {
     if (!nodes.length) {
       const tr = el("tr", "om-account-map-none");
       const td = el("td", "", this.#emptyText(v));
-      td.colSpan = 3;
+      td.colSpan = p.span;
       tr.append(td);
       nodes.push(tr);
     }
@@ -601,8 +683,15 @@ export class OmAccountMap extends HTMLElement {
     if (now.length !== nodes.length || nodes.some((node, i) => now[i] !== node)) p.body.replaceChildren(...nodes);
   }
 
+  /** The state chosen, as the count of accounts says it: "", or " needing attention", or " in Stale". */
+  #inState() {
+    const st = this.#state;
+    return !st ? "" : st === "attention" ? " needing attention" : ` in ${st.slice(1)}`;
+  }
+
   #emptyText(v) {
-    if (v.tokens.length) return `No ${this.#filter === "all" ? "" : `${this.#filter} `}account matches “${this.#q.trim()}”.`;
+    if (this.#state && !v.tokens.length) return `No ${this.#filter === "all" ? "" : `${this.#filter} `}account${this.#inState()}.`;
+    if (v.tokens.length) return `No ${this.#filter === "all" ? "" : `${this.#filter} `}account${this.#inState()} matches “${this.#q.trim()}”.`;
     if (this.#filter === "unlinked") return "Every account is linked.";
     if (this.#filter === "linked") return "No account is linked yet.";
     return "No accounts.";
@@ -613,7 +702,7 @@ export class OmAccountMap extends HTMLElement {
   #groupEl(g, continued) {
     const tr = el("tr", "om-account-map-group");
     const th = el("th");
-    th.colSpan = 3;
+    th.colSpan = this.#parts.span;
     th.scope = "rowgroup";
     const folded = this.#collapsed.has(g.key);
     const toggle = button("", "om-account-map-fold");
@@ -676,6 +765,8 @@ export class OmAccountMap extends HTMLElement {
       }
     }
 
+    const state = this.#model.shows ? this.#stateCell(x) : null;
+
     const actions = el("td", "om-account-map-actions");
     const wrap = el("div", "om-account-map-buttons");
     if (suggestion) {
@@ -691,8 +782,35 @@ export class OmAccountMap extends HTMLElement {
     wrap.append(edit);
     actions.append(wrap);
 
-    tr.append(ext, to, actions);
+    tr.append(...[ext, state, to, actions].filter(Boolean));
     return tr;
+  }
+
+  /** The account's status (om-status's dot, its label beside it) and its values under it. */
+  #stateCell(x) {
+    const td = el("td", "om-account-map-state");
+    const st = x.status;
+    if (st) {
+      const line = el("div", "om-account-map-state-line");
+      const dot = document.createElement("om-status");
+      dot.setAttribute("state", st.state);
+      dot.setAttribute("label", st.label);
+      if (st.detail) dot.setAttribute("detail", st.detail);
+      if (st.at) dot.setAttribute("at", st.at);
+      if (st.at_label) dot.setAttribute("at-label", st.at_label);
+      // The dot's own name is the label: shown again beside it, for the eye alone.
+      const said = el("span", "om-account-map-state-label", st.label);
+      said.setAttribute("aria-hidden", "true");
+      line.append(dot, said);
+      td.append(line);
+    }
+    for (const v of x.values) {
+      const line = el("div", "hint");
+      if (v.label) line.append(el("span", "om-account-map-value-label", `${v.label}: `));
+      line.append(el("span", v.tone ? `${v.tone}-ink` : "", v.value));
+      td.append(line);
+    }
+    return td;
   }
 
   #clicked(e) {
@@ -739,7 +857,7 @@ export class OmAccountMap extends HTMLElement {
     const tr = el("tr", "om-account-map-editor");
     tr.id = `${this.#id}-editor`;
     const td = el("td");
-    td.colSpan = 3;
+    td.colSpan = this.#parts.span;
     const box = el("div", "om-account-map-edit");
     box.setAttribute("role", "group");
     box.setAttribute("aria-label", `Link ${x.name || x.external_account_id}`);

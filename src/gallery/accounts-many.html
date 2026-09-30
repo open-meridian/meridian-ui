@@ -20,7 +20,7 @@
   <header class="page-head">
     <div>
       <h1>Account links</h1>
-      <p>Reading 67 connections. <om-moment label="Last read" value="2026-09-30T08:15:00Z">Last read 2026-09-30 08:15 UTC</om-moment>.</p>
+      <p><om-status state="busy" label="Reading 67 connections" at="2026-09-30T08:15:00Z" at-label="Last read">Reading 67 connections. Last read 2026-09-30 08:15 UTC</om-status></p>
     </div>
     <div class="actions"><button type="button" data-om-action="refresh">Refresh</button></div>
   </header>
@@ -37,7 +37,7 @@
       <p class="muted" id="summary">Each account the plugin reaches is recorded against the deployment's account it is
         linked to, and one nothing links is not recorded.</p>
     </div>
-    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several
+    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several status-heading="Sync state"
                     empty="No accounts yet: they appear here once the venue is read."></om-account-map>
   </section>
 
