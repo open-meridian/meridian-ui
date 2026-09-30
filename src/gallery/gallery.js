@@ -12,6 +12,7 @@ const select = document.getElementById("scheme");
 const layout = document.getElementById("layout");
 const direction = document.getElementById("direction");
 const frames = document.getElementById("frames");
+const framed = document.getElementById("framed");
 const sent = document.getElementById("sent");
 
 for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
@@ -24,21 +25,28 @@ function modes() {
   return layout.value === "both" ? ["light", "dark"] : [layout.value];
 }
 
+/** A figure framing `page` in `mode`, with the theme as query parameters. */
+function figure(title, page, mode) {
+  const fig = document.createElement("figure");
+  const cap = document.createElement("figcaption");
+  cap.innerHTML = `<strong>${title}</strong><span class="faint">?om-scheme=${select.value}&amp;om-mode=${mode}&amp;om-direction=${direction.value}</span>`;
+  const frame = document.createElement("iframe");
+  frame.title = `${title}: ${page}, ${mode}`;
+  frame.dataset.mode = mode;
+  frame.src = `gallery/${page}?om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
+  frame.addEventListener("load", () => fit(frame));
+  fig.append(cap, frame);
+  return fig;
+}
+
 function build() {
   frames.replaceChildren();
   frames.classList.toggle("one", modes().length === 1);
-  for (const mode of modes()) {
-    const fig = document.createElement("figure");
-    const cap = document.createElement("figcaption");
-    cap.innerHTML = `<strong>${mode[0].toUpperCase()}${mode.slice(1)}</strong><span class="faint">?om-scheme=${select.value}&amp;om-mode=${mode}&amp;om-direction=${direction.value}</span>`;
-    const frame = document.createElement("iframe");
-    frame.title = `Sample page, ${mode}`;
-    frame.dataset.mode = mode;
-    frame.src = `gallery/sample.html?om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
-    frame.addEventListener("load", () => fit(frame));
-    fig.append(cap, frame);
-    frames.append(fig);
-  }
+  for (const mode of modes()) frames.append(figure(`${mode[0].toUpperCase()}${mode.slice(1)}`, "sample.html", mode));
+  // The round trip: the stand-in host frames the page seamlessly and sizes
+  // it from the page's messages; beside it, the page as it is on its own.
+  const mode = modes()[0];
+  framed.replaceChildren(figure("Framed seamlessly by a host", "host.html", mode), figure("On its own", "sample.html", mode));
   sent.textContent = "Frames loaded with query parameters.";
 }
 
@@ -54,7 +62,7 @@ function fit(frame) {
 
 // A scheme or direction change is the frame's theme message, as the dashboard sends it.
 function send() {
-  for (const frame of frames.querySelectorAll("iframe")) {
+  for (const frame of document.querySelectorAll(".frames iframe")) {
     frame.previousElementSibling.querySelector(".faint").textContent =
       `then the message: scheme "${select.value}", mode "${frame.dataset.mode}", direction "${direction.value}"`;
     frame.contentWindow.postMessage(

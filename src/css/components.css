@@ -48,6 +48,32 @@ ul.plain li + li { margin-top: .2rem; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
 
+/* ── Framed ──────────────────────────────────────────────────────────────── */
+
+/* When the dashboard frames the page and says so (data-om-framed on <html>,
+ * set by meridian.js only then), the page sits in the dashboard's own column:
+ * the dashboard draws the heading and the tab row, its page colour shows
+ * through, and the frame grows to the page. So the page's own heading (the
+ * h1 of its .page-head) and its tab row (a .tabs in its head or straight
+ * under it) go, and so do .page's standalone padding and width and the
+ * body's background. The rest of the head (the line under the heading, its
+ * actions) stays, and nothing else changes. Every rule here is under the
+ * attribute: a page opened on its own is exactly as it was. */
+:root[data-om-framed] body { background: transparent; }
+:root[data-om-framed] .page { max-width: none; margin: 0; padding: 0; }
+:root[data-om-framed] :is(.page-head, .pagehead) :is(h1, .om-page-title),
+:root[data-om-framed] :is(.page-head, .pagehead) .tabs,
+:root[data-om-framed] :is(.page-head, .pagehead) + .tabs { display: none; }
+:root[data-om-framed] :is(.page-head, .pagehead) :is(h1, .om-page-title) + p { margin-top: 0; }
+/* A head left with nothing but its heading (a plain h1, in a div or not)
+ * goes whole. */
+:root[data-om-framed] :is(.page-head, .pagehead):not(:has(:not(div, h1, .om-page-title))) { display: none; }
+/* The gap under the head is the head's own, so it goes with the head: what
+ * follows a hidden head (and its hidden tab row) starts at the top. */
+:root[data-om-framed] .page > :is(.page-head, .pagehead) { margin-bottom: 1.25rem; }
+:root[data-om-framed] .page > :is(.page-head, .pagehead) + *,
+:root[data-om-framed] .page > :is(.page-head, .pagehead) + .tabs + * { margin-top: 0; }
+
 /* ── Panels and cards ────────────────────────────────────────────────────── */
 
 .panel, .card {

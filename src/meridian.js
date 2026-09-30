@@ -11,13 +11,13 @@
  * market-direction convention (which colour means up):
  *
  * - on first load, as query parameters on the page's URL:
- *     ?om-scheme=<id>&om-mode=<light|dark|system>&om-direction=<green-up|red-up>
+ *     ?om-scheme=<id>&om-mode=<light|dark|system>&om-direction=<green-up|red-up>&om-framed=1
  * - on change, as a message from the parent window (the dashboard's frame):
- *     { "type": "meridian:theme", "version": 2, "scheme": "<id>", "mode": "<light|dark|system>",
- *       "direction": "<green-up|red-up>" }
- *   Version 2 adds direction; a version 1 message (no direction) is still
- *   taken, and any field left out keeps its current value. A kit that knows
- *   only version 1 ignores direction and follows the rest.
+ *     { "type": "meridian:theme", "version": 3, "scheme": "<id>", "mode": "<light|dark|system>",
+ *       "direction": "<green-up|red-up>", "framed": <true|false> }
+ *   Version 2 added direction and version 3 framed; an earlier version's
+ *   message is still taken, and any field left out keeps its current value.
+ *   A kit that knows an earlier version ignores what it does not know.
  *
  * The direction is set as data-om-direction on <html>; each scheme's
  * stylesheet swaps only its direction colours (buy and sell, and their
@@ -29,6 +29,20 @@
  * default is always underneath it, so an unknown or unloadable scheme falls
  * back to it. The last theme is kept for the tab (sessionStorage), so a
  * navigation inside the frame that drops the query keeps the person's theme.
+ *
+ * Seamless in the frame. The host says the page is framed, so the frame draws
+ * its heading and tab row: by `om-framed=1` on the page's URL on first load,
+ * and by `framed: true` (or false) in the theme message (version 3). Only a
+ * page that is in a frame takes it; then data-om-framed is set on <html>, and
+ * the kit's CSS drops the page's own heading and tab row, its standalone
+ * padding and width, and its background.
+ *
+ * And the frame grows to the page. Once the host's first theme message has
+ * taught this page the host's origin (event.origin), the page posts its height
+ * to its parent, to that origin alone, and again whenever it changes: rounded
+ * up to a whole pixel, at most once a frame, from a ResizeObserver on <html>:
+ *     { "type": "meridian:size", "version": 1, "height": <CSS pixels> }
+ * Before that message it sends nothing, and it never sends to "*".
  *
  * No plugin code is needed: the page follows the theme by linking this file.
  */
@@ -42,12 +56,18 @@
   var SCHEME_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
   var STORE = "om-theme";
   var LINK_ID = "om-scheme";
+  var FRAMED = "data-om-framed";
+  // An origin a message can be posted to: never "null", never a wildcard.
+  var ORIGIN = /^https?:\/\/[^\/\s]+$/;
+  // Whether this page is in a frame at all: the host's word counts only then.
+  var inFrame = !!(win.parent && win.parent !== win);
 
   // The kit's base: the directory this script was served from.
   var script = doc.currentScript;
   var base = (script && script.src) ? new URL(".", script.src).href : new URL("./", win.location.href).href;
 
   var current = { scheme: "default", mode: "system", direction: "green-up" };
+  var framed = false;
 
   function valid(scheme, mode, direction) {
     return {
@@ -64,7 +84,8 @@
   }
 
   function remember() {
-    try { win.sessionStorage.setItem(STORE, JSON.stringify(current)); } catch (e) { /* storage refused: fine */ }
+    var kept = { scheme: current.scheme, mode: current.mode, direction: current.direction, framed: framed };
+    try { win.sessionStorage.setItem(STORE, JSON.stringify(kept)); } catch (e) { /* storage refused: fine */ }
   }
 
   function recall() {
@@ -118,24 +139,64 @@
     return { scheme: current.scheme, mode: current.mode, direction: current.direction };
   }
 
+  /** Framed or not, as the host says; a page not in a frame never is. */
+  function frame(on) {
+    framed = on === true && inFrame;
+    if (framed) root.setAttribute(FRAMED, "");
+    else root.removeAttribute(FRAMED);
+  }
+
+  // The frame's size. The host's origin is learned from its first theme
+  // message and never changes; until then nothing is sent.
+  var host = null;
+  var sent = null;
+  var pending = false;
+
+  function report() {
+    pending = false;
+    if (!host) return;
+    var height = Math.ceil(root.getBoundingClientRect().height);
+    if (height === sent) return;
+    try {
+      win.parent.postMessage({ type: "meridian:size", version: 1, height: height }, host);
+      sent = height;
+    } catch (e) { /* the parent went away: nothing to size */ }
+  }
+
+  function schedule() {
+    if (pending || !host) return;
+    pending = true;
+    if (win.requestAnimationFrame) win.requestAnimationFrame(report);
+    else win.setTimeout(report, 16);
+  }
+
   function onMessage(event) {
     var parent = win.parent;
     // Only the frame this page is in: never itself, never another window.
     if (!parent || parent === win || event.source !== parent) return;
     var d = event.data;
     if (!d || typeof d !== "object" || d.type !== "meridian:theme") return;
+    if (typeof d.framed === "boolean") frame(d.framed);
     apply(d.scheme, d.mode, d.direction);
+    if (!host && typeof event.origin === "string" && ORIGIN.test(event.origin)) {
+      host = event.origin;
+      // The first size now, measured after this message's changes.
+      report();
+    }
   }
 
   // First load: the query, else what this tab last had, else the default.
   var query = new URLSearchParams(win.location.search);
   var saved = recall() || {};
+  var framedQuery = query.get("om-framed");
+  frame(framedQuery !== null ? framedQuery === "1" : saved.framed === true);
   apply(
     query.get("om-scheme") || saved.scheme || "default",
     query.get("om-mode") || saved.mode || "system",
     query.get("om-direction") || saved.direction || "green-up"
   );
   win.addEventListener("message", onMessage);
+  if (inFrame && win.ResizeObserver) new win.ResizeObserver(schedule).observe(root);
 
   // A system change matters to anything drawing with the resolved mode.
   if (win.matchMedia) {
@@ -150,6 +211,10 @@
     current: function () {
       return { scheme: current.scheme, mode: current.mode, resolved: resolved(current.mode), direction: current.direction };
     },
+  };
+  win.Meridian.frame = {
+    /** Whether the host frames this page seamlessly (data-om-framed). */
+    framed: function () { return framed; },
   };
 
   // The components, as modules beside this file. Custom elements upgrade in

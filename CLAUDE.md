@@ -34,6 +34,13 @@ ruled); read it before changing what the kit is.
   `om-direction`) and by a `meridian:theme` message from the parent window;
   `src/meridian.js` applies them and accepts a message from the parent only.
   A plugin writes no theme code and cannot override it.
+- **Seamless in the frame, on the host's word.** A page is framed
+  (`data-om-framed`) only when it is in a frame and the host says so
+  (`om-framed=1`, or `framed` in the theme message); the kit's CSS then hides
+  only the head's heading and the tab row under it, and every framed rule is
+  under that attribute. The page posts `meridian:size` only to the origin
+  learned from the host's first theme message, never `*`. README, "The frame:
+  seamless", is the protocol the dashboard implements.
 - **Direction apart from status.** Red-up swaps only the direction colours
   (buy and sell, and their washes, per the contract's `direction`); good,
   danger and warning never flip. The check measures a scheme under both

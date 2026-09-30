@@ -18,6 +18,7 @@ from anywhere but itself. The design is meridian-design's
 - [CSS components](#css-components)
 - [Web components](#web-components): [om-grid](#om-grid) (and its [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels)
 - [The theme: the frame's message](#the-theme-the-frames-message)
+- [The frame: seamless](#the-frame-seamless)
 - [The scheme contract](#the-scheme-contract)
 - [Building and checking](#building-and-checking)
 
@@ -35,8 +36,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.1.0/meridian.css">
-  <script src="/.meridian/ui/0.1.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.2.0/meridian.css">
+  <script src="/.meridian/ui/0.2.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -64,7 +65,9 @@ first paint, and it loads the components beside it.
 The version in the path is the deployment's, so a brand change reaches every
 page at once; a page may pin the version it was built against. The frame draws
 the plugin's name, the way back to the dashboard and the person: a page draws
-only its content, inside `.page`.
+only its content, inside `.page`. Where the dashboard frames a page seamlessly
+(its admin view's tabs), it draws the page's heading and tab row too, and the
+kit drops the page's own: see [the frame: seamless](#the-frame-seamless).
 
 The kit is plain files under one directory, and every reference inside it is
 relative, so it works under any base path:
@@ -77,7 +80,7 @@ relative, so it works under any base path:
 | `lib/*.js` | Decimals, the same-origin rule, schemes and the contrast check |
 | `schemes/<id>.css` | A colour scheme: `default` is the brand's; the dashboard serves an admin's beside it |
 | `scheme-contract.json` | What a scheme defines and the pairs it must pass |
-| `gallery.html` | Every component, light and dark, in each scheme shipped, green-up or red-up |
+| `gallery.html` | Every component, light and dark, in each scheme shipped, green-up or red-up; and the sample page framed seamlessly by a stand-in host (`gallery/host.html`) beside it on its own |
 
 The kit's CSS is in cascade layers (`meridian.scheme`, `meridian.tokens`,
 `meridian.base`, `meridian.components`), so a page's own rules win without a
@@ -455,22 +458,24 @@ plugin writes no code for it.
 **On first load**, as query parameters on the framed page's URL:
 
 ```
-?om-scheme=<id>&om-mode=<light|dark|system>&om-direction=<green-up|red-up>
+?om-scheme=<id>&om-mode=<light|dark|system>&om-direction=<green-up|red-up>&om-framed=1
 ```
 
 **On change**, as a message from the dashboard's frame to the page's window,
 with `postMessage(message, pluginOrigin)`:
 
 ```json
-{ "type": "meridian:theme", "version": 2, "scheme": "harbour", "mode": "dark", "direction": "red-up" }
+{ "type": "meridian:theme", "version": 3, "scheme": "harbour", "mode": "dark", "direction": "red-up", "framed": true }
 ```
 
 `scheme` is an id (lower-case letters, digits and hyphens, at most 64),
-`mode` is `light`, `dark` or `system`, and `direction` is `green-up` or
-`red-up`; any may be left out to keep the current one, and an invalid value is
-ignored rather than guessed. Version 2 added `direction`; a version 1 message
-(scheme and mode) is still taken and keeps the direction, and a kit that knows
-only version 1 follows a version 2 message's scheme and mode. The
+`mode` is `light`, `dark` or `system`, `direction` is `green-up` or
+`red-up`, and `framed` is `true` or `false` (see
+[the frame: seamless](#the-frame-seamless)); any may be left out to keep the
+current one, and an invalid value is ignored rather than guessed. Version 2
+added `direction` and version 3 `framed`; an earlier version's message is
+still taken and keeps what it does not name, and a kit that knows an earlier
+version follows what it knows and ignores the rest. The
 dashboard is the only sender: the page accepts the message only when
 `event.source` is its own `window.parent`, and never when it is not framed.
 The dashboard should also send the message on each `load` of the frame, so a
@@ -496,6 +501,104 @@ and `--sell` (and their washes) are the direction colours: use `--buy` for a
 gain or an up move and `--sell` for a loss or a down move, and the kit swaps
 them under red-up. The status colours (`--good`, `--danger`, `--warn-ink`)
 never flip. There is nothing for a page to do.
+
+## The frame: seamless
+
+The dashboard's admin view of a plugin frames each of the plugin's admin pages
+in a tab. The frame stays, because it keeps the plugin's script away from the
+administrator's session (the page is on the plugin's own origin, with its own
+sign-in), but it is seamless, as Shopify's admin apps and Salesforce Canvas
+are: the page has no inner scrollbar, the frame grows to the page, and the
+dashboard's heading and tab row are the only ones. The kit does the page's
+half with no plugin code; the host (the dashboard) does the rest.
+
+**Framed, when the host says so.** The host says a page is framed on first
+load with `om-framed=1` on the frame's address (so the first paint is already
+framed), and in its theme message with `"framed": true` (version 3), which it
+sends on every load of the frame; `"framed": false` undoes it. `om-framed=0`,
+or no word at all, is a page on its own. The host's word is taken only when
+the page is in a frame (`window.parent !== window`), and a message only from
+the parent window, as any theme message; being in a frame alone is not enough.
+The last word is kept for the tab with the theme, so a navigation inside the
+frame that drops the query (a form's redirect) stays framed. A framed page
+has `data-om-framed` on `<html>`, and `window.Meridian.frame.framed()` says so.
+
+**The framed look.** With `data-om-framed`, the kit's CSS
+
+- hides the page's own heading: the `h1` (or `.om-page-title`) of its
+  `.page-head` (or `.pagehead`). The rest of the head stays: the line under
+  the heading and the `.actions`. A head holding nothing but a plain heading
+  goes whole;
+- hides the page's tab row: a `.tabs` inside the head, or straight after it.
+  A `.tabs` further down is the page's content and stays;
+- removes `.page`'s standalone padding, centring and `max-width`;
+- makes the body's background transparent, so the dashboard's page colour
+  shows through;
+
+and nothing else. A page not framed looks exactly as it did.
+
+So a page benefits by drawing its heading and its tab row with the kit, in
+that shape:
+
+```html
+<main class="page">
+  <header class="page-head">
+    <div><h1>Connections</h1><p>Reading SnapTrade. Last read 12:04.</p></div>
+    <div class="actions"><button class="primary">Connect a brokerage</button></div>
+  </header>
+  <nav class="tabs">…</nav>          <!-- hidden when framed: the dashboard's tabs replace it -->
+  …
+</main>
+```
+
+A framed page must not size itself by the viewport's height (`vh`, `100%` on
+`html` or `body`): the viewport is the frame, whose height follows the page.
+
+**The size message.** A page in a frame watches its document (a
+`ResizeObserver` on `<html>`) and posts its height to its parent:
+
+```json
+{ "type": "meridian:size", "version": 1, "height": 1284 }
+```
+
+`height` is the height of `<html>`'s box in CSS pixels, rounded up to a whole
+pixel, so a fraction never leaves a scrollbar. It is posted
+
+- only to the origin the page learned from the host's first theme message
+  (that message's `event.origin`, from the parent window, when it is an
+  `http` or `https` origin), never to `"*"`; the origin is learned once and
+  never changes;
+- not at all before that message arrives; the current height at once when it
+  does;
+- then again only when the rounded height changes, at most once an animation
+  frame.
+
+This holds framed or not: a host that sends the theme message gets the size.
+A page on its own posts nothing.
+
+**The host's half.** For each framed page, the host:
+
+1. Frames it with `om-framed=1` beside the theme on its address, and no
+   border, no background of its own and no scrolling of its own.
+2. Sends `{ "type": "meridian:theme", "version": 3, …, "framed": true }` to
+   the frame's window on every `load` of the frame and on every theme change,
+   with `postMessage(message, pluginOrigin)`.
+3. Takes a message as a size only when `event.source` is that frame's
+   `contentWindow`, `event.origin` is exactly the plugin's origin (the one it
+   sends the theme to), `data.type` is `"meridian:size"` and `data.version` is
+   `1`, and `data.height` is a whole number of at least 0; it sets the frame's
+   height to it, capped at a height of its own choosing (the page is the
+   plugin's, and a height is only a request).
+4. Keeps a height of its own until the first size arrives, so a page on a kit
+   without the size message (before 0.2.0) still shows, and the frame is never
+   0 tall (a browser may stop rendering a frame it cannot see, and then it
+   never measures).
+5. Gives the frame the page's `color-scheme` (the person's mode: `light`,
+   `dark`, or `light dark` for the system's): where a frame's colour scheme
+   differs from its document's, a browser paints the frame opaque, and the
+   transparent page would show a white or black box.
+
+`gallery/host.html` is that host, and `gallery/host.js` all of its script.
 
 ## The scheme contract
 
@@ -598,7 +701,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did |
 | `make bench` | The high-rate grid's budget in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
