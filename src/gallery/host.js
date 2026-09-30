@@ -13,7 +13,12 @@
 // Here the plugin's page is beside this one, so its origin is this one's; on
 // the dashboard it is the plugin's own host.
 
-const PAGE = new URL("sample.html", import.meta.url);
+// The page it frames, a sample beside it named by ?page= (only these), and its tab.
+const PAGES = { "sample.html": "Positions", "accounts.html": "Account links" };
+const asked = new URLSearchParams(location.search).get("page");
+const chosen = Object.hasOwn(PAGES, asked) ? asked : "sample.html";
+const PAGE = new URL(chosen, import.meta.url);
+document.querySelector(".tabs .tab.on").textContent = PAGES[chosen];
 const ORIGIN = PAGE.origin;
 // However tall a page says it is, the frame stops here.
 const TALLEST = 20000;

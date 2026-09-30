@@ -24,8 +24,18 @@
 // `freeze-sort` holds the order while streaming, so rows do not jump under
 // the pointer. The display order is kept incrementally, not re-sorted per
 // frame: a changed row is taken out and put back by binary search.
+//
+// A page that writes no script declares its columns and rows as JSON in a
+// child <script type="application/json">{ "columns": […], "rows": […] }</script>
+// (lib/declared.js); every column option but `format` and `compare` is plain
+// JSON: `hint`, `tone` from a row's field, `blank`, `strong`, `priority`.
+//
+// At narrow width (`narrow="cards"` or `narrow="priority"`), each row is a
+// card, or the least wanted columns hide first; the CSS does it, by the
+// grid's own width, so a grid in a narrow panel is narrow too.
 
 import { compareDecimal, compareParsed, groupDigits, parseDecimal, signOf } from "../lib/decimal.js";
+import { declaredJson, whenParsed } from "../lib/declared.js";
 
 const NUMERIC = new Set(["number", "decimal"]);
 const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -35,17 +45,46 @@ const OVERSCAN = 6;
 // Rows drawn before the view has a height to measure (hidden, or no layout).
 const FIRST_SCREEN = 40;
 const BLANK = Object.freeze({ blank: true });
+// The tones a row's field may name: the badge's, and for any other column
+// the text colour of the same name. Anything else is no tone, never a class.
+const TONES = new Set(["good", "warn", "bad", "accent", "info", "violet", "buy", "sell"]);
+const INKS = { good: "good-ink", warn: "warn-ink", bad: "bad-ink", buy: "buy-ink", sell: "sell-ink" };
+// A column's fields besides its own that its cell shows: a high-rate grid
+// redraws the cell when any of them changes.
+const WATCHED = new WeakMap();
 
 function normaliseColumn(c) {
   if (!c || typeof c.key !== "string") throw new TypeError("om-grid: every column needs a string key");
   const type = c.type || "text";
-  return {
+  const col = {
     ...c,
     type,
     label: c.label ?? c.key,
     align: c.align || (NUMERIC.has(type) ? "right" : "left"),
     sortable: c.sortable !== false,
   };
+  const watched = [...(Array.isArray(c.watch) ? c.watch : []), toneField(col), typeof c.hint === "string" ? c.hint : ""];
+  WATCHED.set(col, watched.filter(Boolean));
+  return col;
+}
+
+/** The row field a column's tone is read from (`tone: { field: "…" }`), or "". */
+function toneField(col) {
+  const t = col.tone;
+  return t && typeof t === "object" && typeof t.field === "string" ? t.field : "";
+}
+
+/** Whether a column draws more than its value: a hint, a blank's text, a tone
+ * from a field, or strong text. */
+function rich(col) {
+  return Boolean((typeof col.hint === "string" && col.hint) || col.blank || col.strong || toneField(col));
+}
+
+function span(className, text) {
+  const s = document.createElement("span");
+  if (className) s.className = className;
+  s.textContent = text;
+  return s;
 }
 
 function isBlank(v) {
@@ -96,9 +135,21 @@ export class OmGrid extends HTMLElement {
   #drawn = { first: -1, last: -1, version: -1 };
   #active = null; // the key of the row the keyboard is on
   #resize = null;
+  // Whether script set the columns or the rows, which the declared JSON then
+  // leaves as they are.
+  #columnsSet = false;
+  #rowsSet = false;
+  #waiting = false;
 
   connectedCallback() {
-    if (!this.#table) this.#build();
+    if (this.#table || this.#waiting) return;
+    // Upgraded before the document is parsed: wait for the children (the
+    // declared JSON, and the table a page shows without the kit).
+    this.#waiting = true;
+    whenParsed(() => {
+      this.#waiting = false;
+      if (!this.#table && this.isConnected) this.#build();
+    });
   }
 
   disconnectedCallback() {
@@ -138,6 +189,7 @@ export class OmGrid extends HTMLElement {
   }
 
   #build() {
+    if (!this.#table) this.#declared();
     this.#resize?.disconnect();
     this.#resize = null;
     this.textContent = "";
@@ -170,6 +222,14 @@ export class OmGrid extends HTMLElement {
     this.#renderCaption();
     this.#renderHead();
     this.#renderAll();
+  }
+
+  // The columns and rows declared in the page's JSON, where script has not set them.
+  #declared() {
+    const data = declaredJson(this);
+    if (!data) return;
+    if (Array.isArray(data.columns) && !this.#columnsSet) this.#columns = data.columns.map(normaliseColumn);
+    if (Array.isArray(data.rows) && !this.#rowsSet) this.#replaceRows(data.rows);
   }
 
   #buildFast() {
@@ -206,6 +266,7 @@ export class OmGrid extends HTMLElement {
   }
 
   set columns(value) {
+    this.#columnsSet = true;
     this.#columns = (value || []).map(normaliseColumn);
     this.#resort();
     if (!this.#table) return;
@@ -270,6 +331,12 @@ export class OmGrid extends HTMLElement {
 
   /** Replace every row (a snapshot). Pending updates are dropped: the snapshot is newer. */
   setRows(rows) {
+    this.#rowsSet = true;
+    this.#replaceRows(rows);
+    if (this.#table) this.#renderAll();
+  }
+
+  #replaceRows(rows) {
     this.#pending.clear();
     this.#pendingRemove.clear();
     this.#rows.clear();
@@ -280,7 +347,6 @@ export class OmGrid extends HTMLElement {
       this.#rows.set(key, row);
     }
     this.#resort();
-    if (this.#table) this.#renderAll();
   }
 
   /** Insert or replace rows by key, applied on the next frame, last state per key winning. */
@@ -539,6 +605,7 @@ export class OmGrid extends HTMLElement {
       th.scope = "col";
       if (col.align === "right") th.className = "num";
       if (col.width) th.style.width = col.width;
+      if (col.priority) th.dataset.priority = String(col.priority);
       if (col.sortable) {
         const b = document.createElement("button");
         b.type = "button";
@@ -640,6 +707,10 @@ export class OmGrid extends HTMLElement {
       let td = tr.cells[i];
       if (!td) {
         td = document.createElement("td");
+        // For the narrow layouts: a card names each value by its column, and
+        // a column's priority says when it hides.
+        if (!this.#fast) td.dataset.label = col.label;
+        if (col.priority) td.dataset.priority = String(col.priority);
         tr.append(td);
       }
       this.#fillCell(td, col, row);
@@ -652,7 +723,7 @@ export class OmGrid extends HTMLElement {
     this.#columns.forEach((col, i) => {
       const was = before?.[col.key];
       const now = row?.[col.key];
-      const moved = was !== now || (Array.isArray(col.watch) && col.watch.some((k) => before?.[k] !== row?.[k]));
+      const moved = was !== now || (WATCHED.get(col) || []).some((k) => before?.[k] !== row?.[k]);
       if (!moved) return;
       const td = tr.cells[i];
       if (!td) return;
@@ -686,16 +757,24 @@ export class OmGrid extends HTMLElement {
     const className = classes.join(" ");
     if (td.className !== className) td.className = className;
 
+    if (rich(col)) {
+      this.#fillRich(td, col, row, value, content);
+      return;
+    }
     if (col.type === "badge" && !isBlank(value)) {
       const tone = typeof col.tone === "function" ? col.tone(value, row) : "";
-      const span = td.firstElementChild;
       const cls = `badge${tone ? ` ${tone}` : ""}`;
+      // A format may give the badge's text, or a node to put inside it.
+      if (content && typeof content === "object" && "nodeType" in content) {
+        const b = span(cls, "");
+        b.append(content);
+        td.replaceChildren(b);
+        return;
+      }
+      const shown = td.firstElementChild;
       const text = String(content);
-      if (span && span.className === cls && span.textContent === text && td.childNodes.length === 1) return;
-      const b = document.createElement("span");
-      b.className = cls;
-      b.textContent = text;
-      td.replaceChildren(b);
+      if (shown && shown.className === cls && shown.textContent === text && td.childNodes.length === 1) return;
+      td.replaceChildren(span(cls, text));
       return;
     }
     if (content && typeof content === "object" && "nodeType" in content) {
@@ -704,6 +783,40 @@ export class OmGrid extends HTMLElement {
     }
     const text = isBlank(content) ? "" : String(content);
     if (td.childElementCount || td.textContent !== text) td.textContent = text;
+  }
+
+  // A cell drawing more than its value, from plain JSON: the value (a badge,
+  // strong, or in its tone's colour), or the column's `blank` text for an
+  // empty one, then the row's `hint` field under it.
+  #fillRich(td, col, row, value, content) {
+    const parts = [];
+    if (isBlank(value)) {
+      if (col.blank) parts.push(span("faint", String(col.blank)));
+    } else {
+      const field = toneField(col);
+      const fromField = field ? String(row?.[field] ?? "") : "";
+      const tone = typeof col.tone === "function" ? col.tone(value, row) || "" : TONES.has(fromField) ? fromField : "";
+      const node = content && typeof content === "object" && "nodeType" in content;
+      if (col.type === "badge") {
+        const b = span(`badge${tone ? ` ${tone}` : ""}`, node ? "" : String(content ?? ""));
+        if (node) b.append(content);
+        parts.push(b);
+      } else if (node) {
+        parts.push(content);
+      } else {
+        const text = isBlank(content) ? "" : String(content);
+        const ink = field ? INKS[tone] || "" : "";
+        if (col.strong) {
+          const s = document.createElement("strong");
+          if (ink) s.className = ink;
+          s.textContent = text;
+          parts.push(s);
+        } else parts.push(ink ? span(ink, text) : document.createTextNode(text));
+      }
+    }
+    const hint = typeof col.hint === "string" && col.hint ? row?.[col.hint] : "";
+    if (!isBlank(hint)) parts.push(span("hint", String(hint)));
+    td.replaceChildren(...parts);
   }
 
   // ── High-rate: the window of rows in the document ────────────────────────

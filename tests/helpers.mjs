@@ -19,3 +19,14 @@ export function brandTokensPath() {
 export async function settle(times = 5) {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
+
+/** Put `html` in the document's body as a browser inserts parsed markup: each
+ * element with its children already in it when it is connected. (happy-dom's
+ * innerHTML connects an element before its children are appended, as only a
+ * browser still parsing the page would.) */
+export function put(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  document.body.replaceChildren(...holder.childNodes);
+  return document.body.firstElementChild;
+}

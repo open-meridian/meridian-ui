@@ -94,12 +94,14 @@ ul.plain li + li { margin-top: .2rem; }
 .panel-section { border-top: 1px solid var(--line-soft); padding-top: var(--space-4); }
 .panel-section > * + * { margin-top: .6rem; }
 
+/* A row's text grows beside its actions, and never narrower than 16rem: where
+ * both do not fit (a phone), the actions drop below the text. */
 .list-row {
-  display: flex; align-items: center; gap: .9rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) .9rem;
   padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line-soft); min-height: 3.4rem;
 }
 .list-row:last-child { border-bottom: 0; }
-.list-row .grow { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.list-row .grow { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
 .list-row .title { font-weight: 550; }
 .list-row .meta { color: var(--ink-soft); font-size: .85rem; }
 
@@ -228,6 +230,9 @@ input[type="url"], input[type="password"], input:not([type]), select, textarea {
   border-radius: var(--radius);
   padding: .5rem .65rem;
 }
+/* A select is as tall as a text input: a browser lays a select's text out by
+ * its font rather than its line height, so it is held to the input's box. */
+select { min-height: calc(1lh + 1rem + 2px); }
 input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 textarea { font-family: var(--mono); font-size: .84rem; resize: vertical; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); outline: none; }
@@ -235,6 +240,37 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--da
 
 .filters { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin-bottom: var(--space-4); }
 .filters select, .filters input { width: auto; min-width: 10rem; }
+
+/* A field and its button on one row, the button as tall as the field and
+ * level with it; on a narrow row the button drops below. A hint belongs
+ * under the row, not in it. */
+.field-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-2); margin-bottom: .9rem; }
+.field-row > .field { flex: 1 1 10rem; min-width: 0; margin-bottom: 0; }
+.field-row > :is(button, .button) { flex: none; line-height: inherit; padding-top: .5rem; padding-bottom: .5rem; }
+@media (max-width: 40rem) { .field-row { row-gap: var(--space-2); } }
+
+/* A choice: radio buttons (or checkboxes) as options, each a label with its
+ * words and a hint, as the dashboard's settings draw them. */
+input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
+fieldset.choice { border: 0; margin: 0 0 .9rem; padding: 0; min-width: 0; }
+fieldset.choice > legend { padding: 0; width: 100%; font-size: .84rem; font-weight: 550; margin-bottom: .3rem; color: var(--ink); }
+.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-2); }
+label.option {
+  display: flex; align-items: flex-start; gap: .6rem; margin: 0; padding: .65rem .8rem;
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card);
+  font-weight: 400; cursor: pointer;
+}
+label.option:hover { background: var(--hover); }
+label.option:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); }
+label.option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+label.option input { margin: .25rem 0 0; flex: none; }
+label.option input:focus-visible { outline: none; }
+label.option .option-label { display: block; font-weight: 600; color: var(--ink); }
+label.option .hint { margin: .1rem 0 0; }
+/* ink-faint is not held to its ratio on hover or on the chosen option's wash. */
+label.option:is(:hover, :has(input:checked)) .hint { color: var(--ink-soft); }
+label.option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+label.check { display: flex; align-items: center; gap: .5rem; font-weight: 400; margin: .5rem 0 0; cursor: pointer; }
 
 /* ── Tiles ───────────────────────────────────────────────────────────────── */
 
@@ -298,6 +334,41 @@ om-grid tr[data-key] { cursor: default; }
 om-grid .om-grid-empty td { text-align: center; color: var(--ink-soft); padding: 2rem 1rem; }
 om-grid[sticky-head] .table-wrap { max-height: var(--om-grid-height, 28rem); overflow: auto; }
 om-grid[sticky-head] th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+/* Narrow: by the grid's own width (a phone, or a narrow panel), with
+ * narrow="cards" each row is a card, its first column the card's title and
+ * each other value under its column's name; with narrow="priority" the columns
+ * the page wants least hide first (priority 3 under 48rem, 2 under 32rem; 1,
+ * or none, never). Without the attribute a narrow grid scrolls sideways, as it
+ * always has. A high-rate grid takes priority, never cards: its rows keep one
+ * height. */
+om-grid[narrow] { container: om-grid / inline-size; }
+@container om-grid (max-width: 40rem) {
+  om-grid[narrow="cards"]:not([high-rate]) :is(table, tbody, tr, td) { display: block; }
+  om-grid[narrow="cards"]:not([high-rate]) thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line-soft); }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key]:last-child { border-bottom: 0; }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr:hover td { background: none; }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td {
+    display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: var(--space-3);
+    align-items: baseline; justify-items: start; padding: .2rem 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
+  }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td::before {
+    content: attr(data-label); grid-row: span 3; align-self: start;
+    color: var(--ink-faint); font: 600 .72rem/1.6 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td:first-child { display: block; padding: 0 0 .35rem; font-weight: 550; }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td:first-child::before { content: none; }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td:empty { display: none; }
+  om-grid[narrow="cards"]:not([high-rate]) tbody tr[data-key] td .hint { grid-column: 2; }
+  om-grid[narrow="cards"]:not([high-rate]) .om-grid-empty td { display: block; }
+  om-grid[narrow="priority"] :is(th, td)[data-priority="3"] { display: none; }
+}
+@container om-grid (max-width: 32rem) {
+  om-grid[narrow="priority"] :is(th, td)[data-priority="2"] { display: none; }
+}
 
 /* High-rate: a view --om-grid-height tall with the head held, a fixed row
  * height (--om-grid-row-height, set from row-height), fixed column widths so
@@ -369,6 +440,14 @@ om-asof .om-asof-label { font-size: .84rem; font-weight: 550; color: var(--ink-s
 om-asof input[type="date"] { width: auto; min-width: 0; padding: .4rem .55rem; font-variant-numeric: tabular-nums; }
 om-asof .om-asof-latest { color: var(--ink-faint); font-size: .84rem; }
 
+/* ── om-moment ───────────────────────────────────────────────────────────── */
+
+/* A moment the figures are as of, to read, not to choose. */
+om-moment { display: inline; }
+om-moment .om-moment-label { color: var(--ink-soft); }
+om-moment time { font-variant-numeric: tabular-nums; }
+om-moment .om-moment-empty { color: var(--ink-faint); }
+
 /* ── om-instrument-picker ────────────────────────────────────────────────── */
 
 om-instrument-picker { display: block; position: relative; }
@@ -389,6 +468,42 @@ om-instrument-picker .om-picker-meta { color: var(--ink-soft); font-size: .8rem;
 om-instrument-picker .om-picker-status { padding: .45rem .6rem; color: var(--ink-soft); font-size: .86rem; }
 om-instrument-picker .om-picker-status.bad { color: var(--danger); }
 om-instrument-picker .om-picker-chosen { margin-top: .4rem; }
+
+/* ── om-account-map ──────────────────────────────────────────────────────── */
+
+/* Each external account beside the deployment's account it is linked to, or
+ * the forms to link it; one column where the map is narrow (a phone). */
+om-account-map { display: block; container: om-account-map / inline-size; }
+om-account-map .om-account-map-head,
+om-account-map .om-account-map-row {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+}
+om-account-map .om-account-map-head {
+  padding-block: .6rem; border-bottom: 1px solid var(--line); color: var(--ink-faint); text-transform: uppercase;
+}
+om-account-map .om-account-map-row { border-bottom: 1px solid var(--line-soft); align-items: start; }
+om-account-map .om-account-map-row:last-child { border-bottom: 0; }
+om-account-map .om-account-map-external { min-width: 0; overflow-wrap: anywhere; }
+om-account-map .om-account-map-external .title,
+om-account-map .om-account-map-linked .title { font-weight: 550; }
+om-account-map .meta { color: var(--ink-soft); font-size: .85rem; }
+om-account-map .om-account-map-link { min-width: 0; }
+om-account-map .om-account-map-link > * + * { margin-top: var(--space-2); }
+om-account-map .om-account-map-link form { margin: 0; }
+om-account-map .om-account-map-link .field-row { margin-bottom: 0; }
+om-account-map .field-row > .om-account-map-name { flex: 2 1 14rem; }
+om-account-map .om-account-map-linked { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) .9rem; }
+om-account-map .om-account-map-linked > div { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+om-account-map .om-account-map-or { color: var(--ink-faint); font-size: .84rem; }
+om-account-map details.om-account-map-change > summary { cursor: pointer; color: var(--accent); font-size: .9rem; width: max-content; }
+om-account-map details.om-account-map-change[open] > summary { margin-bottom: var(--space-2); }
+om-account-map details.om-account-map-change > * + * { margin-top: var(--space-2); }
+om-account-map .om-account-map-empty { padding: 2.5rem 1rem; text-align: center; color: var(--ink-soft); }
+@container om-account-map (max-width: 40rem) {
+  om-account-map .om-account-map-head { display: none; }
+  om-account-map .om-account-map-row { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ── om-live ─────────────────────────────────────────────────────────────── */
 

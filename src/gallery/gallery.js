@@ -13,6 +13,8 @@ const layout = document.getElementById("layout");
 const direction = document.getElementById("direction");
 const frames = document.getElementById("frames");
 const framed = document.getElementById("framed");
+const accounts = document.getElementById("accounts");
+const phone = document.getElementById("phone");
 const sent = document.getElementById("sent");
 
 for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
@@ -26,14 +28,14 @@ function modes() {
 }
 
 /** A figure framing `page` in `mode`, with the theme as query parameters. */
-function figure(title, page, mode) {
+function figure(title, page, mode, extra = "") {
   const fig = document.createElement("figure");
   const cap = document.createElement("figcaption");
   cap.innerHTML = `<strong>${title}</strong><span class="faint">?om-scheme=${select.value}&amp;om-mode=${mode}&amp;om-direction=${direction.value}</span>`;
   const frame = document.createElement("iframe");
   frame.title = `${title}: ${page}, ${mode}`;
   frame.dataset.mode = mode;
-  frame.src = `gallery/${page}?om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
+  frame.src = `gallery/${page}?${extra ? `${extra}&` : ""}om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
   frame.addEventListener("load", () => fit(frame));
   fig.append(cap, frame);
   return fig;
@@ -47,6 +49,14 @@ function build() {
   // it from the page's messages; beside it, the page as it is on its own.
   const mode = modes()[0];
   framed.replaceChildren(figure("Framed seamlessly by a host", "host.html", mode), figure("On its own", "sample.html", mode));
+  // The account links page, at the gallery's width and at a phone's: in each
+  // mode on its own, and framed by the host.
+  accounts.replaceChildren();
+  accounts.classList.toggle("one", modes().length === 1);
+  for (const m of modes()) accounts.append(figure(`${m[0].toUpperCase()}${m.slice(1)}`, "accounts.html", m));
+  phone.replaceChildren();
+  for (const m of modes()) phone.append(figure(`390px, ${m}`, "accounts.html", m));
+  for (const m of modes()) phone.append(figure(`390px, ${m}, framed by the host`, "host.html", m, "page=accounts.html"));
   sent.textContent = "Frames loaded with query parameters.";
 }
 
@@ -57,7 +67,9 @@ function fit(frame) {
     frame.style.height = `${doc.documentElement.scrollHeight + 4}px`;
   };
   size();
-  new ResizeObserver(size).observe(doc.body);
+  // The frame's own observer: one from this window does not hear a framed
+  // document grow (the stand-in host growing to its page).
+  new frame.contentWindow.ResizeObserver(size).observe(doc.documentElement);
 }
 
 // A scheme or direction change is the frame's theme message, as the dashboard sends it.

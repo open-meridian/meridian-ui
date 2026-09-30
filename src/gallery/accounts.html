@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample account links page</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<!-- The gallery's own: shows what a link form would send, rather than posting it. -->
+<script type="module" src="accounts.js"></script>
+</head>
+<body>
+<!-- A plugin's admin page as a page in any language writes it: tags and JSON,
+     and no script of its own. Each om-grid and the om-account-map read the
+     JSON inside them; what else is inside is what a browser shows without
+     the kit. -->
+<main class="page">
+
+  <header class="page-head">
+    <div>
+      <h1>Account links</h1>
+      <p>Reading SnapTrade. <om-moment label="Last read" value="2026-09-29T12:04:00Z">Last read 2026-09-29 12:04 UTC</om-moment>.</p>
+    </div>
+    <div class="actions"><button type="button">Read now</button></div>
+  </header>
+  <nav class="tabs" aria-label="The plugin's admin">
+    <a class="tab" href="#connections">Connections</a>
+    <a class="tab on" aria-current="page" href="#accounts">Account links</a>
+  </nav>
+
+  <div class="notice good" role="status" id="said">Linked Individual brokerage to Main.</div>
+
+  <section class="panel">
+    <div class="panel-body">
+      <h2>Link each account</h2>
+      <p class="muted">Each account SnapTrade reaches is recorded against the deployment's account it is linked to,
+        and one nothing links is not recorded. Link it to an existing account, or create one for it.</p>
+    </div>
+    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" empty="No accounts yet: they appear here once SnapTrade is read.">
+      <script type="application/json">{"external_accounts": [{"external_account_id": "st-7b20c1e5", "name": "Individual brokerage", "detail": "Interactive Brokers \u00b7 Margin", "custodian": "Interactive Brokers", "account_type": "Margin"}, {"external_account_id": "st-19fe03aa", "name": "Roth IRA", "detail": "Fidelity \u00b7 IRA", "custodian": "Fidelity", "account_type": "IRA"}, {"external_account_id": "st-5c3310d9", "name": "Joint account", "detail": "Schwab \u00b7 Cash", "custodian": "Schwab", "account_type": "Cash", "note": "SnapTrade gives no stable ID for this account: after a reconnect it appears as a new account, to be linked again."}], "accounts": [{"account_id": "ACC-7b20c1e5", "name": "Main", "custodian": "Interactive Brokers", "account_type": "Margin", "open": true}, {"account_id": "ACC-0d44e912", "name": "Retirement", "custodian": "Fidelity", "account_type": "IRA", "open": true}, {"account_id": "ACC-2a9b7f01", "name": "Family trust", "custodian": "", "account_type": "", "open": true}, {"account_id": "ACC-9e11c4b3", "name": "Closed margin", "custodian": "Schwab", "account_type": "Margin", "open": false}], "links": [{"external_account_id": "st-7b20c1e5", "account_id": "ACC-7b20c1e5", "account_name": "Main"}]}</script>
+      <p class="panel-body">Without the kit, the page's own forms would be here.</p>
+    </om-account-map>
+  </section>
+
+  <section class="panel">
+    <div class="panel-body">
+      <h2>Sync state: cards where narrow</h2>
+      <p class="muted"><code>narrow="cards"</code>: under 40rem each row is a card, each value under its column's name.</p>
+    </div>
+    <om-grid row-key="id" caption="Accounts, as cards where narrow" narrow="cards">
+      <script type="application/json">{"columns": [{"key": "account", "label": "Account", "hint": "where", "strong": true}, {"key": "link", "label": "Link", "type": "badge", "tone": {"field": "link_tone"}}, {"key": "state", "label": "Sync state", "type": "badge", "tone": {"field": "tone"}, "hint": "todo", "priority": 2}, {"key": "holdings_as_of", "label": "Holdings as of", "blank": "not reported", "priority": 3}, {"key": "history_as_of", "label": "History as of", "blank": "not reported", "priority": 3}, {"key": "recorded", "label": "Last statement", "tone": {"field": "recorded_tone"}, "hint": "recorded_note", "priority": 3}, {"key": "id", "label": "Account ID", "type": "code", "hint": "id_note", "priority": 3}], "rows": [{"id": "st-7b20c1e5", "account": "Individual brokerage", "where": "Interactive Brokers \u00b7 Margin", "link": "Linked", "link_tone": "good", "state": "Current", "tone": "good", "todo": "", "holdings_as_of": "2026-09-29 12:04 UTC", "history_as_of": "2026-09-29 12:04 UTC", "recorded": "42 rows", "recorded_tone": "", "recorded_note": "2 awaiting an instrument", "id_note": ""}, {"id": "st-19fe03aa", "account": "Roth IRA", "where": "Fidelity \u00b7 IRA", "link": "Not linked", "link_tone": "warn", "state": "Stale", "tone": "warn", "todo": "Holdings are a day old. Refresh the connection, or wait for the next read.", "holdings_as_of": "2026-09-28 09:30 UTC", "history_as_of": "", "recorded": "Nothing recorded", "recorded_tone": "", "recorded_note": "Refused: nothing links it.", "id_note": ""}, {"id": "st-5c3310d9", "account": "Joint account", "where": "Schwab \u00b7 Cash", "link": "Not linked", "link_tone": "warn", "state": "Needs sign-in", "tone": "bad", "todo": "Reconnect it through SnapTrade's Connection Portal.", "holdings_as_of": "", "history_as_of": "", "recorded": "Stopped at 3 of 9 rows", "recorded_tone": "bad", "recorded_note": "The sidecar refused a row.", "id_note": "No stable ID: after a reconnect it is a new account."}]}</script>
+    </om-grid>
+  </section>
+
+  <section class="panel">
+    <div class="panel-body">
+      <h2>Sync state: the least wanted columns hide</h2>
+      <p class="muted"><code>narrow="priority"</code>: priority 3 hides under 48rem, 2 under 32rem.</p>
+    </div>
+    <om-grid row-key="id" caption="Accounts, by priority where narrow" narrow="priority">
+      <script type="application/json">{"columns": [{"key": "account", "label": "Account", "hint": "where", "strong": true}, {"key": "link", "label": "Link", "type": "badge", "tone": {"field": "link_tone"}}, {"key": "state", "label": "Sync state", "type": "badge", "tone": {"field": "tone"}, "hint": "todo", "priority": 2}, {"key": "holdings_as_of", "label": "Holdings as of", "blank": "not reported", "priority": 3}, {"key": "history_as_of", "label": "History as of", "blank": "not reported", "priority": 3}, {"key": "recorded", "label": "Last statement", "tone": {"field": "recorded_tone"}, "hint": "recorded_note", "priority": 3}, {"key": "id", "label": "Account ID", "type": "code", "hint": "id_note", "priority": 3}], "rows": [{"id": "st-7b20c1e5", "account": "Individual brokerage", "where": "Interactive Brokers \u00b7 Margin", "link": "Linked", "link_tone": "good", "state": "Current", "tone": "good", "todo": "", "holdings_as_of": "2026-09-29 12:04 UTC", "history_as_of": "2026-09-29 12:04 UTC", "recorded": "42 rows", "recorded_tone": "", "recorded_note": "2 awaiting an instrument", "id_note": ""}, {"id": "st-19fe03aa", "account": "Roth IRA", "where": "Fidelity \u00b7 IRA", "link": "Not linked", "link_tone": "warn", "state": "Stale", "tone": "warn", "todo": "Holdings are a day old. Refresh the connection, or wait for the next read.", "holdings_as_of": "2026-09-28 09:30 UTC", "history_as_of": "", "recorded": "Nothing recorded", "recorded_tone": "", "recorded_note": "Refused: nothing links it.", "id_note": ""}, {"id": "st-5c3310d9", "account": "Joint account", "where": "Schwab \u00b7 Cash", "link": "Not linked", "link_tone": "warn", "state": "Needs sign-in", "tone": "bad", "todo": "Reconnect it through SnapTrade's Connection Portal.", "holdings_as_of": "", "history_as_of": "", "recorded": "Stopped at 3 of 9 rows", "recorded_tone": "bad", "recorded_note": "The sidecar refused a row.", "id_note": "No stable ID: after a reconnect it is a new account."}]}</script>
+    </om-grid>
+  </section>
+
+  <section class="panel">
+    <div class="panel-body"><h2>Connections</h2><p class="muted">List rows: where the text and the actions do not fit side by side, the actions drop below.</p></div>
+    <div class="list-row"><div class="grow"><div class="row"><span class="title">Interactive Brokers</span> <span class="badge good">Current</span></div>
+      <div class="meta">Individual · read-only · 1 account</div>
+      <span class="hint">Delayed: SnapTrade serves this connection from its cache. Refresh asks it to read the brokerage again.</span></div>
+      <button type="button">Refresh</button><button type="button">Reconnect</button></div>
+    <div class="list-row"><div class="grow"><div class="row"><span class="title">Schwab</span> <span class="badge bad">Needs sign-in</span></div>
+      <div class="meta">Joint · read-only · 1 account</div>
+      <span class="hint">The brokerage asked for the person to sign in again.</span></div>
+      <button type="button" class="primary">Reconnect</button></div>
+  </section>
+
+  <section class="panel padded">
+    <h2>Fields, options and the moment</h2>
+    <fieldset class="choice">
+      <legend>SnapTrade key</legend>
+      <div class="options">
+        <label class="option"><input type="radio" name="key_type" value="personal" checked><span><span class="option-label">Personal</span><span class="hint">One person's own brokerage accounts.</span></span></label>
+        <label class="option"><input type="radio" name="key_type" value="commercial"><span><span class="option-label">Commercial</span><span class="hint">A firm's users, each registered under the key.</span></span></label>
+      </div>
+    </fieldset>
+    <div class="field-row">
+      <label class="field"><span>Link to an existing account</span><select name="account_id"><option value="">Choose an account</option><option>Main (Interactive Brokers, Margin)</option></select></label>
+      <button type="button">Link</button>
+    </div>
+    <div class="field-row">
+      <label class="field"><span>A new account</span><input type="text" value="Roth IRA"></label>
+      <button type="button" class="primary">Create and link</button>
+    </div>
+    <label class="check"><input type="checkbox" checked> Synthetic mode</label>
+    <div class="filters" style="margin: var(--space-4) 0 0">
+      <om-asof name="as_of" value="2026-09-28" max="2026-09-29"></om-asof>
+      <span class="muted"><om-moment label="Holdings as of" value="2026-09-29T12:04:00Z"></om-moment></span>
+      <span class="muted"><om-moment label="History as of" value=""></om-moment></span>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

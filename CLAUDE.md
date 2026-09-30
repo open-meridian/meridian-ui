@@ -13,6 +13,11 @@ ruled); read it before changing what the kit is.
   JavaScript the browser runs natively, usable from plain HTML, React, Vue or
   Svelte, from a plugin written in any language. No framework, no bundler or
   transpiler in the page, no backend of its own, no runtime dependency.
+- **Data without script.** A page in any language gives a component its data
+  as JSON in a child `<script type="application/json">` and writes no script
+  (`src/lib/declared.js`); a column option or a component's data that only a
+  function can say is a convenience beside that, never the only way in. A 0.x
+  release only adds: nothing removed or renamed.
 - **Nothing from elsewhere.** Everything works under the base path the
   dashboard serves it at, with relative references only: no CDN, no absolute
   path, no other origin. A component that reaches the network reaches only the
