@@ -476,38 +476,99 @@ om-instrument-picker .om-picker-chosen { margin-top: .4rem; }
 
 /* ── om-account-map ──────────────────────────────────────────────────────── */
 
-/* Each external account beside the deployment's account it is linked to, or
- * the forms to link it; one column where the map is narrow (a phone). */
+/* A dense table of external accounts, each with its link and its actions,
+ * under a bar to search, filter and group them; one row's choices open under
+ * it. Where the map is narrow (a phone) each row stacks, by its own width. */
 om-account-map { display: block; container: om-account-map / inline-size; }
-om-account-map .om-account-map-head,
-om-account-map .om-account-map-row {
-  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-2) var(--space-6);
-  padding: var(--space-3) var(--space-4);
+om-account-map .om-account-map-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line-soft);
 }
-om-account-map .om-account-map-head {
-  padding-block: .6rem; border-bottom: 1px solid var(--line); color: var(--ink-faint); text-transform: uppercase;
+om-account-map .om-account-map-search { flex: 1 1 16rem; width: auto; min-width: 0; }
+om-account-map .om-account-map-filters { display: inline-flex; flex: none; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+om-account-map .om-account-map-filters button { border: 0; border-radius: 0; padding: .45rem .75rem; font-weight: 400; gap: .35rem; }
+om-account-map .om-account-map-filters button + button { border-left: 1px solid var(--line-strong); }
+om-account-map .om-account-map-filters button[aria-pressed="true"] { background: var(--accent-wash); color: var(--ink); font-weight: 600; }
+om-account-map .om-account-map-filters .count,
+om-account-map .om-account-map-group .count { color: var(--ink-soft); font-weight: 400; font-variant-numeric: tabular-nums; }
+om-account-map .om-account-map-grouping { display: inline-flex; align-items: center; gap: .4rem; flex: none; font-size: .84rem; color: var(--ink-soft); }
+om-account-map .om-account-map-grouping select { width: auto; min-width: 8rem; }
+om-account-map .om-account-map-review { padding: var(--space-4); border-bottom: 1px solid var(--line-soft); }
+om-account-map .om-account-map-review p { margin: .3rem 0 .6rem; }
+om-account-map .om-account-map-pairs {
+  list-style: none; margin: 0 0 var(--space-3); padding: .2rem .6rem; max-height: 22rem; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--radius);
 }
-om-account-map .om-account-map-row { border-bottom: 1px solid var(--line-soft); align-items: start; }
-om-account-map .om-account-map-row:last-child { border-bottom: 0; }
-om-account-map .om-account-map-external { min-width: 0; overflow-wrap: anywhere; }
-om-account-map .om-account-map-external .title,
-om-account-map .om-account-map-linked .title { font-weight: 550; }
-om-account-map .meta { color: var(--ink-soft); font-size: .85rem; }
-om-account-map .om-account-map-link { min-width: 0; }
-om-account-map .om-account-map-link > * + * { margin-top: var(--space-2); }
-om-account-map .om-account-map-link form { margin: 0; }
-om-account-map .om-account-map-link .field-row { margin-bottom: 0; }
+om-account-map .om-account-map-pairs li + li { border-top: 1px solid var(--line-soft); }
+om-account-map .om-account-map-pairs label.check { align-items: flex-start; margin: 0; padding: .45rem 0; overflow-wrap: anywhere; }
+om-account-map .om-account-map-pairs label.check input { margin-top: .25rem; }
+om-account-map .om-account-map-status, om-account-map .om-account-map-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4);
+  padding: .55rem var(--space-4); color: var(--ink-soft); font-size: .85rem;
+}
+om-account-map .om-account-map-status { border-bottom: 1px solid var(--line); }
+om-account-map .om-account-map-foot { border-top: 1px solid var(--line-soft); justify-content: flex-end; }
+om-account-map .om-account-map-pager { display: inline-flex; align-items: center; gap: .5rem; }
+om-account-map .om-account-map-page { font-variant-numeric: tabular-nums; white-space: nowrap; }
+om-account-map .om-account-map-table { table-layout: fixed; }
+om-account-map .om-account-map-table thead th:not(.om-account-map-actions) { width: 42%; }
+om-account-map .om-account-map-table thead th.om-account-map-actions { width: 16%; text-align: right; }
+om-account-map .om-account-map-table td { padding: .5rem 1rem; vertical-align: top; overflow-wrap: anywhere; }
+om-account-map .om-account-map-row .title { font-weight: 550; }
+om-account-map .meta { color: var(--ink-soft); font-size: .84rem; }
+om-account-map .om-account-map-row .hint { font-size: .82rem; }
+om-account-map .om-account-map-suggestion { margin-top: .2rem; }
+om-account-map .om-account-map-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+om-account-map .om-account-map-buttons form { margin: 0; }
+om-account-map tr.om-account-map-group th { padding: 0; background: var(--card); text-transform: none; letter-spacing: normal; color: var(--ink); border-bottom: 1px solid var(--line); }
+om-account-map .om-account-map-fold {
+  display: flex; align-items: center; gap: .5rem; width: 100%; justify-content: flex-start;
+  border: 0; border-radius: 0; background: none; padding: .55rem 1rem; white-space: normal; text-align: left;
+  font-family: var(--sans); font-size: .9rem; font-weight: 600; letter-spacing: normal;
+}
+om-account-map .om-account-map-fold::before { content: "▾"; color: var(--ink-faint); width: 1em; flex: none; }
+om-account-map .om-account-map-fold[aria-expanded="false"]::before { content: "▸"; }
+om-account-map .om-account-map-fold:hover { background: var(--hover); }
+om-account-map tr.om-account-map-editor td { padding: 0; background: var(--card); }
+om-account-map tbody tr.om-account-map-editor:hover td { background: var(--card); }
+om-account-map .om-account-map-edit { padding: var(--space-3) var(--space-4) var(--space-4); border-left: 3px solid var(--accent); }
+om-account-map .om-account-map-edit > * + * { margin-top: var(--space-2); }
+om-account-map .om-account-map-edit form { margin: 0; }
+om-account-map .om-account-map-edit .field-row { margin-bottom: 0; }
+om-account-map .om-account-map-edit-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+om-account-map .om-account-map-edit-head p { margin: 0; }
 om-account-map .field-row > .om-account-map-name { flex: 2 1 14rem; }
-om-account-map .om-account-map-linked { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) .9rem; }
-om-account-map .om-account-map-linked > div { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+om-account-map .field-row > .om-account-map-chooser { flex: 3 1 16rem; }
+om-account-map .om-account-map-chosen { margin: .3rem 0 0; }
+om-account-map .om-account-map-chosen:empty { display: none; }
+om-account-map .om-account-map-choices {
+  list-style: none; margin: .25rem 0 0; padding: .3rem; max-height: 18rem; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+}
+om-account-map .om-account-map-choice {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .6rem;
+  padding: .4rem .6rem; border-radius: calc(var(--radius) - 2px); cursor: pointer; color: var(--ink);
+}
+om-account-map .om-account-map-choice[aria-selected="true"], om-account-map .om-account-map-choice:hover { background: var(--hover); }
+om-account-map .om-account-map-choice .om-account-map-name { flex: 1 1 12rem; min-width: 0; font-weight: 550; overflow-wrap: anywhere; }
+om-account-map .om-account-map-choice code { color: var(--ink-soft); font-size: .8rem; }
+om-account-map .om-account-map-more { padding: .4rem .6rem; color: var(--ink-soft); font-size: .84rem; }
 om-account-map .om-account-map-or { color: var(--ink-faint); font-size: .84rem; }
-om-account-map details.om-account-map-change > summary { cursor: pointer; color: var(--accent); font-size: .9rem; width: max-content; }
-om-account-map details.om-account-map-change[open] > summary { margin-bottom: var(--space-2); }
-om-account-map details.om-account-map-change > * + * { margin-top: var(--space-2); }
+om-account-map .om-account-map-close { font-size: .9rem; }
+om-account-map tr.om-account-map-none td { text-align: center; color: var(--ink-soft); padding: 2rem 1rem; }
 om-account-map .om-account-map-empty { padding: 2.5rem 1rem; text-align: center; color: var(--ink-soft); }
 @container om-account-map (max-width: 40rem) {
-  om-account-map .om-account-map-head { display: none; }
-  om-account-map .om-account-map-row { grid-template-columns: minmax(0, 1fr); }
+  om-account-map .om-account-map-bar { padding: var(--space-3); }
+  om-account-map .om-account-map-search { flex-basis: 100%; }
+  om-account-map .om-account-map-table, om-account-map .om-account-map-table :is(tbody, tr, td) { display: block; }
+  om-account-map .om-account-map-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  om-account-map .om-account-map-table tr.om-account-map-row { padding: .6rem var(--space-3); border-bottom: 1px solid var(--line-soft); }
+  om-account-map .om-account-map-table tr.om-account-map-row td { padding: .15rem 0; border: 0; background: none; }
+  om-account-map .om-account-map-table tr.om-account-map-row.selected { background: var(--accent-wash); }
+  om-account-map .om-account-map-buttons { justify-content: flex-start; padding-top: .3rem; }
+  om-account-map tr.om-account-map-group th { display: block; }
+  om-account-map .om-account-map-edit { padding: var(--space-3); }
+  om-account-map .om-account-map-status, om-account-map .om-account-map-foot { padding-inline: var(--space-3); }
 }
 
 /* ── om-live ─────────────────────────────────────────────────────────────── */

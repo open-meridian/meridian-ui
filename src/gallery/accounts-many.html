@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account links at scale</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<!-- The gallery's own: 2,000 external accounts and 1,500 of the deployment's,
+     invented, set as the map's data; and a link shown rather than sent. -->
+<script type="module" src="accounts-many.js"></script>
+</head>
+<body>
+<!-- An industrial plugin's Account links tab: thousands of external accounts,
+     searched, filtered, grouped and paged, with suggestions reviewed and sent
+     as one form. A plugin's page would declare the same data as JSON inside
+     the map, as accounts.html does; here it is made up in script. -->
+<main class="page">
+
+  <header class="page-head">
+    <div>
+      <h1>Account links</h1>
+      <p>Reading 67 connections. <om-moment label="Last read" value="2026-09-30T08:15:00Z">Last read 2026-09-30 08:15 UTC</om-moment>.</p>
+    </div>
+    <div class="actions"><button type="button" data-om-action="refresh">Refresh</button></div>
+  </header>
+  <nav class="tabs" aria-label="The plugin's admin">
+    <a class="tab" href="#connections">Connections</a>
+    <a class="tab on" aria-current="page" href="#accounts">Account links</a>
+  </nav>
+
+  <div class="notice info" role="status" id="said">2,000 external accounts, 1,500 of the deployment's. A link here is shown, not sent.</div>
+
+  <section class="panel">
+    <div class="panel-body">
+      <h2>Link each account</h2>
+      <p class="muted" id="summary">Each account the plugin reaches is recorded against the deployment's account it is
+        linked to, and one nothing links is not recorded.</p>
+    </div>
+    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several
+                    empty="No accounts yet: they appear here once the venue is read."></om-account-map>
+  </section>
+
+</main>
+</body>
+</html>

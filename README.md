@@ -37,8 +37,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.4.0/meridian.css">
-  <script src="/.meridian/ui/0.4.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.5.0/meridian.css">
+  <script src="/.meridian/ui/0.5.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -102,7 +102,11 @@ serves to any 0.x request. 0.3.0 added `om-account-map`, `om-moment`, the
 grid's declared JSON, rich cells and narrow layouts, list rows that wrap,
 options, the field row and a select as tall as an input. 0.4.0 added header
 actions: a framed page's head buttons drawn in the host's header (see
-[the frame: seamless](#the-frame-seamless)).
+[the frame: seamless](#the-frame-seamless)). 0.5.0 made `om-account-map` a
+dense table for thousands of accounts: search, filters, grouping, pages, a
+chooser found by typing, suggestions, and several links in one form
+(`link-several`), with the data's new fields `number`, `connection` and
+`connection_id` (all optional).
 
 ## Never raw colours
 
@@ -537,16 +541,19 @@ store `detail.layout`, and set `layout` from it when the page loads.
 
 A plugin links each external account it reads (a brokerage account behind a
 custody connector) to one of the deployment's accounts, on its admin page
-(meridian-design W6.4): each external account beside the deployment's account
-it is linked to, or the forms to link it. Two columns where it is wide, one
-under 40rem (by its own width).
+(meridian-design W6.4). Built for an industrial deployment's hundreds or
+thousands of accounts: a dense table, one row per external account, with its
+name and detail, its link (the account it is linked to, or Not linked), and
+its actions. Each row stacks under 40rem (by the map's own width).
 
 ```html
-<om-account-map action="/admin/accounts/link" token-name="csrf" token="3f9c…" empty="No accounts yet.">
+<om-account-map action="/admin/accounts/link" token-name="csrf" token="3f9c…"
+                group-by="connection" link-several empty="No accounts yet.">
   <script type="application/json">{
     "external_accounts": [
       { "external_account_id": "st-19fe03aa", "name": "Roth IRA", "detail": "Fidelity · IRA",
-        "custodian": "Fidelity", "account_type": "IRA", "note": "" }],
+        "custodian": "Fidelity", "account_type": "IRA", "note": "",
+        "number": "Z12345678", "connection": "Fidelity · Individual", "connection_id": "c-2" }],
     "accounts": [
       { "account_id": "ACC-7b20c1e5", "name": "Main", "custodian": "Interactive Brokers", "account_type": "Margin", "open": true }],
     "links": [
@@ -558,8 +565,8 @@ under 40rem (by its own width).
 
 | Data | |
 |---|---|
-| `external_accounts` | The plugin's accounts: `external_account_id` (required), `name`, `detail` (a line under it, such as the brokerage and type), `custodian` and `account_type` (a new account's, prefilled), `note` (a hint) |
-| `accounts` | The deployment's accounts, read for the admin viewing the page (`read_accounts_for_linking`): `account_id`, `name`, `custodian`, `account_type`, `open` (default true). Only open ones are offered. `null` or missing says they could not be read |
+| `external_accounts` | The plugin's accounts: `external_account_id` (required), `name`, `detail` (a line under it, such as the brokerage and type), `custodian` and `account_type` (a new account's, prefilled), `note` (a hint); since 0.5.0, optionally `number` (the venue's account number, for matching and shown; leave out one the venue masks), `connection` and `connection_id` (the connection it is reached through, to group by) |
+| `accounts` | The deployment's accounts, read for the admin viewing the page (`read_accounts_for_linking`): `account_id`, `name`, `custodian`, `account_type`, `open` (default true), and since 0.5.0 an optional `number`. Only open ones are offered. `null` or missing says they could not be read |
 | `links` | The plugin's links as the SDK gives them (`AccountScope.links`: `external_account_id`, `account_id`, `account_name`). An external account in it is linked, naming that account; one not in it is not linked. There is no third state |
 
 | Attribute | |
@@ -567,6 +574,49 @@ under 40rem (by its own width).
 | `action` | Where every form posts (default: the page's own address) |
 | `token-name`, `token` | The page's token, sent in a hidden field of that name in every form (none when `token-name` is absent) |
 | `empty` | What it says with no external accounts |
+| `group-by` | `connection` or `custodian`: the grouping to start with (the person may change it) |
+| `page-size` | Rows on a page, 50 by default |
+| `link-several` | The handler at `action` takes several links in one form (below): "Link N suggested…" is offered |
+
+**Finding one among thousands.** Above the table, a search, the filters and
+the grouping; under it, the pages.
+
+- *The search* matches every word typed, anywhere in the external account's
+  name, ID, number, custodian, type, detail and connection, or in the name,
+  ID, custodian, type or number of the account it is linked to or suggested
+  for; case, spacing and character width aside. It is applied at most once a
+  frame, however fast the typing.
+- *Unlinked, Linked and All*, each with its count under the search. The map
+  opens on Unlinked when any account is unlinked, because that is the work,
+  and on All otherwise.
+- *Group by* connection or custodian (offered only where the data has at
+  least two), each group's head saying how many it holds (and, under All,
+  how many are not linked), folded and unfolded by its head.
+- *Pages* of `page-size` rows, so the document holds a page of rows however
+  many accounts there are; a row once drawn is kept and moved, not drawn
+  again. Data set again keeps the search, the filter, the grouping and the
+  page as far as it can.
+
+**One row's choices.** A row offers Link… (Change… when linked); its choices
+open under that row alone, one row at a time, and close on Close, Escape or
+pressing it again: an existing open account, found by typing into a chooser
+(the first 50 matches listed, the suggestion first; a closed account, and
+the one it is linked to, never), a new account named from the external one,
+and on a linked account, Unlink.
+
+**Suggestions.** Where an unlinked external account's name, or its number,
+matches exactly one open account (a name to a name; a number to a number, or
+to a name), that account is suggested in its row, with why ("same name",
+"same number", "named by its number"). Matching is exact but for case,
+spacing and character width. None is suggested where two accounts match,
+where the account is linked to another external account already, where two
+unlinked accounts would claim the one account, or where the deployment's
+accounts could not be read. The row's Link takes it, as the plain `link`
+form; opened, its chooser starts on it.
+
+With `link-several`, "Link N suggested…" (the suggestions the search finds)
+opens a review: each pair, external account to account, with a checkbox to
+leave it out, and "Link N accounts" sends them together.
 
 **The forms.** Each is a plain `<form method="post">`, so a page needs no
 script. Its fields are named as the SDK's `link_external_account` takes them,
@@ -574,27 +624,53 @@ beside the token and `intent`:
 
 | `intent` | Fields | Shown |
 |---|---|---|
-| `link` | `external_account_id`, `account_id` | A picker of the open accounts (required), and Link |
+| `link` | `external_account_id`, `account_id` | An account chosen from the chooser, and Link; or a suggestion's Link |
 | `create` | `external_account_id`, `new_account_name` (required, the external account's name to start), `new_account_custodian`, `new_account_type` (prefilled, may be emptied) | Create and link |
 | `unlink` | `external_account_id` | Unlink, on a linked account |
+| `link-several` | `external_account_id` and `account_id`, repeated: one pair per link, in order | The review's "Link N accounts", with `link-several` only |
 
-A linked account shows the account it is linked to and Unlink, with the link
-and create forms folded under "Link to another account" (the picker leaving
-out the account it is linked to). The server does what `intent` says, as
+The server does what `intent` says, as
 `link_external_account(external_account_id=…, account_id=…)`,
 `link_external_account(external_account_id=…, new_account_name=…,
 new_account_custodian=…, new_account_type=…)` or
 `link_external_account(external_account_id=…)`, acting for the admin, then
 answers with the page again.
 
+**What a handler of `link-several` must accept.** A form whose `intent` is
+`link-several` carries the token once and, after it, `external_account_id`
+and `account_id` repeated, in the order the page wrote them: the first
+`external_account_id` is linked to the first `account_id`, and so on (read
+them as lists, as `parse_qs`, `request.form.getlist` or
+`URLSearchParams.getAll` give them). Refuse the whole form if the two lists
+differ in length or one external account appears twice; otherwise check the
+token once, then link each pair as its own `link_external_account` call (a
+link is per external account; one failing does not undo the others), and
+answer with the page, saying how each went. The body grows about a hundred
+bytes a pair, so allow for a few thousand pairs. A handler that does not
+know the intent answers it as any unknown intent (the kit offers it only with
+`link-several`, so a page that has not said so never sends it). The one-pair
+`link` form stays, for a handler without it and for a suggestion taken alone.
+
 | Property or method | |
 |---|---|
 | `data` | `{ external_accounts, accounts, links }`, as the JSON carries it; setting it redraws |
 | `linkOf(external_account_id)` | The link standing for it, or null |
+| `suggestionOf(external_account_id)` | `{ account_id, name, why }` suggested for it, or null |
+| `suggestions` | Every suggestion, `{ external_account_id, account_id, why }`, in the order of the external accounts |
+| `flush()` | Apply a search typed but not yet drawn now, rather than on the next frame |
 
 | Event | `detail` |
 |---|---|
-| `om-link` | `{ intent, external_account_id, account_id, new_account_name, new_account_custodian, new_account_type, form }`, as a form is sent. Cancel it (`preventDefault`) to send the link yourself; the token is the form's |
+| `om-link` | `{ intent, external_account_id, account_id, new_account_name, new_account_custodian, new_account_type, form }`, as a form is sent, and for `link-several` `pairs: [{ external_account_id, account_id }]` (its `external_account_id` and `account_id` then empty). Cancel it (`preventDefault`) to send the link yourself; the token is the form's. A `link` without a chosen account is not sent, and not heard |
+
+**How fast.** `make bench` holds it, in headless Chromium, with 2,000
+external accounts and 1,500 of the deployment's declared as JSON: typing a
+search (a key a frame, and four), a page a frame, the filters, grouping and
+folding, and typing in a row's chooser, each at a frame time under 16.7 ms at
+the 95th percentile, at most one draw a frame, and at most a page of rows in
+the document. Twenty thousand and fifteen thousand are measured for the
+record. The gallery's [many-accounts page](src/gallery/accounts-many.html)
+shows 2,000 and 1,500.
 
 ## The theme: the frame's message
 
@@ -921,8 +997,8 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the account map's states, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment` |
-| `make bench` | The high-rate grid's budget in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment` |
+| `make bench` | The high-rate grid's budget, and the account map's at 2,000 and 1,500 accounts, in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
 

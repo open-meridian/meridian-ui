@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The high-rate grid's budget, held in a real browser.
+// The high-rate grid's budget and the account map's, held in a real browser.
 //
 //   node tools/bench.mjs [--json]
 //
@@ -9,8 +9,14 @@
 // see Dockerfile.check) and runs each scenario there. The budget: 10,000
 // rows taking 1,000 updates a second for 5 seconds, each frame's main-thread
 // time at the 95th percentile under 16.7 ms (one frame at 60 Hz), with every
-// update applied and the order exact. It fails when the budget is not held,
-// and prints what it measured either way.
+// update applied and the order exact. Then tests/bench/account-map.html: 2,000
+// external accounts and 1,500 of the deployment's, declared as JSON, and each
+// action a person takes on them, one a frame (typing a search, four keys a
+// frame, paging, the filters, grouping and folding, typing in a row's
+// chooser), each frame's main-thread time at the 95th percentile under
+// 16.7 ms, at most one draw a frame, and at most a page of rows in the
+// document. It fails when a budget is not held, and prints what it measured
+// either way.
 
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
@@ -32,6 +38,21 @@ const SCENARIOS = [
   { name: "for the record: 10,000 rows, 1,000 updates/s, standard mode", rows: 10000, rate: 1000, seconds: 3, highRate: false, held: false },
 ];
 
+// The account map's: each action on 2,000 and 1,500 is held to the budget;
+// twenty thousand and fifteen thousand are measured for the record.
+const MAP_SCENARIOS = [
+  { name: "map budget: typing a search, a key a frame", action: "type", held: true },
+  { name: "map budget: typing a search, four keys a frame", action: "type-fast", held: true },
+  { name: "map budget: a page a frame, through every page", action: "page", held: true },
+  { name: "map budget: Unlinked, Linked and All, one a frame", action: "filter", held: true },
+  { name: "map budget: grouping and folding, one a frame", action: "group", held: true },
+  { name: "map budget: typing in a row's chooser of open accounts", action: "chooser", held: true },
+  { name: "for the record: 20,000 and 15,000, typing a search", externals: 20000, accounts: 15000, action: "type", frames: 120, held: false },
+  { name: "for the record: 20,000 and 15,000, a page a frame", externals: 20000, accounts: 15000, action: "page", frames: 120, held: false },
+];
+// A page of rows (50), the head of a group a page opens inside, and one row's choices.
+const MAP_ROWS_MOST = 52;
+
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
 function serve() {
@@ -50,6 +71,18 @@ function serve() {
     res.end(readFileSync(file));
   });
   return new Promise((ok) => server.listen(0, "127.0.0.1", () => ok(server)));
+}
+
+function mapLine(r) {
+  const f = r.frameTimeMs;
+  const placed = r.placed
+    ? `\n  declared JSON (${Math.round(r.placed.bytes / 1024)} KB) parsed, modelled and drawn in ${r.placed.drawnMs} ms, painted by ${r.placed.paintedMs} ms; ${r.placed.suggestions} suggestions`
+    : "";
+  return (
+    `${r.name}${placed}\n` +
+    `  ${r.externals} external and ${r.accounts} deployment accounts, ${r.action}: ${r.frames} frames; at most ${r.rowsInDocumentMax} rows in the document, ${r.drawsPerFrameMax} draw a frame\n` +
+    `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)`
+  );
 }
 
 function line(r) {
@@ -110,6 +143,26 @@ async function main() {
       if (r.size !== s.rows) failed.push(`${s.name}: ${r.size} rows, not ${s.rows}`);
       if (r.domRowsMax > 80) failed.push(`${s.name}: ${r.domRowsMax} rows in the document; virtual scrolling should hold a view's worth`);
     }
+
+    // The account map.
+    const mapPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    mapPage.on("pageerror", (e) => failed.push(`the map's page threw: ${e.message}`));
+    await mapPage.goto(`http://127.0.0.1:${port}/bench/account-map.html?kit=${VERSION}`);
+    await mapPage.waitForFunction(() => window.benchReady === true, null, { timeout: 30000 });
+    for (const s of MAP_SCENARIOS) {
+      const r = await mapPage.evaluate((opts) => window.runMapBench(opts), s);
+      r.held = s.held;
+      results.push(r);
+      console.log(mapLine(r) + "\n");
+      if (r.placed && s.held) {
+        const review = await mapPage.evaluate(() => window.openReview());
+        console.log(`map: the review of ${review.pairs} suggestions drawn in ${review.drawnMs} ms\n`);
+      }
+      if (!s.held) continue;
+      if (!(r.frameTimeMs.p95 < BUDGET_MS)) failed.push(`${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${BUDGET_MS}`);
+      if (r.drawsPerFrameMax > 1) failed.push(`${s.name}: ${r.drawsPerFrameMax} draws in one frame; at most one`);
+      if (r.rowsInDocumentMax > MAP_ROWS_MOST) failed.push(`${s.name}: ${r.rowsInDocumentMax} rows in the document; a page holds at most ${MAP_ROWS_MOST}`);
+    }
   } finally {
     await browser.close();
     server.close();
@@ -119,8 +172,9 @@ async function main() {
     console.error(`bench FAILED:\n  ${failed.join("\n  ")}`);
     process.exit(1);
   }
-  const held = results.filter((r) => r.held);
-  console.log(`bench OK: frame time p95 ${held.map((r) => r.frameTimeMs.p95).join(", ")} ms, each under ${BUDGET_MS}`);
+  const held = results.filter((r) => r.held && !r.action);
+  const mapHeld = results.filter((r) => r.held && r.action);
+  console.log(`bench OK: grid frame time p95 ${held.map((r) => r.frameTimeMs.p95).join(", ")} ms; map ${mapHeld.map((r) => r.frameTimeMs.p95).join(", ")} ms; each under ${BUDGET_MS}`);
 }
 
 main().catch((e) => {

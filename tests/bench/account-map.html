@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>om-account-map benchmark</title>
+<!-- Run by tools/bench.mjs in a real headless browser, with the built kit
+     served at /.meridian/ui/<version>/ beside this page (?kit=<version>). -->
+<script>
+  (function () {
+    var kit = "/.meridian/ui/" + new URLSearchParams(location.search).get("kit") + "/";
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = kit + "meridian.css";
+    document.head.append(link);
+    window.KIT = kit;
+  })();
+</script>
+</head>
+<body>
+<main class="page">
+  <p id="status">Loading.</p>
+  <section class="panel" id="slot"></section>
+</main>
+<script type="module">
+  await import(`${window.KIT}components/om-account-map.js`);
+  const { manyAccounts } = await import(`${window.KIT}gallery/many-accounts.js`);
+  await customElements.whenDefined("om-account-map");
+
+  const slot = document.getElementById("slot");
+  const status = document.getElementById("status");
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const pct = (xs, p) => {
+    if (!xs.length) return null;
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1))];
+  };
+  const round = (x) => (x === null ? null : Math.round(x * 100) / 100);
+  const QUERY = "harbour 00 margin";
+
+  let map = null;
+  let size = "";
+
+  /** The map as a page declares it: its JSON inside it, parsed and drawn when it is connected. */
+  async function place(externals, accounts) {
+    const data = manyAccounts({ externals, accounts });
+    const json = JSON.stringify(data).replace(/</g, "\\u003c");
+    slot.replaceChildren();
+    await frame();
+    const el = document.createElement("om-account-map");
+    el.setAttribute("action", "link");
+    el.setAttribute("token-name", "csrf");
+    el.setAttribute("token", "bench");
+    el.setAttribute("group-by", "connection");
+    el.toggleAttribute("link-several", true);
+    el.innerHTML = `<script type="application/json">${json}<\/script>`;
+    const start = performance.now();
+    slot.append(el); // parsed, modelled and drawn, synchronously, once the document is parsed
+    const drawnMs = performance.now() - start;
+    await frame();
+    const paintedMs = performance.now() - start;
+    map = el;
+    size = `${externals}x${accounts}`;
+    return { drawnMs: round(drawnMs), paintedMs: round(paintedMs), bytes: json.length, suggestions: el.suggestions.length };
+  }
+
+  function reset() {
+    map.data = map.data;
+    input(map.querySelector(".om-account-map-search"), "");
+    map.flush();
+    map.querySelector('.om-account-map-filters [data-filter="unlinked"]').click();
+    const select = map.querySelector(".om-account-map-grouping select");
+    select.value = "connection";
+    select.dispatchEvent(new Event("change"));
+  }
+
+  const input = (box, value) => {
+    box.value = value;
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  /**
+   * The actions, one step a frame, each as a person would take it: typing a
+   * search (once a frame, or four keys a frame to hold the draw to one), a
+   * page at a time, the filters, the grouping and a group folded, and typing
+   * in one row's chooser.
+   */
+  function stepper(action) {
+    const q = () => map.querySelector(".om-account-map-search");
+    const filters = () => [...map.querySelectorAll(".om-account-map-filters button")];
+    let i = 0;
+    switch (action) {
+      case "type":
+        return () => {
+          const n = i++ % (2 * QUERY.length);
+          input(q(), n < QUERY.length ? QUERY.slice(0, n + 1) : QUERY.slice(0, 2 * QUERY.length - n - 1));
+        };
+      case "type-fast":
+        return () => {
+          for (let k = 0; k < 4; k++) {
+            const n = i++ % (2 * QUERY.length);
+            input(q(), n < QUERY.length ? QUERY.slice(0, n + 1) : QUERY.slice(0, 2 * QUERY.length - n - 1));
+          }
+        };
+      case "page":
+        return () => {
+          const next = map.querySelector(".om-account-map-pager").children[2];
+          // Through every page, then from the first again.
+          (next.disabled ? filters()[2] : next).click();
+        };
+      case "filter":
+        return () => filters()[i++ % 3].click();
+      case "group":
+        return () => {
+          const select = map.querySelector(".om-account-map-grouping select");
+          if (i % 3 === 2) map.querySelector(".om-account-map-fold")?.click();
+          else {
+            select.value = ["connection", "custodian", ""][i % 3];
+            select.dispatchEvent(new Event("change"));
+          }
+          i++;
+        };
+      case "chooser":
+        return () => {
+          let box = map.querySelector(".om-account-map-editor [role=combobox]");
+          if (!box) {
+            map.querySelector("[data-edit]").click();
+            box = map.querySelector(".om-account-map-editor [role=combobox]");
+          }
+          const word = "book 0";
+          const n = i++ % (2 * word.length);
+          input(box, n < word.length ? word.slice(0, n + 1) : word.slice(0, 2 * word.length - n - 1));
+        };
+      default:
+        throw new Error(`no action ${action}`);
+    }
+  }
+
+  window.runMapBench = async ({ name, externals = 2000, accounts = 1500, action, frames: count = 180 }) => {
+    status.textContent = `Running ${name}.`;
+    const placed = size === `${externals}x${accounts}` ? null : await place(externals, accounts);
+    // Each run starts from the map as it opens: the search empty, Unlinked, grouped by connection, no row open.
+    reset();
+    for (let k = 0; k < 10; k++) await frame();
+    // A draw sets the status line's text once (a new text node, so one record
+    // however many rows it moves): the records a frame are the draws a frame.
+    const said = map.querySelector(".om-account-map-said");
+    let draws = 0;
+    let drawsMax = 0;
+    const seen = new MutationObserver((records) => {
+      draws += records.length;
+    });
+    seen.observe(said, { childList: true });
+
+    const step = stepper(action);
+    const work = [];
+    const intervals = [];
+    let rowsMax = 0;
+    let frameStart = null;
+    let lastTs = null;
+    let left = count;
+    const channel = new MessageChannel();
+    let done;
+    const finished = new Promise((r) => (done = r));
+    channel.port1.onmessage = () => {
+      if (frameStart !== null) work.push(performance.now() - frameStart);
+      frameStart = null;
+      rowsMax = Math.max(rowsMax, map.querySelectorAll("tbody tr").length);
+      draws += seen.takeRecords().length;
+      drawsMax = Math.max(drawsMax, draws);
+      draws = 0;
+    };
+    const loop = (ts) => {
+      if (lastTs !== null) intervals.push(ts - lastTs);
+      lastTs = ts;
+      frameStart = ts;
+      if (left-- > 0) {
+        step();
+        requestAnimationFrame(loop);
+      } else {
+        requestAnimationFrame(() => done());
+      }
+      channel.port2.postMessage(0);
+    };
+    requestAnimationFrame(loop);
+    await finished;
+    await frame();
+    seen.disconnect();
+    const result = {
+      name,
+      externals,
+      accounts,
+      action,
+      frames: work.length,
+      frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },
+      framesOver16_7Ms: work.filter((w) => w > 16.7).length,
+      intervalMs: { p50: round(pct(intervals, 50)), p95: round(pct(intervals, 95)) },
+      rowsInDocumentMax: rowsMax,
+      drawsPerFrameMax: drawsMax,
+      placed,
+    };
+    status.textContent = `Done: ${name}.`;
+    return result;
+  };
+
+  /** Opening the review of every suggestion, and the time it takes to draw it. */
+  window.openReview = async () => {
+    reset();
+    await frame();
+    const start = performance.now();
+    map.querySelector(".om-account-map-several").click();
+    const drawnMs = performance.now() - start;
+    await frame();
+    const pairs = map.querySelectorAll(".om-account-map-pairs li").length;
+    map.querySelector(".om-account-map-review button[type=button]").click();
+    return { drawnMs: round(drawnMs), pairs };
+  };
+  window.benchReady = true;
+  status.textContent = "Ready.";
+</script>
+</body>
+</html>
