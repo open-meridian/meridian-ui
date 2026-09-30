@@ -57,7 +57,8 @@ ul.plain li + li { margin-top: .2rem; }
  * h1 of its .page-head) and its tab row (a .tabs in its head or straight
  * under it) go, and so do .page's standalone padding and width and the
  * body's background. The rest of the head (the line under the heading, its
- * actions) stays, and nothing else changes. Every rule here is under the
+ * actions) stays, but for what the host draws (header actions, the header
+ * status), and nothing else changes. Every rule here is under the
  * attribute: a page opened on its own is exactly as it was. */
 :root[data-om-framed] body { background: transparent; }
 :root[data-om-framed] .page { max-width: none; margin: 0; padding: 0; }
@@ -78,6 +79,13 @@ ul.plain li + li { margin-top: .2rem; }
  * the kit could not offer the host (data-om-kept) stays. */
 :root[data-om-framed] :is(.page-head, .pagehead) .actions [data-om-action]:not([data-om-kept]),
 :root[data-om-framed] :is(.page-head, .pagehead) .actions form.inline:has([data-om-action]:not([data-om-kept])) { display: none; }
+/* The head's status marked data-om-header is the host's to draw beside the
+ * plugin's name; one the kit could not offer (data-om-kept) stays. */
+:root[data-om-framed] :is(.page-head, .pagehead) om-status[data-om-header]:not([data-om-kept]) { display: none; }
+/* A head the kit found empty once the host draws its heading, tab row,
+ * actions and status (data-om-empty, set by meridian.js only when framed)
+ * goes whole, and its gap with it. */
+:root[data-om-framed] :is(.page-head, .pagehead)[data-om-empty] { display: none; }
 
 /* ── Panels and cards ────────────────────────────────────────────────────── */
 

@@ -15,9 +15,16 @@
 //   header, and a click posts meridian:action to the plugin's origin alone;
 //   the page presses its own button, which posts its own form. A new load of
 //   the frame is a new page, so its buttons go until it offers its own.
+// - It takes meridian:status under the same guards, and a valid shape: a
+//   state it knows, a short label, a detail, a moment and its label, each set
+//   as text. It draws the dot beside the plugin's name with the kit's own
+//   om-status, so its look and its note are the page's; state null, or a new
+//   load of the frame, takes it away.
 //
 // Here the plugin's page is beside this one, so its origin is this one's; on
 // the dashboard it is the plugin's own host.
+
+import "../components/om-status.js";
 
 // The page it frames, a sample beside it named by ?page= (only these), and its tab.
 const PAGES = { "sample.html": "Positions", "accounts.html": "Account links", "accounts-many.html": "Account links" };
@@ -48,6 +55,7 @@ function tell() {
 }
 frame.addEventListener("load", () => {
   draw([]);
+  show(null);
   tell();
 });
 // This page follows its own frame's theme (the gallery's); the plugin's page follows this one.
@@ -91,6 +99,42 @@ function draw(list) {
   }));
 }
 
+// The page's status, drawn beside the plugin's name.
+const NAME = document.getElementById("name");
+const toldLine = document.getElementById("told");
+const STATES = new Set(["ok", "busy", "warn", "error"]);
+const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+const text = (v, least, most) => typeof v === "string" && v.trim().length >= least && v.length <= most;
+
+/** The status a meridian:status message carries, null for none, or
+ * undefined when it is not exactly the shape the kit sends: then nothing it
+ * says is drawn. */
+function validStatus(d) {
+  if (d.state === null) return null;
+  if (!STATES.has(d.state) || !text(d.label, 1, 80)) return undefined;
+  if (d.detail !== undefined && !text(d.detail, 0, 300)) return undefined;
+  if (d.at !== undefined && !(text(d.at, 1, 40) && MOMENT.test(d.at) && !Number.isNaN(Date.parse(d.at)))) return undefined;
+  if (d.at_label !== undefined && !text(d.at_label, 1, 40)) return undefined;
+  return { state: d.state, label: d.label, detail: d.detail, at: d.at, at_label: d.at_label };
+}
+
+function show(status) {
+  const drawn = NAME.querySelector("om-status");
+  if (!status) {
+    if (drawn) drawn.remove();
+    return;
+  }
+  const dot = drawn || document.createElement("om-status");
+  // Attributes only: om-status sets every word as text, never as markup.
+  const set = (name, value) => (value ? dot.setAttribute(name, value) : dot.removeAttribute(name));
+  set("state", status.state);
+  set("label", status.label);
+  set("detail", status.detail);
+  set("at", status.at);
+  set("at-label", status.at && status.at_label);
+  if (!drawn) NAME.append(dot);
+}
+
 window.addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow || event.origin !== ORIGIN) return;
   const d = event.data;
@@ -100,6 +144,15 @@ window.addEventListener("message", (event) => {
     if (!list) return;
     draw(list);
     offeredLine.textContent = `Received meridian:actions from ${event.origin}: ${list.map((a) => a.label).join(", ") || "none"}.`;
+    return;
+  }
+  if (d.type === "meridian:status") {
+    const status = validStatus(d);
+    if (status === undefined) return;
+    show(status);
+    toldLine.textContent = status
+      ? `Received meridian:status from ${event.origin}: ${status.state}, ${status.label}.`
+      : `Received meridian:status from ${event.origin}: none.`;
     return;
   }
   if (d.type !== "meridian:size") return;

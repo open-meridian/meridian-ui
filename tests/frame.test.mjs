@@ -373,6 +373,177 @@ test("meridian:action is taken only from the parent, at the learned origin, whil
   assert.equal(seen[0].click, "refresh", "the host's word, from the parent at its origin, framed");
 });
 
+// ── Header status ────────────────────────────────────────────────────────────
+
+// A head as SnapTrade writes one: its heading, its status dot marked for the
+// host in the line under it, and Refresh, its one header action.
+const STATUS_HEAD = (attrs = 'state="ok" label="SnapTrade read" at="2026-09-30T09:12:00.498692-04:00" at-label="Last read"') => `
+<main class="page">
+  <header class="page-head" id="head">
+    <div><h1>Account links</h1><p><om-status data-om-header id="dot" ${attrs}>SnapTrade read.</om-status></p></div>
+    <div class="actions"><form method="post" action="/admin/read" class="inline"><input type="hidden" name="csrf" value="t0ken"><button data-om-action="refresh">Refresh</button></form></div>
+  </header>
+  <section class="panel" id="first"><om-status state="error" label="In the content" data-om-header id="content-dot"></om-status></section>
+</main>`;
+
+const statuses = (p) => p.parent.posted.filter((m) => m.data.type === "meridian:status");
+const status = (fields) => ({ data: { type: "meridian:status", version: 1, ...fields }, targetOrigin: HOST });
+const READ = { state: "ok", label: "SnapTrade read", at: "2026-09-30T13:12:00.498Z", at_label: "Last read" };
+const NONE = { state: null };
+
+test("framed, the head's marked status goes to the host's origin with its first theme message, and nothing before", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD() });
+  await settle();
+  p.frame();
+  assert.deepEqual(statuses(p), [], "nothing before the host's origin is known");
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(statuses(p), [status(READ)], "the moment in UTC; only the head's; never '*'");
+  assert.deepEqual(p.win.Meridian.frame.status(), READ);
+});
+
+test("a framed page with no marked status in its head says so; an unmarked one stays the page's", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: HEAD });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(statuses(p), [status(NONE)]);
+  const unmarked = page("https://plugin.example/admin?om-framed=1", {
+    body: STATUS_HEAD().replace("data-om-header ", ""),
+  });
+  message(unmarked.win, theme({ framed: true }), unmarked.parent, HOST);
+  assert.deepEqual(statuses(unmarked), [status(NONE)], "0.6.0's head: the dot stays in the page");
+  assert.equal(unmarked.win.document.getElementById("head").hasAttribute("data-om-empty"), false);
+});
+
+test("in a frame but not framed, and on its own, no status is told", async () => {
+  const p = page("https://plugin.example/admin", { body: STATUS_HEAD() });
+  message(p.win, theme(), p.parent, HOST);
+  p.win.document.getElementById("dot").setAttribute("state", "busy");
+  await settle();
+  p.frame();
+  assert.deepEqual(statuses(p), []);
+  const alone = page("https://plugin.example/admin?om-framed=1", { parent: null, body: STATUS_HEAD() });
+  const posted = [];
+  alone.win.postMessage = (...args) => posted.push(args);
+  message(alone.win, theme({ framed: true }), alone.win, HOST);
+  await settle();
+  alone.frame();
+  assert.deepEqual(posted, []);
+  assert.equal(alone.win.document.getElementById("head").hasAttribute("data-om-empty"), false);
+});
+
+test("a change to the status is told again, at most once a frame, and only a change", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD() });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  const dot = p.win.document.getElementById("dot");
+  p.parent.posted.length = 0;
+
+  dot.setAttribute("label", "  SnapTrade   read ");
+  dot.setAttribute("zone", "local");
+  p.win.document.getElementById("content-dot").setAttribute("state", "ok");
+  await settle();
+  p.frame();
+  assert.deepEqual(statuses(p), [], "the same words, a zone, and a dot outside the head are no change");
+
+  dot.setAttribute("state", "busy");
+  dot.setAttribute("label", "Reading SnapTrade");
+  dot.setAttribute("detail", "The last read failed: HTTP 503.");
+  await settle();
+  assert.equal(p.frames.length, 1, "three changes ask for one frame");
+  p.frame();
+  assert.deepEqual(statuses(p), [status({ state: "busy", label: "Reading SnapTrade", detail: "The last read failed: HTTP 503.", at: READ.at, at_label: "Last read" })]);
+
+  dot.setAttribute("state", "error");
+  dot.removeAttribute("label");
+  dot.removeAttribute("detail");
+  dot.removeAttribute("at");
+  await settle();
+  p.frame();
+  assert.deepEqual(statuses(p).at(-1), status({ state: "error", label: "Failed" }), "the state's own name; no moment, no at_label");
+
+  dot.remove();
+  await settle();
+  p.frame();
+  assert.deepEqual(statuses(p).at(-1), status(NONE), "removed: none");
+  assert.equal(statuses(p).length, 3);
+});
+
+test("framed: false clears the host's dot, and framed: true tells it again", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD() });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(statuses(p), [status(READ), status(NONE), status(READ)]);
+});
+
+test("a status the kit cannot offer stays in the page, marked kept; a long detail is cut", () => {
+  const long = "x".repeat(81);
+  const cases = [
+    ['state="green" label="Odd"', NONE, "a state not one of the four"],
+    [`state="ok" label="${long}"`, NONE, "a label past 80"],
+    [`state="ok" at="2026-09-30T13:12:00Z" at-label="${"y".repeat(41)}"`, NONE, "an at-label past 40"],
+  ];
+  for (const [attrs, told, why] of cases) {
+    const p = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD(attrs) });
+    message(p.win, theme({ framed: true }), p.parent, HOST);
+    assert.deepEqual(statuses(p), [status(told)], why);
+    const doc = p.win.document;
+    assert.equal(doc.getElementById("dot").hasAttribute("data-om-kept"), true, why);
+    assert.equal(doc.getElementById("head").hasAttribute("data-om-empty"), false, `${why}: the dot keeps the head`);
+  }
+
+  const p = page("https://plugin.example/admin?om-framed=1", {
+    body: STATUS_HEAD(`state="error" label="The last read failed" detail="${"word ".repeat(80)}" at="yesterday"`).replace(
+      "</p>",
+      '<om-status data-om-header state="ok" id="second"></om-status></p>',
+    ),
+  });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  const [{ data }] = statuses(p);
+  assert.equal(data.state, "error");
+  assert.equal(data.detail.length, 300, "cut to 300");
+  assert.ok(data.detail.endsWith("word…"), "ending in an ellipsis");
+  assert.equal("at" in data || "at_label" in data, false, "a moment it cannot read is left out");
+  assert.equal(p.win.document.getElementById("second").hasAttribute("data-om-kept"), true, "only the first is offered");
+  assert.equal(p.win.document.getElementById("dot").hasAttribute("data-om-kept"), false);
+});
+
+test("framed, a head left empty once the host draws its heading, actions and status is marked empty", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD() });
+  const head = p.win.document.getElementById("head");
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.equal(head.getAttribute("data-om-empty"), "", "SnapTrade's head: nothing left");
+
+  // Anything else it holds keeps it: a word, a kept action, a control, another component.
+  const keeps = [
+    ["a word beside the dot", (h) => h.querySelector("p").append(" Synthetic mode.")],
+    ["a kept action", (h) => h.querySelector("button").setAttribute("data-om-action", "Bad Id")],
+    ["a plain button", (h) => h.querySelector(".actions").insertAdjacentHTML("beforeend", "<button>Export</button>")],
+    ["another component", (h) => h.querySelector(".actions").insertAdjacentHTML("beforeend", "<om-live></om-live>")],
+  ];
+  for (const [why, change] of keeps) {
+    const q = page("https://plugin.example/admin?om-framed=1", { body: STATUS_HEAD() });
+    const h = q.win.document.getElementById("head");
+    change(h);
+    message(q.win, theme({ framed: true }), q.parent, HOST);
+    assert.equal(h.hasAttribute("data-om-empty"), false, why);
+  }
+
+  // It follows the page: a line added fills it again, removed empties it.
+  const line = p.win.document.createElement("span");
+  line.textContent = "Reading now.";
+  head.querySelector("div").append(line);
+  await settle();
+  p.frame();
+  assert.equal(head.hasAttribute("data-om-empty"), false, "a line added");
+  line.remove();
+  await settle();
+  p.frame();
+  assert.equal(head.hasAttribute("data-om-empty"), true, "and removed");
+
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  assert.equal(head.hasAttribute("data-om-empty"), false, "not framed: the head is the page's");
+});
+
 // ── The framed look ──────────────────────────────────────────────────────────
 
 const BASE = read("src/css/base.css");
@@ -449,6 +620,22 @@ test("framed, a head with nothing but its heading goes whole, and what follows s
   // A heading with markup inside keeps its (empty) head: never more hidden than the heading.
   assert.notEqual(style("#marked-up").display, "none");
   assert.equal(style("#marked-up h1").display, "none");
+});
+
+test("framed, the head's marked status goes, and a head marked empty goes whole with its gap", () => {
+  const { style } = styled(`${STATUS_HEAD()}
+    <header class="page-head"><div><h1>Orders</h1><p><om-status data-om-header data-om-kept state="odd" id="kept"></om-status>
+      <om-status state="ok" id="unmarked"></om-status></p></div></header>`, { framed: true });
+  assert.equal(style("#dot").display, "none", "the marked status");
+  assert.notEqual(style("#kept").display, "none", "one the kit could not offer");
+  assert.notEqual(style("#unmarked").display, "none", "an unmarked one");
+  assert.notEqual(style("#content-dot").display, "none", "a marked one outside the head");
+  const empty = styled(STATUS_HEAD().replace('id="head"', 'id="head" data-om-empty'), { framed: true });
+  assert.equal(empty.style("#head").display, "none");
+  assert.equal(empty.style("#first").marginTop, "0px", "what follows starts the frame");
+  const alone = styled(STATUS_HEAD().replace('id="head"', 'id="head" data-om-empty'));
+  assert.notEqual(alone.style("#head").display, "none", "on its own, the head is the page's");
+  assert.notEqual(alone.style("#dot").display, "none");
 });
 
 test("on its own, the page is exactly as it was before the frame rules", () => {

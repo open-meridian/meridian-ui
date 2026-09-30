@@ -57,6 +57,20 @@
  * kit then clicks the page's own button, so its form posts with its own
  * token. On its own, a page's buttons stay where they are.
  *
+ * Header status. An <om-status> in the page head marked data-om-header is
+ * one the host may draw beside the plugin's name (an unmarked one stays in
+ * the page). Framed, the kit's CSS hides it in the page, and the kit posts it
+ * to the learned host origin alone, with the host's first theme message and
+ * then whenever its attributes change (at most once a frame):
+ *     { "type": "meridian:status", "version": 1, "state": "ok"|"busy"|"warn"|"error",
+ *       "label", "detail"?, "at"?: ISO moment, "at_label"? }
+ * and { "type": "meridian:status", "version": 1, "state": null } when there is
+ * none (removed, or the page no longer framed).
+ *
+ * A head left with nothing to show once its heading, its tab row, its header
+ * actions and its status are the host's is marked data-om-empty, and the
+ * kit's CSS drops it whole, framed only.
+ *
  * No plugin code is needed: the page follows the theme by linking this file.
  */
 (function (win) {
@@ -233,10 +247,122 @@
     return { list: list, buttons: buttons };
   }
 
+  // The header status: the head's om-status marked data-om-header, the one
+  // the host draws beside the plugin's name when the page is framed. Only the
+  // first is offered; another, or one the kit cannot offer (a state that is
+  // not one of the four, a label or an at-label too long), is marked kept and
+  // stays in the page. A detail too long is cut, ending in an ellipsis.
+  var HEADER = "data-om-header";
+  var STATUS_ATTRIBUTES = ["state", "label", "detail", "at", "at-label", HEADER];
+  var STATES = { ok: "Up to date", busy: "Updating", warn: "Needs attention", error: "Failed" };
+  var MAX_STATUS_LABEL = 80;
+  var MAX_DETAIL = 300;
+  var MAX_AT_LABEL = 40;
+  // om-moment's reading of a moment: an ISO 8601 date-time with its offset.
+  var MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+  var STATUS_SELECTOR = ".page-head om-status[" + HEADER + "], .pagehead om-status[" + HEADER + "]";
+  var EMPTY = "data-om-empty";
+  var told = null;
+
+  function words(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function keep(el, kept) {
+    if (kept && !el.hasAttribute(KEPT)) el.setAttribute(KEPT, "");
+    else if (!kept && el.hasAttribute(KEPT)) el.removeAttribute(KEPT);
+  }
+
+  /** The header status the page declares, as the host is told it, or null. */
+  function statusOf() {
+    var found = doc.querySelectorAll(STATUS_SELECTOR);
+    var status = null;
+    for (var i = 0; i < found.length; i++) {
+      var el = found[i];
+      var state = el.getAttribute("state") || "";
+      var ok = status === null && Object.prototype.hasOwnProperty.call(STATES, state);
+      var label = ok ? (words(el.getAttribute("label")) || STATES[state]) : "";
+      var atLabel = words(el.getAttribute("at-label")) || "Updated";
+      ok = ok && label.length <= MAX_STATUS_LABEL && atLabel.length <= MAX_AT_LABEL;
+      keep(el, !ok);
+      if (!ok) continue;
+      status = { state: state, label: label };
+      var detail = words(el.getAttribute("detail"));
+      if (detail.length > MAX_DETAIL) detail = detail.slice(0, MAX_DETAIL - 1).trim() + "\u2026";
+      if (detail) status.detail = detail;
+      var at = words(el.getAttribute("at"));
+      var moment = MOMENT.test(at) ? new Date(at) : null;
+      if (moment && !isNaN(moment.getTime())) {
+        status.at = moment.toISOString();
+        status.at_label = atLabel;
+      }
+    }
+    return status;
+  }
+
+  // What a head holds that the frame draws, or that draws nothing: gone when
+  // the page is framed. Anything else it holds with a text or a box of its
+  // own (a word, a control, an image, another component) keeps the head.
+  var GONE = "h1, .om-page-title, .tabs, [hidden], input[type=hidden], script, style, template, noscript";
+  var DRAWN = { img: 1, svg: 1, canvas: 1, video: 1, audio: 1, iframe: 1, object: 1, embed: 1, input: 1,
+    button: 1, select: 1, textarea: 1, meter: 1, progress: 1, hr: 1, br: 1, picture: 1, math: 1 };
+
+  function gone(el) {
+    if (el.matches(GONE)) return true;
+    if (el.hasAttribute(KEPT)) return false;
+    if (el.matches(STATUS_SELECTOR) || el.matches(ACTION_SELECTOR)) return true;
+    // The one-button form holding an offered action goes with it (the CSS's rule).
+    return el.localName === "form" && el.classList.contains("inline") &&
+      !!el.closest(".actions") && !!el.querySelector("[" + ACTION + "]:not([" + KEPT + "])");
+  }
+
+  /** Whether `node` shows anything once the host draws what it draws. */
+  function shows(node) {
+    for (var n = node.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 3 && /\S/.test(n.nodeValue)) return true;
+      if (n.nodeType !== 1 || gone(n)) continue;
+      if (DRAWN[n.localName] || n.localName.indexOf("-") > 0 || shows(n)) return true;
+    }
+    return false;
+  }
+
+  /** Mark each head left empty in the frame (data-om-empty), so the CSS
+   * drops it whole; unframed, none is. */
+  function settleHeads() {
+    var heads = doc.querySelectorAll(".page-head, .pagehead");
+    for (var i = 0; i < heads.length; i++) {
+      var empty = framed && !shows(heads[i]);
+      if (empty !== heads[i].hasAttribute(EMPTY)) {
+        if (empty) heads[i].setAttribute(EMPTY, "");
+        else heads[i].removeAttribute(EMPTY);
+      }
+    }
+  }
+
+  /** Tell the host the page's header status, when it differs from what it
+   * was last told. Framed only; unframed, a host once told is told none. */
+  function tellStatus() {
+    if (!framed && told === null) return;
+    var status = framed ? statusOf() : null;
+    if (!host) return;
+    var message = { type: "meridian:status", version: 1, state: null };
+    if (status) {
+      message.state = status.state;
+      message.label = status.label;
+      if (status.detail) message.detail = status.detail;
+      if (status.at) { message.at = status.at; message.at_label = status.at_label; }
+    }
+    var said = JSON.stringify(message);
+    if (said === told) return;
+    try {
+      win.parent.postMessage(message, host);
+      told = said;
+    } catch (e) { /* the parent went away: nobody to draw it */ }
+  }
+
   /** Tell the host the page's header actions, when they differ from what it
    * was last told. Framed only; unframed, a host once told is told none. */
-  function offer() {
-    offerPending = false;
+  function tellActions() {
     if (!framed && offered === null) return;
     var list = framed ? declared().list : [];
     if (!host) return;
@@ -248,8 +374,17 @@
     } catch (e) { /* the parent went away: nobody to draw them */ }
   }
 
+  /** What the host draws for the page: its header actions and its status,
+   * each told only when it differs; and the heads that leaves empty. */
+  function offer() {
+    offerPending = false;
+    tellActions();
+    tellStatus();
+    settleHeads();
+  }
+
   function scheduleOffer() {
-    if (offerPending || (!framed && offered === null)) return;
+    if (offerPending || (!framed && offered === null && told === null)) return;
     offerPending = true;
     if (win.requestAnimationFrame) win.requestAnimationFrame(offer);
     else win.setTimeout(offer, 16);
@@ -278,10 +413,11 @@
     apply(d.scheme, d.mode, d.direction);
     if (!host && typeof event.origin === "string" && ORIGIN.test(event.origin)) {
       host = event.origin;
-      // The first size now, measured after this message's changes, and the
-      // page's header actions with it.
-      report();
+      // What the host draws for the page (its header actions and status,
+      // and the heads that leaves empty), then the first size, measured
+      // after this message's changes.
       offer();
+      report();
     } else if (framed !== was) {
       offer();
     }
@@ -304,9 +440,14 @@
   if (inFrame && win.MutationObserver) {
     new win.MutationObserver(scheduleOffer).observe(root, {
       childList: true, subtree: true, characterData: true,
-      attributes: true, attributeFilter: [ACTION, "disabled", "class", "value"],
+      attributes: true, attributeFilter: [ACTION, "disabled", "class", "value", "hidden"].concat(STATUS_ATTRIBUTES),
     });
-    doc.addEventListener("DOMContentLoaded", scheduleOffer);
+    // The heads are settled as soon as the page is parsed, before its first
+    // frame where the browser allows; what the host is told follows.
+    doc.addEventListener("DOMContentLoaded", function () {
+      if (framed) { declared(); statusOf(); settleHeads(); }
+      scheduleOffer();
+    });
   }
 
   // A system change matters to anything drawing with the resolved mode.
@@ -328,6 +469,8 @@
     framed: function () { return framed; },
     /** The header actions the page declares (data-om-action), as the host is told them. */
     actions: function () { return declared().list; },
+    /** The header status the page declares (om-status data-om-header), as the host is told it, or null. */
+    status: function () { return statusOf(); },
   };
 
   // The components, as modules beside this file. Custom elements upgrade in

@@ -12,7 +12,7 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.6.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.7.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -40,8 +40,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.6.0/meridian.css">
-  <script src="/.meridian/ui/0.6.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.7.0/meridian.css">
+  <script src="/.meridian/ui/0.7.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -112,7 +112,11 @@ chooser found by typing, suggestions, and several links in one form
 (`link-several`), with the data's new fields `number`, `connection` and
 `connection_id` (all optional). 0.6.0 added `om-status`, a status dot with
 its note on hover, focus or a tap, and to `om-account-map` each account's
-optional `status` and `values`, a Status column and a filter by state.
+optional `status` and `values`, a Status column and a filter by state. 0.7.0
+added the header status: a framed page's head `om-status` marked
+`data-om-header` drawn by the host beside the plugin's name, and a head left
+with nothing to show once the host draws its parts dropped whole (see
+[the frame: seamless](#the-frame-seamless)).
 
 ## Never raw colours
 
@@ -397,6 +401,12 @@ hides it until the pointer or focus leaves. Every word is set as text, never
 as markup. What the page puts inside is shown, beside the dot the kit's CSS
 draws from `state`, until the kit's script draws it: so without script the
 label, detail and moment show as plain text. `state` is also a property.
+
+**In the page's head.** Marked `data-om-header`, the head's status is the
+plugin's own, which a framed page hands to the host to draw beside the
+plugin's name, so no line is left under the host's tabs for it; unmarked, it
+stays in the page, framed or not. See the header status under
+[the frame: seamless](#the-frame-seamless).
 
 ### om-instrument-picker
 
@@ -819,6 +829,10 @@ has `data-om-framed` on `<html>`, and `window.Meridian.frame.framed()` says so.
 
 - hides the head's header actions (below), and the one-button
   `form.inline` holding one;
+- hides the head's header status (below), an `om-status` marked
+  `data-om-header`;
+- drops a head left with nothing to show once those are gone (below), with
+  the gap under it, so the page starts right under the host's tabs;
 
 and nothing else. A page not framed looks exactly as it did.
 
@@ -921,6 +935,76 @@ never sees the form, its token or its answer. On its own, a page's buttons
 stay where they are, and nothing is posted. `window.Meridian.frame.actions()`
 returns what would be offered.
 
+**Header status.** A page's head may hand its status dot to the host, which
+draws it beside the plugin's name, so the dot takes no line of the page's.
+The page marks it declaratively, and writes no script for it:
+`data-om-header` on an `om-status` anywhere inside the head. It is not handed
+up by default: an unmarked `om-status` in the head stays in the page, as it
+did in 0.6.0.
+
+```html
+<header class="page-head">
+  <div><h1>Account links</h1>
+    <p><om-status data-om-header state="ok" label="SnapTrade read" at="2026-09-30T13:12:00Z" at-label="Last read">SnapTrade read. Last read 2026-09-30 13:12 UTC.</om-status></p></div>
+  <div class="actions">…</div>
+</header>
+```
+
+The first marked one in the head is offered. Its `state` must be `ok`,
+`busy`, `warn` or `error`; its label is its `label` (its whitespace
+collapsed; the state's own name when it has none, as `om-status` draws it),
+at most 80 characters; its `detail` is cut to 300 characters, ending in an
+ellipsis; its `at` is sent in UTC (`toISOString()`) when it reads as
+`om-moment` reads a moment, and left out otherwise; its `at-label` (default
+"Updated") at most 40 characters, sent only with `at`. `zone` is the page's
+and is not sent: the host shows the moment as it shows moments. One the kit
+cannot offer (a state not one of the four, a label or an at-label too long)
+and every marked one after the first are marked `data-om-kept` and stay in
+the page.
+
+Framed, the kit's CSS hides the offered one in the page, and the kit posts it
+to the host:
+
+```json
+{ "type": "meridian:status", "version": 1, "state": "ok", "label": "SnapTrade read",
+  "at": "2026-09-30T13:12:00.000Z", "at_label": "Last read" }
+```
+
+`detail` is there only when the page gives one, and `at` and `at_label` only
+together, when the page gives a moment it can read. When there is none (the
+page has no offered status, it was removed, or the page is no longer framed),
+it posts
+
+```json
+{ "type": "meridian:status", "version": 1, "state": null }
+```
+
+It is posted as the header actions are:
+
+- only to the origin learned from the host's first theme message, never to
+  `"*"`, and only while the page is framed;
+- with that first theme message (the status, or `state: null` when there is
+  none);
+- then again whenever the status's attributes change, or it is added or
+  removed (a `MutationObserver`), at most once an animation frame, and only
+  when what it would say differs from what it last said. A theme message with
+  `"framed": false` sends `state: null`, and `"framed": true` the status again.
+
+On its own, a page's status stays where it is, and nothing is posted.
+`window.Meridian.frame.status()` returns what would be told, or `null`.
+
+**An empty head goes.** Framed, a head left with nothing to show once the
+host draws its heading, its tab row, its header actions and its header
+status is marked `data-om-empty` by the kit, and the kit's CSS drops it whole,
+its gap with it, so what follows starts at the top of the frame. Nothing to
+show is no text but whitespace and no element that draws itself (a control,
+an image, another component, a kept action or status); a plain wrapper
+(`div`, `p`, `span`) holding nothing else, hidden inputs and a one-button
+form holding an offered action count as nothing. The mark follows the page
+(a `MutationObserver`), and is set when the page is parsed, before the host
+has said anything more than `om-framed=1`. Only when framed: on its own, no
+head is marked.
+
 **The host's half.** For each framed page, the host:
 
 1. Frames it with `om-framed=1` beside the theme on its address, and no
@@ -952,8 +1036,29 @@ returns what would be offered.
    on each `load` of the frame, until the new page offers its own.
 7. On a click, posts `{ "type": "meridian:action", "version": 1, "id" }` to
    the frame's window with `postMessage(message, pluginOrigin)`, never `"*"`.
+8. Takes a message as the page's header status only under the size's guards
+   (`event.source` is that frame's `contentWindow`, `event.origin` is exactly
+   the plugin's origin), with `data.type` `"meridian:status"` and
+   `data.version` `1`, and only in the shape above: `state` `null` (no
+   status: it removes its dot), or `state` one of `"ok"`, `"busy"`,
+   `"warn"`, `"error"` with a `label` string of 1 to 80 characters (not only
+   whitespace), `detail` absent or a string of at most 300, `at` absent or an
+   ISO 8601 date-time with its offset (`Z` or `±hh:mm`) of at most 40
+   characters that parses, and `at_label` absent or a string of 1 to 40.
+   Anything else is refused whole, and the dot it drew stays as it was.
+9. Draws the status as a dot beside the plugin's name in its breadcrumb, with
+   `om-status`'s look and note: most simply the kit's own `om-status`
+   (`components/om-status.js`), its `state`, `label`, `detail`, `at` and
+   `at-label` set as attributes from the message, or an equivalent drawn the
+   same way (a mark per state, never colour alone; the label as the dot's
+   name; the note on hover, focus or a tap, with the detail and the moment as
+   the dot's description). Every word is set as text, never as HTML. It
+   removes the dot on each `load` of the frame, until the new page tells its
+   own.
 
-`gallery/host.html` is that host, and `gallery/host.js` all of its script.
+`gallery/host.html` is that host, and `gallery/host.js` all of its script;
+it draws the status beside the plugin's name in its heading, with the kit's
+`om-status`.
 
 ## The scheme contract
 
@@ -1056,7 +1161,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state |
 | `make bench` | The high-rate grid's budget, and the account map's at 2,000 and 1,500 accounts, in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
