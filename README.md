@@ -12,7 +12,7 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.7.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.7.1; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -40,8 +40,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.7.0/meridian.css">
-  <script src="/.meridian/ui/0.7.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.7.1/meridian.css">
+  <script src="/.meridian/ui/0.7.1/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -116,7 +116,9 @@ optional `status` and `values`, a Status column and a filter by state. 0.7.0
 added the header status: a framed page's head `om-status` marked
 `data-om-header` drawn by the host beside the plugin's name, and a head left
 with nothing to show once the host draws its parts dropped whole (see
-[the frame: seamless](#the-frame-seamless)).
+[the frame: seamless](#the-frame-seamless)). 0.7.1 added `om-account-map`'s
+`no-new-account`, for a page whose viewer may link to an existing account
+but not create one.
 
 ## Never raw colours
 
@@ -631,6 +633,7 @@ stacks under 40rem (by the map's own width).
 | `group-by` | `connection` or `custodian`: the grouping to start with (the person may change it) |
 | `page-size` | Rows on a page, 50 by default |
 | `link-several` | The handler at `action` takes several links in one form (below): "Link N suggested…" is offered |
+| `no-new-account` | Since 0.7.1: the person viewing the page may not create an account, so no new account is offered anywhere (below) |
 | `status-heading` | The Status column's heading (default "Status"), such as "Sync state" |
 
 **Status, since 0.6.0.** An external account may carry `status`, `{ state,
@@ -673,6 +676,19 @@ pressing it again: an existing open account, found by typing into a chooser
 the one it is linked to, never), a new account named from the external one,
 and on a linked account, Unlink.
 
+**No new account, since 0.7.1.** Only a deployment admin may create an
+account (W6.4): a plugin admin who is not one links each external account to
+an existing account and names no new one. A page viewed by such an admin says
+`no-new-account`, and the map offers no new account anywhere: a row's
+choices are the chooser alone (and Unlink, on a linked account), with no
+"or" and no Create and link; where there is no open account to choose, it
+says so without "create one"; suggestions and the several-link review are as
+they were, since they only ever link to an existing account. No `create`
+form is drawn, so none is sent. What the page shows without the kit should
+match: no form to create an account for that viewer. The attribute hides the
+option; the page's handler still refuses `create` from a viewer who may not
+create one. Without it, the map offers a new account as before.
+
 **Suggestions.** Where an unlinked external account's name, or its number,
 matches exactly one open account (a name to a name; a number to a number, or
 to a name), that account is suggested in its row, with why ("same name",
@@ -694,7 +710,7 @@ beside the token and `intent`:
 | `intent` | Fields | Shown |
 |---|---|---|
 | `link` | `external_account_id`, `account_id` | An account chosen from the chooser, and Link; or a suggestion's Link |
-| `create` | `external_account_id`, `new_account_name` (required, the external account's name to start), `new_account_custodian`, `new_account_type` (prefilled, may be emptied) | Create and link |
+| `create` | `external_account_id`, `new_account_name` (required, the external account's name to start), `new_account_custodian`, `new_account_type` (prefilled, may be emptied) | Create and link, unless `no-new-account` |
 | `unlink` | `external_account_id` | Unlink, on a linked account |
 | `link-several` | `external_account_id` and `account_id`, repeated: one pair per link, in order | The review's "Link N accounts", with `link-several` only |
 

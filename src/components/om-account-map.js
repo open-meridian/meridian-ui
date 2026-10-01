@@ -34,8 +34,9 @@
 // - pages (`page-size`, 50 by default), so the document holds a page of rows
 //   however many accounts there are, and each row, once drawn, is kept and
 //   moved rather than drawn again;
-// - the choices for one row (an open account, found by typing; a new account;
-//   Unlink) open under that row only, when asked for;
+// - the choices for one row (an open account, found by typing; a new account,
+//   unless the page says `no-new-account` (0.7.1), because the person viewing
+//   it may not create one; Unlink) open under that row only, when asked for;
 // - a suggestion where an unlinked account's name, or its number, matches
 //   exactly one open account nothing else is linked to or suggested for:
 //   Link takes it, and with `link-several`, "Link N suggested…" lists every
@@ -46,10 +47,10 @@
 // link_external_account takes them: `external_account_id`, and `account_id`
 // to link an existing account, or `new_account_name`, `new_account_custodian`
 // and `new_account_type` to create one, or neither to unlink; `intent` says
-// which (`link`, `create`, `unlink`). The several-link form (`link-several`,
-// only where the page says its handler takes it) carries `intent`
-// `link-several` and one `external_account_id` and one `account_id` per link,
-// in pairs, in order. A page with script hears `om-link` first, and may
+// which (`link`, `create`, `unlink`); with `no-new-account`, no `create` form
+// is drawn anywhere. The several-link form (`link-several`, only where the
+// page says its handler takes it) carries `intent` `link-several` and one
+// `external_account_id` and one `account_id` per link, in pairs, in order. A page with script hears `om-link` first, and may
 // cancel it to send the link itself.
 
 import { declaredJson, whenParsed } from "../lib/declared.js";
@@ -268,7 +269,7 @@ const tokensOf = (q) => fold(q).split(" ").filter(Boolean);
 
 export class OmAccountMap extends HTMLElement {
   static get observedAttributes() {
-    return ["action", "token", "token-name", "empty", "link-several", "page-size", "status-heading"];
+    return ["action", "token", "token-name", "empty", "link-several", "no-new-account", "page-size", "status-heading"];
   }
 
   #data = normalise(null);
@@ -874,37 +875,19 @@ export class OmAccountMap extends HTMLElement {
     const m = this.#model;
     const current = link ? link.account_id : "";
     const open = m.open.filter((o) => o.a.account_id !== current);
+    // A new account, unless the page says the person viewing it may not create one.
+    const creates = !this.hasAttribute("no-new-account");
     if (m.accounts === null) {
       box.append(el("p", "hint", "The deployment's accounts could not be read, so none is offered here."));
     } else if (!open.length) {
-      box.append(el("p", "hint", current ? "The deployment has no other open account: create one." : "The deployment has no open accounts yet: create one."));
+      const none = current ? "The deployment has no other open account" : "The deployment has no open accounts yet";
+      box.append(el("p", "hint", `${none}${creates ? ": create one" : ""}.`));
     } else {
       box.append(this.#chooser(r, id, open));
-      box.append(el("div", "om-account-map-or", "or"));
+      if (creates) box.append(el("div", "om-account-map-or", "or"));
     }
+    if (creates) box.append(this.#createForm(x, id));
 
-    const field = (name, label, value, required) => {
-      const input = el("input");
-      input.type = "text";
-      input.name = name;
-      input.value = value;
-      input.required = required;
-      input.id = `${id}-${name}`;
-      input.autocomplete = "off";
-      return this.#field(input, label, name === "new_account_name" ? "om-account-map-name" : "");
-    };
-    box.append(
-      this.#form(
-        x,
-        "create",
-        [
-          field("new_account_name", "A new account", x.name || x.external_account_id, true),
-          field("new_account_custodian", "Custodian", x.custodian, false),
-          field("new_account_type", "Type", x.account_type, false),
-        ],
-        button("Create and link", "primary", "submit"),
-      ),
-    );
     const cancel = button("Close", "link om-account-map-close");
     cancel.addEventListener("click", () => this.#close());
     box.append(cancel);
@@ -918,6 +901,30 @@ export class OmAccountMap extends HTMLElement {
     tr.append(td);
     this.#editor = { key: x.external_account_id, tr };
     return tr;
+  }
+
+  /** A new account named from the external one, its custodian and type prefilled, and Create and link. */
+  #createForm(x, id) {
+    const field = (name, label, value, required) => {
+      const input = el("input");
+      input.type = "text";
+      input.name = name;
+      input.value = value;
+      input.required = required;
+      input.id = `${id}-${name}`;
+      input.autocomplete = "off";
+      return this.#field(input, label, name === "new_account_name" ? "om-account-map-name" : "");
+    };
+    return this.#form(
+      x,
+      "create",
+      [
+        field("new_account_name", "A new account", x.name || x.external_account_id, true),
+        field("new_account_custodian", "Custodian", x.custodian, false),
+        field("new_account_type", "Type", x.account_type, false),
+      ],
+      button("Create and link", "primary", "submit"),
+    );
   }
 
   /** The open accounts, found by typing: a combobox over them, and the one chosen. */

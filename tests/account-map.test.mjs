@@ -678,3 +678,72 @@ test("a status is held to its shape: an unknown state is none, and one with no l
   assert.equal(row(m, "st-3").querySelector("om-status"), null);
   assert.equal(m.data.external_accounts[2].status, null);
 });
+
+// ── No new account: the person viewing may not create one (0.7.1) ────────────
+// Only a deployment admin creates an account (W6.4): a plugin admin who is not
+// one links to an existing account, so the page says `no-new-account`.
+
+const intents = (ed) => [...ed.querySelectorAll("form")].map((f) => fields(f).intent);
+const offersNew = (m) => Boolean(m.querySelector('[name^="new_account_"], .om-account-map-or')) || /A new account|Create and link|create one/.test(m.textContent);
+
+test("with no-new-account, no row offers a new account: only an existing one, or Unlink", async () => {
+  for (const attrs of [`${ATTRS} no-new-account`, `${ATTRS} no-new-account link-several`]) {
+    const m = await map(SUGGESTING, attrs);
+    const seen = [];
+    m.addEventListener("om-link", (e) => seen.push(e.detail.intent));
+    edit(m, "e-two");
+    assert.deepEqual(intents(editor(m)), ["link"], `${attrs}: an unlinked row, only the chooser`);
+    assert.ok(editor(m).querySelector("[role=combobox]"));
+    assert.equal(offersNew(m), false, `${attrs}: no new account, no "or" before it`);
+    edit(m, "e-name");
+    assert.deepEqual(intents(editor(m)), ["link"], `${attrs}: a suggested row, only the chooser, the suggestion chosen`);
+    assert.equal(fields(editor(m).querySelector("form")).account_id, "A-roth");
+    assert.deepEqual(intents(row(m, "e-name")), ["link"], "the suggestion's Link is still taken in its row");
+    show(m, "all");
+    edit(m, "e-linked");
+    assert.deepEqual(intents(editor(m)), ["unlink", "link"], `${attrs}: a linked row, Unlink and another existing account`);
+    assert.equal(offersNew(m), false);
+    if (attrs.includes("link-several")) {
+      const several = m.querySelector(".om-account-map-several");
+      assert.ok(!several.hidden, "several suggestions are still reviewed");
+      several.click();
+      const review = m.querySelector(".om-account-map-review form");
+      assert.equal(fields(review).intent, "link-several");
+      assert.equal(offersNew(m), false, "and the review offers no new account either");
+      assert.equal(submit(review), false);
+    }
+    for (const f of m.querySelectorAll("form")) assert.notEqual(fields(f).intent, "create", "no create form anywhere");
+    assert.ok(!seen.includes("create"));
+  }
+});
+
+test("with no-new-account and nothing to link to, it says so without offering to create one", async () => {
+  const none = await map({ ...DATA, accounts: [{ account_id: "ACC-9", name: "Old", open: false }] }, `${ATTRS} no-new-account`);
+  edit(none, "st-2");
+  assert.equal(editor(none).querySelector(".hint").textContent, "The deployment has no open accounts yet.");
+  assert.deepEqual(intents(editor(none)), []);
+  assert.equal(offersNew(none), false);
+  show(none, "all");
+  edit(none, "st-1");
+  assert.match(editor(none).textContent, /The deployment has no other open account\./);
+  assert.deepEqual(intents(editor(none)), ["unlink"]);
+
+  const unread = await map({ ...DATA, accounts: null }, `${ATTRS} no-new-account`);
+  edit(unread, "st-2");
+  assert.match(editor(unread).textContent, /could not be read, so none is offered here/);
+  assert.deepEqual(intents(editor(unread)), [], "nothing to send: only Close");
+  assert.ok(editor(unread).querySelector(".om-account-map-close"));
+});
+
+test("no-new-account set or removed later redraws: the default offers a new account as before", async () => {
+  const m = await map();
+  edit(m, "st-2");
+  assert.deepEqual(intents(editor(m)), ["link", "create"], "by default, a new account too");
+  m.setAttribute("no-new-account", "");
+  assert.equal(editor(m).previousElementSibling, row(m, "st-2"), "the row's choices stay open, drawn again");
+  assert.deepEqual(intents(editor(m)), ["link"]);
+  assert.equal(offersNew(m), false);
+  m.removeAttribute("no-new-account");
+  assert.deepEqual(intents(editor(m)), ["link", "create"]);
+  assert.ok(offersNew(m));
+});

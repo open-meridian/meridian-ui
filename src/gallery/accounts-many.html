@@ -14,7 +14,10 @@
 <!-- An industrial plugin's Account links tab: thousands of external accounts,
      searched, filtered, grouped and paged, with suggestions reviewed and sent
      as one form. A plugin's page would declare the same data as JSON inside
-     the map, as accounts.html does; here it is made up in script. -->
+     the map, as accounts.html does; here it is made up in script. It is the
+     page as a plugin admin who is not a deployment admin sees it: they link
+     to an existing account and may not create one, so the page says
+     no-new-account. -->
 <main class="page">
 
   <header class="page-head">
@@ -35,9 +38,10 @@
     <div class="panel-body">
       <h2>Link each account</h2>
       <p class="muted" id="summary">Each account the plugin reaches is recorded against the deployment's account it is
-        linked to, and one nothing links is not recorded.</p>
+        linked to, and one nothing links is not recorded. Link it to an existing account; a deployment admin may also
+        create one for it.</p>
     </div>
-    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several status-heading="Sync state"
+    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several no-new-account status-heading="Sync state"
                     empty="No accounts yet: they appear here once the venue is read."></om-account-map>
   </section>
 
