@@ -12,22 +12,54 @@
    * frame has no border and no background: the page is drawn on this one. */
   #plugin { display: block; width: 100%; height: 12rem; border: 0; }
   #said, #offered, #told { margin-top: var(--space-4); font: .8rem var(--mono); }
-  #name om-status { margin-left: var(--space-2); font-size: 1rem; font-weight: 400; }
+  /* The header, as the dashboard draws it on every tab and at every level:
+   * on the left the plugin's name and its status dot right after it; on the
+   * right the page's actions immediately left of the level switch, which is
+   * always the rightmost, so actions grow leftward and never move it. On a
+   * phone it stays one row: the switch is a menu naming the level, and a
+   * long name is cut with an ellipsis. The plugin's id is the line under. */
+  #host-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title side" "id id"; column-gap: var(--space-4); row-gap: .3rem; align-items: center; }
+  .host-title { grid-area: title; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 2.5rem; }
+  .host-title h1 { min-width: 0; overflow-wrap: anywhere; }
+  #host-head > p { grid-area: id; margin: 0; }
+  #dot { display: inline-flex; align-items: center; flex-shrink: 0; }
+  #dot:empty { display: none; }
+  .host-side { grid-area: side; justify-self: end; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+  .host-side .actions:empty { display: none; }
+  .host-levels { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; font-size: .86rem; }
+  .host-levels a { padding: .3rem .75rem; color: var(--ink-soft); background: var(--card); }
+  .host-levels a + a { border-left: 1px solid var(--line-strong); }
+  .host-levels a[aria-current] { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+  .host-level-menu { display: none; }
+  .host-level-menu > summary { border: 1px solid var(--line-strong); background: var(--accent-wash); color: var(--accent); font-size: .86rem; font-weight: 600; line-height: 1.4; padding: .3rem .65rem; }
+  .host-level-menu > summary::after { content: " \25BE"; }
+  .host-level-menu .menu-pop { min-width: 9rem; }
+  .host-level-menu .menu-pop a[aria-current] { color: var(--accent); font-weight: 600; }
+  @media (max-width: 36rem) {
+    .host-levels { display: none; }
+    .host-level-menu { display: block; }
+    .host-title h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
 </style>
 </head>
 <body>
 <main class="page wide">
-  <header class="page-head">
-    <div>
-      <h1><span id="name">Sample plugin</span> <span class="faint mono">sample-1</span></h1>
-      <p>A stand-in for the dashboard's view of one plugin. This page draws the heading and the tab row, and
-        frames the plugin's page seamlessly: the page drops its own, and the frame takes its height from the
-        page's <code>meridian:size</code> messages. The buttons beside this heading are the page's header
-        actions, drawn here from its <code>meridian:actions</code>; pressing one sends <code>meridian:action</code>
-        back, and the page presses its own. The dot beside the plugin's name is the page's status, drawn here
-        from its <code>meridian:status</code>.</p>
+  <header class="page-head" id="host-head">
+    <div class="host-title"><h1 id="name" title="Sample plugin">Sample plugin</h1><span id="dot"></span></div>
+    <p><span class="faint mono">sample-1</span>. A stand-in for the dashboard's view of one plugin. This page
+      draws the heading and the tab row, and frames the plugin's page seamlessly: the page drops its own, and
+      the frame takes its height from the page's <code>meridian:size</code> messages. The dot after the
+      plugin's name is the page's status, drawn here from its <code>meridian:status</code>. The buttons left of
+      the level switch are the page's header actions, drawn here from its <code>meridian:actions</code> (an icon
+      where the kit knows one, its words the button's name and tooltip); pressing one sends
+      <code>meridian:action</code> back, and the page presses its own. The level switch is always the
+      rightmost; on a phone it is a menu naming the level.</p>
+    <div class="host-side" id="side">
+      <div class="actions" id="actions" role="group" aria-label="The page's actions"></div>
+      <nav class="host-levels" id="levels" aria-label="Open it as"><a href="#manage">Manage</a><a href="#open" aria-current="page">Open</a><a href="#view">View</a></nav>
+      <details class="menu host-level-menu" id="level-menu"><summary aria-label="Open it as: Open">Open</summary>
+        <nav class="menu-pop" aria-label="Open it as"><a href="#manage">Manage</a><a href="#open" aria-current="page">Open</a><a href="#view">View</a></nav></details>
     </div>
-    <div class="actions" id="actions" aria-label="The page's actions"></div>
   </header>
   <nav class="tabs" aria-label="The plugin's admin">
     <a class="tab" href="#overview">Overview</a>

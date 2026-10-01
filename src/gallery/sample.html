@@ -18,6 +18,8 @@
     <div>
       <h1>Positions</h1>
       <p>A plugin's page built only from the kit. <span class="faint">Every colour is the scheme's.</span></p>
+      <!-- Its header status: framed, the host draws it right after the plugin's name. -->
+      <p><om-status data-om-header state="ok" label="Up to date" at="2026-09-30T13:12:00Z" at-label="Last read">Up to date. Last read 2026-09-30 13:12 UTC</om-status></p>
     </div>
     <div class="actions">
       <om-live id="feed" src="events" snapshot="snapshot.json" for="positions"></om-live>
@@ -25,8 +27,9 @@
       <button type="button" class="danger">Close all</button>
       <!-- Header actions: framed, the host draws these in its own header and
            the page's go; a click there clicks them here. "Refresh" is a plain
-           form of the page's own; "New order" a button of its script's. -->
-      <form method="get" action="" class="inline"><input type="hidden" name="refreshed" value="1"><button data-om-action="refresh">Refresh</button></form>
+           form of the page's own, drawn as the kit's refresh icon (its words
+           its name and tooltip); "New order" a button of its script's. -->
+      <form method="get" action="" class="inline"><input type="hidden" name="refreshed" value="1"><button data-om-action="refresh" data-om-icon="refresh" title="Refresh">Refresh</button></form>
       <button type="button" class="primary" data-om-action="new-order">New order</button>
     </div>
   </header>

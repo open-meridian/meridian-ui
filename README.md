@@ -12,7 +12,7 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.7.1; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.8.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -40,8 +40,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.7.1/meridian.css">
-  <script src="/.meridian/ui/0.7.1/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.8.0/meridian.css">
+  <script src="/.meridian/ui/0.8.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -118,7 +118,10 @@ added the header status: a framed page's head `om-status` marked
 with nothing to show once the host draws its parts dropped whole (see
 [the frame: seamless](#the-frame-seamless)). 0.7.1 added `om-account-map`'s
 `no-new-account`, for a page whose viewer may link to an existing account
-but not create one.
+but not create one. 0.8.0 added icon buttons: a button marked
+`data-om-icon="refresh"` is drawn as a circular arrow, its words its name,
+and a header action so marked is drawn by the host as that icon (see
+[the frame: seamless](#the-frame-seamless)).
 
 ## Never raw colours
 
@@ -917,16 +920,38 @@ offer (an id that is not one, a repeat, a fifth, no label or a long one) is
 marked `data-om-kept` and stays in the page. A marked button anywhere but the
 head's `.actions` is the page's own.
 
+**Icon actions, since 0.8.0.** A `button` also marked `data-om-icon="<name>"`,
+with a name the kit knows, is an icon button: the kit's CSS draws it square,
+as tall as a button of words, with the icon in the button's own colour, in
+place of its words, in the page as in the host's header. Its words stay: they
+are its accessible name, and the label the host is told; give it a `title`
+of the same words, for a pointer's tooltip. The kit knows one icon:
+
+| Name | Icon |
+|---|---|
+| `refresh` | a circular arrow, clockwise: read again |
+
+Any other name is no icon: the button is drawn with its words, and the host
+is told none. An `input` is never an icon.
+
+```html
+<form method="post" action="/read" class="inline">
+  <input type="hidden" name="csrf" value="…">
+  <button data-om-action="refresh" data-om-icon="refresh" title="Refresh">Refresh</button>
+</form>
+```
+
 Framed, the kit's CSS hides the offered buttons in the page, and the kit
 posts them to the host:
 
 ```json
 { "type": "meridian:actions", "version": 1,
-  "actions": [{ "id": "refresh", "label": "Refresh" }, { "id": "connect", "label": "Connect a brokerage", "tone": "primary" }] }
+  "actions": [{ "id": "refresh", "label": "Refresh", "icon": "refresh" }, { "id": "connect", "label": "Connect a brokerage", "tone": "primary" }] }
 ```
 
-`tone` is there only as `"primary"` or `"danger"`, and `disabled` only as
-`true`. It is posted
+`tone` is there only as `"primary"` or `"danger"`, `disabled` only as
+`true`, and `icon` (since 0.8.0, still version 1: a host that does not know
+it draws the label) only as a name the kit knows. It is posted
 
 - only to the origin learned from the host's first theme message, as the size
   is, never to `"*"`, and only while the page is framed;
@@ -1047,9 +1072,17 @@ head is marked.
    `"meridian:actions"` and `data.version` `1`, and only in the shape above:
    at most four, each an `id` as above and unique, a `label` string of 1 to
    40 characters, `tone` absent or `"primary"` or `"danger"`, `disabled`
-   absent or a boolean. Anything else is refused whole. It draws each as a
-   button in its header, the label as text (never as HTML), and drops them
-   on each `load` of the frame, until the new page offers its own.
+   absent or a boolean, `icon` absent or a string of the id's shape.
+   Anything else is refused whole. It draws each as a button in its header,
+   the label as text (never as HTML), and drops them on each `load` of the
+   frame, until the new page offers its own. An `icon` it knows is drawn as
+   that icon (most simply by the kit's CSS: `data-om-icon` on its own
+   button), the label the button's `aria-label` and `title`; one it does not
+   know, as the label. The header is the same on every page: on the left
+   the plugin's name and its status dot right after it; on the right the
+   page's actions immediately left of whatever the host draws of its own
+   there (the dashboard's level switch), which stays the rightmost, so
+   actions grow leftward and never move it.
 7. On a click, posts `{ "type": "meridian:action", "version": 1, "id" }` to
    the frame's window with `postMessage(message, pluginOrigin)`, never `"*"`.
 8. Takes a message as the page's header status only under the size's guards
@@ -1062,7 +1095,7 @@ head is marked.
    ISO 8601 date-time with its offset (`Z` or `±hh:mm`) of at most 40
    characters that parses, and `at_label` absent or a string of 1 to 40.
    Anything else is refused whole, and the dot it drew stays as it was.
-9. Draws the status as a dot beside the plugin's name in its breadcrumb, with
+9. Draws the status as a dot right after the plugin's name in its heading, with
    `om-status`'s look and note: most simply the kit's own `om-status`
    (`components/om-status.js`), its `state`, `label`, `detail`, `at` and
    `at-label` set as attributes from the message, or an equivalent drawn the
@@ -1073,8 +1106,10 @@ head is marked.
    own.
 
 `gallery/host.html` is that host, and `gallery/host.js` all of its script;
-it draws the status beside the plugin's name in its heading, with the kit's
-`om-status`.
+it draws the status right after the plugin's name in its heading, with the
+kit's `om-status`, and on the right the page's actions (an icon by the kit's
+CSS) immediately left of a level switch, which on a phone is a menu naming
+the level, so the head stays one row.
 
 ## The scheme contract
 

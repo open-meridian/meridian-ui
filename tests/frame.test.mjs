@@ -373,6 +373,35 @@ test("meridian:action is taken only from the parent, at the learned origin, whil
   assert.equal(seen[0].click, "refresh", "the host's word, from the parent at its origin, framed");
 });
 
+// ── Icon actions (0.8.0) ─────────────────────────────────────────────────────
+
+test("a header action marked with an icon the kit knows is offered with it; any other name, or an input, with none", async () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: `
+    <header class="page-head"><div><h1>Statements</h1></div><div class="actions">
+      <form method="post" action="/read" class="inline"><button data-om-action="refresh" data-om-icon="refresh" title="Refresh" id="refresh">Refresh</button></form>
+      <button data-om-action="export" data-om-icon="spreadsheet" id="export">Export</button>
+      <input type="submit" data-om-action="again" data-om-icon="refresh" value="Again">
+      <button data-om-action="odd" data-om-icon="toString">Odd</button>
+    </div></header>` });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(offered(p), [actions([
+    { id: "refresh", label: "Refresh", icon: "refresh" },
+    { id: "export", label: "Export" },
+    { id: "again", label: "Again" },
+    { id: "odd", label: "Odd" },
+  ])], "the label is still the words: the host's name and tooltip for the icon");
+
+  // An icon given or taken away later is told again, as any change is.
+  p.win.document.getElementById("refresh").removeAttribute("data-om-icon");
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p).at(-1).data.actions[0], { id: "refresh", label: "Refresh" });
+  p.win.document.getElementById("export").setAttribute("data-om-icon", "refresh");
+  await settle();
+  p.frame();
+  assert.deepEqual(offered(p).at(-1).data.actions[1], { id: "export", label: "Export", icon: "refresh" });
+});
+
 // ── Header status ────────────────────────────────────────────────────────────
 
 // A head as SnapTrade writes one: its heading, its status dot marked for the
@@ -700,4 +729,91 @@ test("framed, the head's offered buttons go with their one-button forms; one kep
   assert.notEqual(style("#kept").display, "none", "one the kit could not offer");
   const alone = styled(HEAD);
   for (const id of ["#refresh", "#read-form", "#connect"]) assert.notEqual(alone.style(id).display, "none", `${id} on its own`);
+});
+
+test("in the page, a button marked with an icon the kit knows is drawn as it: square, its words its name, not shown", () => {
+  const { style, doc } = styled(`
+    <header class="page-head"><div><h1>Statements</h1></div><div class="actions">
+      <button data-om-icon="refresh" title="Refresh" id="icon">Refresh</button>
+      <button data-om-icon="spreadsheet" id="unknown">Export</button>
+      <button id="words">Words</button>
+    </div></header>`);
+  const icon = style("#icon");
+  assert.equal(icon.fontSize, "0px", "its words are not drawn");
+  for (const side of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"]) assert.equal(icon[side], style("#words").paddingTop, `${side}: square, as tall as a button of words`);
+  assert.equal(icon.borderTopWidth, style("#words").borderTopWidth, "a button's edge, as any button's");
+  assert.equal(doc.getElementById("icon").textContent, "Refresh", "its words stay, its accessible name");
+  assert.notEqual(style("#unknown").fontSize, "0px", "a name the kit does not know is no icon");
+  assert.match(COMPONENTS, /button\[data-om-icon="refresh"\]::before \{[^}]*background: currentColor;/, "the icon is drawn in the button's own colour");
+  // Framed, the offered one goes to the host as any header action does.
+  const framed = styled(`${HEAD.replace('data-om-action="refresh"', 'data-om-action="refresh" data-om-icon="refresh"')}`, { framed: true });
+  assert.equal(framed.style("#refresh").display, "none");
+});
+
+// ── The stand-in host's header (gallery/host.html) ──────────────────────────
+
+/** The gallery's stand-in host, its script run in a window of its own, the
+ * plugin's page beside it never loaded: what it draws from the messages a
+ * test sends it. */
+function standIn() {
+  const html = read("src/gallery/host.html");
+  const win = new Window({ url: "https://plugin.example/.meridian/ui/0.8.0/gallery/host.html", settings: SETTINGS });
+  const doc = win.document;
+  doc.body.innerHTML = html.match(/<body>([\s\S]*)<\/body>/)[1];
+  const style = doc.createElement("style");
+  style.textContent = BASE + COMPONENTS + html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  doc.head.appendChild(style);
+  win.Meridian = { theme: { current: () => ({ scheme: "default", mode: "light", direction: "green-up" }) } };
+  const script = read("src/gallery/host.js")
+    .replace(/^import .*$/m, "")
+    .replace("import.meta.url", JSON.stringify(win.location.href));
+  new Function("window", "document", "location", script)(win, doc, win.location);
+  const frame = doc.getElementById("plugin");
+  const send = (data) => message(win, data, frame.contentWindow, "https://plugin.example");
+  return { win, doc, send, style: (sel) => win.getComputedStyle(doc.querySelector(sel)) };
+}
+
+test("the stand-in host's header: the name and its dot on the left; the page's actions left of the level switch, which is the rightmost", () => {
+  const { doc, send, style } = standIn();
+  const head = doc.getElementById("host-head");
+  const title = head.querySelector(".host-title");
+  assert.deepEqual([...title.children].map((el) => el.id), ["name", "dot"], "the dot right after the name, and nothing else beside it");
+  assert.equal(doc.getElementById("name").title, "Sample plugin", "the whole name, where a phone cuts it");
+  const side = doc.getElementById("side");
+  assert.equal(head.lastElementChild, side, "the right-hand group is the head's last");
+  assert.deepEqual([...side.children].map((el) => el.id), ["actions", "levels", "level-menu"], "the actions immediately left of the switch");
+  assert.equal(style("#host-head").display, "grid");
+  assert.equal(style("#side").justifySelf, "end", "the group sits at the right, so actions grow leftward");
+  assert.equal(style("#level-menu").display, "none", "wider than a phone: the switch, not the menu");
+  // On a phone, one row: the menu naming the level in place of the switch,
+  // and a long name cut with an ellipsis.
+  const phone = read("src/gallery/host.html").match(/@media \(max-width: 36rem\) \{([\s\S]*?)\n  \}/)[1];
+  assert.match(phone, /\.host-levels \{ display: none; \}/);
+  assert.match(phone, /\.host-level-menu \{ display: block; \}/);
+  assert.match(phone, /\.host-title h1 \{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/);
+  const menu = doc.getElementById("level-menu");
+  assert.equal(menu.localName, "details", "a disclosure, no script");
+  assert.equal(menu.querySelector("summary").getAttribute("aria-label"), "Open it as: Open");
+  assert.equal(menu.querySelector("[aria-current=page]").textContent, "Open");
+
+  send({ type: "meridian:actions", version: 1, actions: [
+    { id: "refresh", label: "Refresh", icon: "refresh" },
+    { id: "export", label: "Export", icon: "spreadsheet" },
+    { id: "new-order", label: "New order", tone: "primary" },
+  ] });
+  const buttons = [...doc.querySelectorAll("#actions button")];
+  assert.equal(buttons.length, 3);
+  const [refresh, exported, order] = buttons;
+  assert.equal(refresh.getAttribute("data-om-icon"), "refresh", "an icon the host knows is drawn as it");
+  assert.equal(refresh.getAttribute("aria-label"), "Refresh", "named for a screen reader");
+  assert.equal(refresh.title, "Refresh", "and for a pointer");
+  assert.equal(refresh.textContent, "Refresh");
+  assert.equal(refresh.type, "button", "focusable, pressed by a key as a click");
+  assert.equal(exported.hasAttribute("data-om-icon"), false, "one it does not know is its words");
+  assert.equal(exported.textContent, "Export");
+  assert.equal(order.className, "primary");
+  assert.deepEqual([...side.children].map((el) => el.id), ["actions", "levels", "level-menu"], "the actions never move the level switch from the right");
+
+  send({ type: "meridian:actions", version: 1, actions: [{ id: "refresh", label: "Refresh", icon: "<svg>" }] });
+  assert.equal(doc.querySelectorAll("#actions button").length, 3, "an icon not in the kit's shape refuses the whole message");
 });

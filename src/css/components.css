@@ -173,6 +173,19 @@ button.small, .button.small { padding: .1rem .5rem; font-size: .76rem; gap: .3re
 button.icon, .button.icon { padding: .3rem .45rem; }
 button:disabled, .button[aria-disabled="true"] { opacity: .5; cursor: not-allowed; filter: none; }
 form.inline { display: inline; margin: 0; }
+/* An icon button (0.8.0): a button marked data-om-icon with a name the kit
+ * knows draws that icon in place of its words, square and as tall as a
+ * button of words. Its words stay its accessible name; a title gives a
+ * pointer the same words. The icon is drawn in the button's own colour, so
+ * it holds the contrast its words had. Any other name is no icon. The host
+ * draws a header action marked so the same way (meridian.js, ICONS).
+ * refresh: a circular arrow, clockwise. */
+button[data-om-icon="refresh"] { gap: 0; padding: .48rem; font-size: 0; }
+button[data-om-icon="refresh"]::before {
+  content: ""; display: block; width: 1.4rem; height: 1.4rem; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19.5 12.5a7.5 7.5 0 1 1-7.5-7.5M9.5 2.5 12 5l-2.5 2.5'/%3E%3C/svg%3E") center / 1.15rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19.5 12.5a7.5 7.5 0 1 1-7.5-7.5M9.5 2.5 12 5l-2.5 2.5'/%3E%3C/svg%3E") center / 1.15rem no-repeat;
+}
 
 /* ── Badges ──────────────────────────────────────────────────────────────── */
 

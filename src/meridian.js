@@ -46,12 +46,16 @@
  *
  * Header actions. A button (or a form's submit button) in the page head's
  * .actions marked data-om-action="<id>" is one the host may draw in its own
- * header, labelled with the button's text. Framed, the kit's CSS hides it in
+ * header, labelled with the button's text. A button also marked
+ * data-om-icon="<name>" with a name the kit knows (ICONS: "refresh", a
+ * circular arrow) is drawn as that icon, its text its accessible name and
+ * tooltip (0.8.0). Framed, the kit's CSS hides it in
  * the page, and the kit posts the set to the learned host origin alone: with
- * the host's first theme message, then whenever the set, a label, a tone or a
- * disabled state changes (a MutationObserver, at most once a frame):
+ * the host's first theme message, then whenever the set, a label, a tone, an
+ * icon or a disabled state changes (a MutationObserver, at most once a frame):
  *     { "type": "meridian:actions", "version": 1,
- *       "actions": [{ "id", "label", "tone"?: "primary"|"danger", "disabled"?: true }] }
+ *       "actions": [{ "id", "label", "tone"?: "primary"|"danger", "disabled"?: true,
+ *                     "icon"?: "refresh" }] }
  * The host answers a click with { "type": "meridian:action", "version": 1, "id" },
  * taken only from the parent window and the learned origin while framed; the
  * kit then clicks the page's own button, so its form posts with its own
@@ -203,6 +207,11 @@
   // stays in the page.
   var ACTION = "data-om-action";
   var KEPT = "data-om-kept";
+  // The icons the kit draws for a button marked data-om-icon (its CSS in the
+  // page, the host in its header). Any other name is no icon: the button
+  // stays its words, and the host is told none.
+  var ICON = "data-om-icon";
+  var ICONS = { refresh: 1 };
   var ACTION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
   var MAX_ACTIONS = 4;
   var MAX_LABEL = 40;
@@ -242,6 +251,8 @@
       if (el.classList.contains("danger")) action.tone = "danger";
       else if (el.classList.contains("primary")) action.tone = "primary";
       if (inert(el)) action.disabled = true;
+      var icon = el.localName === "button" ? el.getAttribute(ICON) : null;
+      if (icon && Object.prototype.hasOwnProperty.call(ICONS, icon)) action.icon = icon;
       list.push(action);
     }
     return { list: list, buttons: buttons };
@@ -435,12 +446,12 @@
   );
   win.addEventListener("message", onMessage);
   if (inFrame && win.ResizeObserver) new win.ResizeObserver(schedule).observe(root);
-  // The header actions follow the page: a button added, removed, relabelled
-  // or disabled is told again (only what differs is sent).
+  // The header actions follow the page: a button added, removed, relabelled,
+  // given an icon or disabled is told again (only what differs is sent).
   if (inFrame && win.MutationObserver) {
     new win.MutationObserver(scheduleOffer).observe(root, {
       childList: true, subtree: true, characterData: true,
-      attributes: true, attributeFilter: [ACTION, "disabled", "class", "value", "hidden"].concat(STATUS_ATTRIBUTES),
+      attributes: true, attributeFilter: [ACTION, ICON, "disabled", "class", "value", "hidden"].concat(STATUS_ATTRIBUTES),
     });
     // The heads are settled as soon as the page is parsed, before its first
     // frame where the browser allows; what the host is told follows.
@@ -467,7 +478,7 @@
   win.Meridian.frame = {
     /** Whether the host frames this page seamlessly (data-om-framed). */
     framed: function () { return framed; },
-    /** The header actions the page declares (data-om-action), as the host is told them. */
+    /** The header actions the page declares (data-om-action, and data-om-icon), as the host is told them. */
     actions: function () { return declared().list; },
     /** The header status the page declares (om-status data-om-header), as the host is told it, or null. */
     status: function () { return statusOf(); },

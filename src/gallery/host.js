@@ -11,13 +11,16 @@
 //   frame grows and shrinks with the page.
 // - It takes meridian:actions under the same guards, and a valid shape: at
 //   most four actions, each an id, a short label drawn as text (never HTML),
-//   a tone it knows and a disabled flag. It draws them as buttons in its own
-//   header, and a click posts meridian:action to the plugin's origin alone;
+//   a tone it knows, a disabled flag and an icon's name. It draws them as
+//   buttons in its own header, immediately left of the level switch, which
+//   stays the rightmost (actions grow leftward): an icon it knows as that
+//   icon, the label the button's name and tooltip, any other as its label. A click
+//   posts meridian:action to the plugin's origin alone;
 //   the page presses its own button, which posts its own form. A new load of
 //   the frame is a new page, so its buttons go until it offers its own.
 // - It takes meridian:status under the same guards, and a valid shape: a
 //   state it knows, a short label, a detail, a moment and its label, each set
-//   as text. It draws the dot beside the plugin's name with the kit's own
+//   as text. It draws the dot right after the plugin's name with the kit's own
 //   om-status, so its look and its note are the page's; state null, or a new
 //   load of the frame, takes it away.
 //
@@ -66,6 +69,8 @@ const ACTIONS = document.getElementById("actions");
 const offeredLine = document.getElementById("offered");
 const ACTION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const TONES = new Set(["primary", "danger"]);
+// The icons this host draws: the kit's, by its CSS for data-om-icon.
+const ICONS = new Set(["refresh"]);
 
 /** The actions a meridian:actions message carries, or null when it is not
  * exactly the shape the kit sends: then nothing it says is drawn. */
@@ -78,6 +83,7 @@ function validActions(list) {
     if (typeof a.label !== "string" || a.label.trim() === "" || a.label.length > 40) return null;
     if (a.tone !== undefined && !TONES.has(a.tone)) return null;
     if (a.disabled !== undefined && typeof a.disabled !== "boolean") return null;
+    if (a.icon !== undefined && (typeof a.icon !== "string" || !ACTION_ID.test(a.icon))) return null;
     ids.add(a.id);
   }
   return list;
@@ -89,6 +95,13 @@ function draw(list) {
     button.type = "button";
     button.textContent = a.label;
     if (a.tone) button.className = a.tone;
+    // An icon this host knows: drawn by the kit's CSS, the label its name
+    // and its tooltip. Another stays its label.
+    if (ICONS.has(a.icon)) {
+      button.setAttribute("data-om-icon", a.icon);
+      button.setAttribute("aria-label", a.label);
+      button.title = a.label;
+    }
     button.disabled = a.disabled === true;
     button.addEventListener("click", () => {
       if (!frame.contentWindow) return;
@@ -99,8 +112,8 @@ function draw(list) {
   }));
 }
 
-// The page's status, drawn beside the plugin's name.
-const NAME = document.getElementById("name");
+// The page's status, drawn right after the plugin's name.
+const DOT = document.getElementById("dot");
 const toldLine = document.getElementById("told");
 const STATES = new Set(["ok", "busy", "warn", "error"]);
 const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
@@ -119,7 +132,7 @@ function validStatus(d) {
 }
 
 function show(status) {
-  const drawn = NAME.querySelector("om-status");
+  const drawn = DOT.querySelector("om-status");
   if (!status) {
     if (drawn) drawn.remove();
     return;
@@ -132,7 +145,7 @@ function show(status) {
   set("detail", status.detail);
   set("at", status.at);
   set("at-label", status.at && status.at_label);
-  if (!drawn) NAME.append(dot);
+  if (!drawn) DOT.append(dot);
 }
 
 window.addEventListener("message", (event) => {
