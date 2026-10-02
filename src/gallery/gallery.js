@@ -17,6 +17,7 @@ const accounts = document.getElementById("accounts");
 const phone = document.getElementById("phone");
 const many = document.getElementById("many");
 const manyPhone = document.getElementById("many-phone");
+const patterns = document.getElementById("patterns");
 const sent = document.getElementById("sent");
 
 for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
@@ -63,6 +64,11 @@ function build() {
   many.replaceChildren(figure(`On its own, ${mode}`, "accounts-many.html", mode), figure(`Framed by the host, ${mode}`, "host.html", mode, "page=accounts-many.html"));
   manyPhone.replaceChildren();
   for (const m of modes()) manyPhone.append(figure(`390px, ${m}`, "accounts-many.html", m));
+  // The patterns: in each mode on its own, then framed by the host.
+  patterns.replaceChildren();
+  patterns.classList.toggle("one", modes().length === 1);
+  for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}`, "patterns.html", m));
+  for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}, framed by the host`, "host.html", m, "page=patterns.html"));
   sent.textContent = "Frames loaded with query parameters.";
 }
 

@@ -20,6 +20,7 @@ building a plugin's page with it is at
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
 - [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map)
+- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [nothing here](#nothing-here), [empty](#empty)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
 - [The scheme contract](#the-scheme-contract)
@@ -84,7 +85,7 @@ relative, so it works under any base path:
 | `lib/*.js` | Decimals, the same-origin rule, schemes and the contrast check |
 | `schemes/<id>.css` | A colour scheme: `default` is the brand's; the dashboard serves an admin's beside it |
 | `scheme-contract.json` | What a scheme defines and the pairs it must pass |
-| `gallery.html` | Every component, light and dark, in each scheme shipped, green-up or red-up; the sample page framed seamlessly by a stand-in host (`gallery/host.html`) beside it on its own; and a plugin's account links page (`gallery/accounts.html`, tags and JSON with no script of its own) at the gallery's width and at 390px, on its own and framed |
+| `gallery.html` | Every component, light and dark, in each scheme shipped, green-up or red-up; the sample page framed seamlessly by a stand-in host (`gallery/host.html`) beside it on its own; a plugin's account links page (`gallery/accounts.html`, tags and JSON with no script of its own) at the gallery's width and at 390px, on its own and framed; and the [patterns](#patterns) (`gallery/patterns.html`), each with its markup, on its own and framed |
 
 The kit's CSS is in cascade layers (`meridian.scheme`, `meridian.tokens`,
 `meridian.base`, `meridian.components`), so a page's own rules win without a
@@ -760,6 +761,210 @@ the document. Twenty thousand and fifteen thousand are measured for the
 record. The gallery's [many-accounts page](src/gallery/accounts-many.html)
 shows 2,000 and 1,500.
 
+## Patterns
+
+The markup every plugin's page writes for the same few things: the head with
+its status and a header action, a status, a one-button form, a notice, a
+badge, tiles, a moment, a grid, the page for somebody who may read nothing
+here, and an empty state. Each is plain kit HTML, the same from any language.
+An SDK's helpers that write them write exactly this, and a page written by
+hand is as good. The Python SDK's `meridian/kit.html`, coming in
+open-meridian 0.14.0 (meridian-design's
+`spec/plugins-share-one-framework-in-code.md`), has a macro for each pattern
+below, named beside it: `status`, `action`, `notice`, `badge`, `tiles`,
+`when`, `grid`, `nothing_here` and `empty`, each held by its tests to its
+pattern here.
+
+A pattern is its elements, their attributes and their text. Whitespace
+between tags, the order of attributes and the layout of a JSON value are not
+part of it, so a test compares them parsed. Every value is escaped as HTML;
+`…` stands for the page's token. An attribute shown only sometimes is left
+out when it has nothing to say, never written empty. The
+[patterns page](src/gallery/patterns.html) in the gallery is these blocks as
+they are drawn, light and dark, on its own and framed; `make test` holds each
+block here to its copy there.
+
+### The head
+
+What `meridian/base.html` writes, and what a page in any language writes: the
+heading, the plugin's status (`data-om-header`, so a framed page hands it to
+the host), and the header actions in `.actions`, only when there is one; then
+the tab row. Framed, the kit hands the status and the actions up, the host
+draws the heading and the tabs, and the head, left with nothing, goes.
+
+```html
+<header class="page-head">
+  <div><h1>Statements</h1></div>
+  <om-status data-om-header state="ok" label="SnapTrade read" at="2026-10-02T13:12:00+00:00" at-label="Last read">SnapTrade read. Last read 2026-10-02 13:12 UTC.</om-status>
+  <div class="actions"><form method="post" action="/read" class="inline"><input type="hidden" name="csrf" value="…"><button data-om-action="refresh" data-om-icon="refresh" title="Refresh">Refresh</button></form></div>
+</header>
+<nav class="tabs">
+  <a class="tab on" href="#statements" aria-current="page">Statements</a>
+  <a class="tab" href="#raw">Raw responses</a>
+</nav>
+```
+
+A page's notices come first in its content, under the tab row, in the order
+they are said.
+
+### Status
+
+The plugin's status as [om-status](#om-status) draws it (`status`), marked
+for the head:
+
+```html
+<om-status data-om-header state="busy" label="Reading SnapTrade" at="2026-10-02T13:12:00+00:00" at-label="Last read">Reading SnapTrade. Last read 2026-10-02 13:12 UTC.</om-status>
+<om-status data-om-header state="warn" label="2 accounts await an opening balance">2 accounts await an opening balance.</om-status>
+<om-status data-om-header state="error" label="The last read failed" detail="SnapTrade answered 503.">The last read failed. SnapTrade answered 503.</om-status>
+```
+
+- `state` is `ok`, `busy`, `warn` or `error`; `label` is always given.
+- `detail` only when there is one: an error's message, say.
+- `at` only with a moment, ISO 8601 with its offset, and `at-label` with it:
+  the plugin's own words, "Last read" or "Last reconciled".
+- Inside, what shows without the kit's script: the label, the detail, and the
+  `at-label` with the moment as [a moment](#a-moment) shows it, each ending as
+  a sentence (a full stop added where it has none), joined by a space.
+
+### Action
+
+A one-button form posting to the page's own server with the page's token
+(`action`): the token first, then the form's own fields, in order, then the
+button with its words.
+
+```html
+<form method="post" action="/accounts/link" class="inline"><input type="hidden" name="csrf" value="…"><input type="hidden" name="account" value="ALPACA:SYN-ALP-1001"><button class="primary">Link</button></form>
+<form method="post" action="/connections/remove" class="inline"><input type="hidden" name="csrf" value="…"><input type="hidden" name="connection" value="c-1"><button class="danger">Remove</button></form>
+<form method="post" action="/read" class="inline"><input type="hidden" name="csrf" value="…"><button aria-label="Refresh everything from SnapTrade">Refresh</button></form>
+```
+
+- `class` on the button only for `primary` or `danger`.
+- `aria-label` only where the words alone do not say what it does.
+- A header action is the same form in the head's `.actions` with
+  `data-om-action="<id>"` on its button (see [the head](#the-head) and the
+  header actions under [the frame: seamless](#the-frame-seamless)). An
+  action's id is its plugin's own.
+- An icon action adds `data-om-icon="<name>"`, a name the kit knows
+  (`refresh`), and `title` with the button's accessible name (its
+  `aria-label`, or else its words); its words stay inside.
+- The token's field is the SDK's (`csrf` is the Python SDK's); the kit never
+  reads it.
+
+### Notice
+
+What an action came to, or how the page's reading stands (`notice`):
+
+```html
+<div class="notice info" role="status">Reading SnapTrade now. Reload in a moment.</div>
+<div class="notice good" role="status">Linked Individual brokerage to Main.</div>
+<div class="notice warn" role="status">Linked 1 of 2 accounts. Not linked:<ul class="plain"><li>Roth IRA: already linked to Retirement.</li></ul></div>
+<div class="notice bad" role="alert">The last read failed: SnapTrade answered 503.</div>
+```
+
+- The tone is `info` (the default), `good`, `warn` or `bad`.
+- `role` is `alert` for `bad`, `status` for every other.
+- Its items, when it has them, follow its text as a `ul.plain`.
+
+### Badge
+
+A short state (`badge`):
+
+```html
+<span class="badge good">Linked</span>
+<span class="badge warn">Stale</span>
+<span class="badge bad">Failed</span>
+<span class="badge">Not linked</span>
+```
+
+The tone is `good`, `warn`, `bad`, `accent`, `info`, `buy` or `sell`, or none,
+a neutral badge: then `class` is `badge` alone.
+
+### Tiles
+
+Figures at the head of the content (`tiles`):
+
+```html
+<div class="tiles">
+  <div class="panel tile"><div class="tile-label">Accounts</div><div class="tile-value">3</div><div class="tile-delta good-ink">all linked</div></div>
+  <div class="panel tile"><div class="tile-label">Last read</div><div class="tile-value">13:12</div><div class="tile-delta">2026-10-02</div></div>
+  <div class="panel tile"><div class="tile-label">Holdings</div><div class="tile-value">42</div></div>
+</div>
+```
+
+A tile's delta only when it has one, and its ink (`good-ink`, `warn-ink`,
+`bad-ink`, `buy-ink` or `sell-ink`) only when it is given.
+
+### A moment
+
+A moment to read, in a sentence or a cell (`when`):
+
+```html
+<time datetime="2026-10-02T13:12:00+00:00">2026-10-02 13:12 UTC</time>
+<time datetime="2026-10-02">2026-10-02</time>
+<span class="faint">not reported</span>
+```
+
+A `<time>` whose `datetime` is the moment, ISO 8601 with its offset, shown as
+[om-moment](#om-moment) shows it: in UTC to the minute, or a date as it is.
+No moment is the faint words the page gives ("not reported" when it gives
+none), never a guess. `om-moment` is for a moment in the reader's own zone.
+
+### Grid
+
+Records in an [om-grid](#om-grid) (`grid`): its columns and rows declared
+inside it as JSON ([data without script](#data-without-script)), and the same
+table beside them for a browser without the kit.
+
+```html
+<om-grid id="holdings" row-key="key" narrow="cards" caption="Holdings" empty="No holdings.">
+  <script type="application/json">{"columns": [{"key": "instrument", "label": "Instrument", "type": "code", "hint": "identifiers"}, {"key": "quantity", "label": "Quantity", "type": "decimal", "group": true}, {"key": "state", "label": "State", "type": "badge", "tone": {"field": "tone"}}], "rows": [{"key": "AAPL", "instrument": "AAPL", "identifiers": "US0378331005", "quantity": "1250.5", "state": "Current", "tone": "good"}, {"key": "USD", "instrument": "USD", "identifiers": "", "quantity": "18004.12", "state": "Assumed", "tone": "warn"}]}</script>
+  <div class="table-wrap"><table><thead><tr><th>Instrument</th><th class="num">Quantity</th><th>State</th></tr></thead><tbody>
+    <tr><td><code>AAPL</code> <span class="hint">US0378331005</span></td><td class="num">1250.5</td><td><span class="badge good">Current</span></td></tr>
+    <tr><td><code>USD</code></td><td class="num">18004.12</td><td><span class="badge warn">Assumed</span></td></tr>
+  </tbody></table></div>
+</om-grid>
+```
+
+- `id` and `row-key` always; `narrow` is `cards` unless the page asks for
+  `priority` or none; `caption` and `empty` only when given.
+- The JSON is the columns, each with only the options it sets, and the rows,
+  each with every field a column or its `hint` or `tone` names, with `<`,
+  `>` and `&` in its strings written `<`, `>` and `&`.
+- The table has a `th` for each column, then a row for each row, a `td` for
+  each column: a `decimal` or `number` column's `th` and `td` are `num`, its
+  value as the plugin sent it (the kit groups its digits); a `code` value is
+  in `<code>`; a `badge` value is the [badge](#badge) of the row's tone; a
+  `strong` value is in `<strong>`; the `hint` field, when the row has it,
+  follows the value as a `span.hint`, after a space; an empty value is the
+  column's `blank` words, faint (`<span class="faint">…</span>`), or
+  nothing.
+- With no rows, the table's body is one row of one cell across every column,
+  saying `empty`: `<tr><td colspan="3">No holdings.</td></tr>`.
+
+### Nothing here
+
+The page for somebody who may read none of the accounts the plugin reaches
+(`nothing_here`): its whole content, with no notice, tile or action. The
+first sentence is the plugin's, saying what it does; the second is every
+plugin's.
+
+```html
+<section class="panel padded narrow">
+  <h2>Nothing here for you</h2>
+  <p>This plugin brings brokerage accounts into this deployment through SnapTrade, and you may read none of them. If you should, ask whoever administers this deployment.</p>
+</section>
+```
+
+### Empty
+
+A list or a section with nothing in it yet (`empty`): its title, and, when
+there is one, a line saying what will fill it; inside the panel it is in, or
+in a `.panel` of its own when it is the page's whole content.
+
+```html
+<div class="empty-state"><strong>No statements yet</strong><p>None of the accounts you may read has come through SnapTrade here yet. An account appears once it is linked to yours.</p></div>
+```
+
 ## The theme: the frame's message
 
 The dashboard frames a plugin's page and hands it the person's colour scheme,
@@ -1212,7 +1417,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty |
 | `make bench` | The high-rate grid's budget, and the account map's at 2,000 and 1,500 accounts, in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |

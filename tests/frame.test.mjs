@@ -573,6 +573,15 @@ test("framed, a head left empty once the host draws its heading, actions and sta
   assert.equal(head.hasAttribute("data-om-empty"), false, "not framed: the head is the page's");
 });
 
+test("the Patterns' head, framed, hands the host its icon action and its status, and is left empty", async () => {
+  const block = read("src/gallery/patterns.html").match(/<!-- pattern: the-head -->\n([\s\S]*?)\n<!-- \/pattern -->/)[1];
+  const p = page("https://plugin.example/statements?om-framed=1", { body: `<main class="page">${block}</main>` });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.deepEqual(p.win.Meridian.frame.actions(), [{ id: "refresh", label: "Refresh", icon: "refresh" }]);
+  assert.deepEqual(p.win.Meridian.frame.status(), { state: "ok", label: "SnapTrade read", at: "2026-10-02T13:12:00.000Z", at_label: "Last read" });
+  assert.equal(p.win.document.querySelector(".page-head").getAttribute("data-om-empty"), "", "nothing left in the head");
+});
+
 // ── The framed look ──────────────────────────────────────────────────────────
 
 const BASE = read("src/css/base.css");

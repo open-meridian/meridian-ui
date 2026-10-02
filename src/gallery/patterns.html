@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit patterns</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<!-- The gallery's own: shows each pattern's markup, read from this page's
+     source, and what a form would post, rather than posting it. -->
+<script type="module" src="patterns.js"></script>
+<style>
+  /* The gallery's own layout; colours are still only the scheme's. */
+  .shown { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+  .markup pre { margin: var(--space-2) 0 0; overflow-x: auto; font-family: var(--mono); font-size: .78rem; white-space: pre; }
+</style>
+</head>
+<body>
+<!-- The README's Patterns, each block between its two comments exactly as the
+     README gives it (make test holds them to each other), drawn by the kit as
+     a plugin's page. What is outside the comments is the gallery's: the
+     section heads, the panels a pattern sits in, and the markup shown. -->
+<main class="page">
+
+<!-- pattern: the-head -->
+<header class="page-head">
+  <div><h1>Statements</h1></div>
+  <om-status data-om-header state="ok" label="SnapTrade read" at="2026-10-02T13:12:00+00:00" at-label="Last read">SnapTrade read. Last read 2026-10-02 13:12 UTC.</om-status>
+  <div class="actions"><form method="post" action="/read" class="inline"><input type="hidden" name="csrf" value="…"><button data-om-action="refresh" data-om-icon="refresh" title="Refresh">Refresh</button></form></div>
+</header>
+<nav class="tabs">
+  <a class="tab on" href="#statements" aria-current="page">Statements</a>
+  <a class="tab" href="#raw">Raw responses</a>
+</nav>
+<!-- /pattern -->
+
+  <div class="notice info" role="status" id="said" hidden></div>
+
+  <details class="notice quiet markup" data-markup="the-head"><summary>The head's markup</summary></details>
+
+  <section class="section-head"><h2>Status</h2><p>The plugin's status, marked for the head. Each shows its words until the kit draws it.</p></section>
+  <section class="panel padded">
+    <div class="shown">
+<!-- pattern: status -->
+<om-status data-om-header state="busy" label="Reading SnapTrade" at="2026-10-02T13:12:00+00:00" at-label="Last read">Reading SnapTrade. Last read 2026-10-02 13:12 UTC.</om-status>
+<om-status data-om-header state="warn" label="2 accounts await an opening balance">2 accounts await an opening balance.</om-status>
+<om-status data-om-header state="error" label="The last read failed" detail="SnapTrade answered 503.">The last read failed. SnapTrade answered 503.</om-status>
+<!-- /pattern -->
+    </div>
+    <details class="notice quiet markup" data-markup="status"><summary>Markup</summary></details>
+  </section>
+
+  <section class="section-head"><h2>Action</h2><p>A one-button form, posting to the page's own server with its token. Here each is shown rather than sent.</p></section>
+  <section class="panel padded">
+    <div class="shown">
+<!-- pattern: action -->
+<form method="post" action="/accounts/link" class="inline"><input type="hidden" name="csrf" value="…"><input type="hidden" name="account" value="ALPACA:SYN-ALP-1001"><button class="primary">Link</button></form>
+<form method="post" action="/connections/remove" class="inline"><input type="hidden" name="csrf" value="…"><input type="hidden" name="connection" value="c-1"><button class="danger">Remove</button></form>
+<form method="post" action="/read" class="inline"><input type="hidden" name="csrf" value="…"><button aria-label="Refresh everything from SnapTrade">Refresh</button></form>
+<!-- /pattern -->
+    </div>
+    <details class="notice quiet markup" data-markup="action"><summary>Markup</summary></details>
+  </section>
+
+  <section class="section-head"><h2>Notice</h2><p>What an action came to, or how the reading stands.</p></section>
+  <section class="panel padded">
+<!-- pattern: notice -->
+<div class="notice info" role="status">Reading SnapTrade now. Reload in a moment.</div>
+<div class="notice good" role="status">Linked Individual brokerage to Main.</div>
+<div class="notice warn" role="status">Linked 1 of 2 accounts. Not linked:<ul class="plain"><li>Roth IRA: already linked to Retirement.</li></ul></div>
+<div class="notice bad" role="alert">The last read failed: SnapTrade answered 503.</div>
+<!-- /pattern -->
+    <details class="notice quiet markup" data-markup="notice"><summary>Markup</summary></details>
+  </section>
+
+  <section class="section-head"><h2>Badge</h2><p>A short state, in a tone or neutral.</p></section>
+  <section class="panel padded">
+    <div class="shown">
+<!-- pattern: badge -->
+<span class="badge good">Linked</span>
+<span class="badge warn">Stale</span>
+<span class="badge bad">Failed</span>
+<span class="badge">Not linked</span>
+<!-- /pattern -->
+    </div>
+    <details class="notice quiet markup" data-markup="badge"><summary>Markup</summary></details>
+  </section>
+
+  <section class="section-head"><h2>Tiles</h2><p>Figures at the head of the content.</p></section>
+<!-- pattern: tiles -->
+<div class="tiles">
+  <div class="panel tile"><div class="tile-label">Accounts</div><div class="tile-value">3</div><div class="tile-delta good-ink">all linked</div></div>
+  <div class="panel tile"><div class="tile-label">Last read</div><div class="tile-value">13:12</div><div class="tile-delta">2026-10-02</div></div>
+  <div class="panel tile"><div class="tile-label">Holdings</div><div class="tile-value">42</div></div>
+</div>
+<!-- /pattern -->
+  <details class="notice quiet markup" data-markup="tiles"><summary>Markup</summary></details>
+
+  <section class="section-head"><h2>A moment</h2><p>A moment to read, in UTC to the minute; a date as it is; or none, never a guess.</p></section>
+  <section class="panel padded">
+    <div class="shown">
+<!-- pattern: a-moment -->
+<time datetime="2026-10-02T13:12:00+00:00">2026-10-02 13:12 UTC</time>
+<time datetime="2026-10-02">2026-10-02</time>
+<span class="faint">not reported</span>
+<!-- /pattern -->
+    </div>
+    <details class="notice quiet markup" data-markup="a-moment"><summary>Markup</summary></details>
+  </section>
+
+  <section class="section-head"><h2>Grid</h2><p>Records in an om-grid, declared as JSON, beside the same table for a browser without the kit; cards where it is narrow.</p></section>
+  <section class="panel">
+<!-- pattern: grid -->
+<om-grid id="holdings" row-key="key" narrow="cards" caption="Holdings" empty="No holdings.">
+  <script type="application/json">{"columns": [{"key": "instrument", "label": "Instrument", "type": "code", "hint": "identifiers"}, {"key": "quantity", "label": "Quantity", "type": "decimal", "group": true}, {"key": "state", "label": "State", "type": "badge", "tone": {"field": "tone"}}], "rows": [{"key": "AAPL", "instrument": "AAPL", "identifiers": "US0378331005", "quantity": "1250.5", "state": "Current", "tone": "good"}, {"key": "USD", "instrument": "USD", "identifiers": "", "quantity": "18004.12", "state": "Assumed", "tone": "warn"}]}</script>
+  <div class="table-wrap"><table><thead><tr><th>Instrument</th><th class="num">Quantity</th><th>State</th></tr></thead><tbody>
+    <tr><td><code>AAPL</code> <span class="hint">US0378331005</span></td><td class="num">1250.5</td><td><span class="badge good">Current</span></td></tr>
+    <tr><td><code>USD</code></td><td class="num">18004.12</td><td><span class="badge warn">Assumed</span></td></tr>
+  </tbody></table></div>
+</om-grid>
+<!-- /pattern -->
+    <div class="panel-body"><details class="notice quiet markup" data-markup="grid"><summary>Markup</summary></details></div>
+  </section>
+
+  <section class="section-head"><h2>Nothing here</h2><p>For somebody who may read none of the plugin's accounts: in a plugin, the page's whole content.</p></section>
+<!-- pattern: nothing-here -->
+<section class="panel padded narrow">
+  <h2>Nothing here for you</h2>
+  <p>This plugin brings brokerage accounts into this deployment through SnapTrade, and you may read none of them. If you should, ask whoever administers this deployment.</p>
+</section>
+<!-- /pattern -->
+  <details class="notice quiet markup" data-markup="nothing-here"><summary>Markup</summary></details>
+
+  <section class="section-head"><h2>Empty</h2><p>A list with nothing in it yet, in its panel.</p></section>
+  <section class="panel">
+<!-- pattern: empty -->
+<div class="empty-state"><strong>No statements yet</strong><p>None of the accounts you may read has come through SnapTrade here yet. An account appears once it is linked to yours.</p></div>
+<!-- /pattern -->
+  </section>
+  <details class="notice quiet markup" data-markup="empty"><summary>Markup</summary></details>
+
+</main>
+</body>
+</html>

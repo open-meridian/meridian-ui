@@ -30,7 +30,7 @@
 import "../components/om-status.js";
 
 // The page it frames, a sample beside it named by ?page= (only these), and its tab.
-const PAGES = { "sample.html": "Positions", "accounts.html": "Account links", "accounts-many.html": "Account links" };
+const PAGES = { "sample.html": "Positions", "accounts.html": "Account links", "accounts-many.html": "Account links", "patterns.html": "Statements" };
 const asked = new URLSearchParams(location.search).get("page");
 const chosen = Object.hasOwn(PAGES, asked) ? asked : "sample.html";
 const PAGE = new URL(chosen, import.meta.url);
