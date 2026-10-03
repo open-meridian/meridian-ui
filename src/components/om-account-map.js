@@ -79,7 +79,9 @@ const GROUPINGS = [
 const text = (v) => (v === undefined || v === null ? "" : String(v));
 /** A value as a search and a match compare it: case, spacing and width set aside. */
 const fold = (v) => text(v).normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
-const count = (n) => n.toLocaleString("en-US");
+// One formatter for every count a draw writes: toLocaleString makes one per call.
+const COUNT = new Intl.NumberFormat("en-US");
+const count = (n) => COUNT.format(n);
 const plural = (n, one, many = `${one}s`) => `${count(n)} ${n === 1 ? one : many}`;
 
 function el(tag, className, content) {
@@ -679,9 +681,17 @@ export class OmAccountMap extends HTMLElement {
       tr.append(td);
       nodes.push(tr);
     }
-    // The rows already there, in order, are left as they are.
-    const now = p.body.children;
-    if (now.length !== nodes.length || nodes.some((node, i) => now[i] !== node)) p.body.replaceChildren(...nodes);
+    // The rows already there are left where they are: only those leaving are
+    // taken out and only those arriving put in, so a row that stays is not
+    // laid out and painted again (a search narrowing, a group folded).
+    const body = p.body;
+    const keep = new Set(nodes);
+    for (const child of [...body.children]) if (!keep.has(child)) child.remove();
+    let at = body.firstElementChild;
+    for (const node of nodes) {
+      if (node === at) at = at.nextElementSibling;
+      else body.insertBefore(node, at);
+    }
   }
 
   /** The state chosen, as the count of accounts says it: "", or " needing attention", or " in Stale". */
