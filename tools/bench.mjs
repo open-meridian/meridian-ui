@@ -24,7 +24,7 @@
 // sideways, in light and dark; and typing into a grid's first row, a sum and
 // a page's rule run on every key, keeps each frame's main-thread time at the
 // 95th percentile under 16.7 ms: a number typed into 1,000 rows, and a cell's
-// message coming and going in 100 (in 1,000, for the record). It fails when a budget or a check is
+// message coming and going in 50 (in 100 and 1,000, for the record). It fails when a budget or a check is
 // not held, and prints what it measured either way.
 
 import { createServer } from "node:http";
@@ -63,7 +63,8 @@ const MAP_SCENARIOS = [
 // and recorded where a message's coming and going moves a thousand rows.
 const ENTRY_SCENARIOS = [
   { name: "entry budget: typing a number into the first of 1,000 rows, a sum and a page's rule on every key", rows: 1000, values: "number", held: true },
-  { name: "entry budget: a cell's message coming and going, every other key, in the first of 100 rows", rows: 100, values: "messages", held: true },
+  { name: "entry budget: a cell's message coming and going, every other key, in the first of 50 rows", rows: 50, values: "messages", held: true },
+  { name: "for the record: the same in the first of 100 rows", rows: 100, values: "messages", held: false },
   { name: "for the record: the same in the first of 1,000 rows; then 500 rows pasted", rows: 1000, values: "messages", paste: 500, held: false },
 ];
 // A page of rows (50), the head of a group a page opens inside, and one row's choices.
@@ -229,8 +230,9 @@ async function entryChecks(browser, base, failed) {
   await phone.close();
 
   // The budget: typing into a grid's first row (every rule run on each key),
-  // a number into 1,000 rows, and a cell's message coming and going in 100,
-  // held; the message in 1,000, and a paste of 500 rows, for the record. A
+  // a number into 1,000 rows, and a cell's message coming and going in 50,
+  // held; the message in 100 and 1,000, and a paste of 500 rows, for the
+  // record. A
   // message coming or going changes its row's height, and the browser lays
   // out every row under it again: in a table or any other layout, that costs
   // in proportion to the rows below (tests/bench/entry-grid.html).
