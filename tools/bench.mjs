@@ -15,8 +15,17 @@
 // frame, paging, the filters, grouping and folding, typing in a row's
 // chooser), each frame's main-thread time at the 95th percentile under
 // 16.7 ms, at most one draw a frame, and at most a page of rows in the
-// document. It fails when a budget is not held, and prints what it measured
-// either way.
+// document. Then tests/bench/entry-grid.html, the entry grid in a real
+// browser: its page with script turned off posts the page's own table; with
+// script, a cell is checked as it is typed and holds the submit, the server's
+// messages are on their cells, a spreadsheet's paste fills across and down,
+// rows are added and removed, and the form posts each row by its path; at a
+// phone's width each row is a card with 44px targets and nothing scrolls
+// sideways, in light and dark; and typing into a grid's first row, a sum and
+// a page's rule run on every key, keeps each frame's main-thread time at the
+// 95th percentile under 16.7 ms: a number typed into 1,000 rows, and a cell's
+// message coming and going in 100 (in 1,000, for the record). It fails when a budget or a check is
+// not held, and prints what it measured either way.
 
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
@@ -50,6 +59,13 @@ const MAP_SCENARIOS = [
   { name: "for the record: 20,000 and 15,000, typing a search", externals: 20000, accounts: 15000, action: "type", frames: 120, held: false },
   { name: "for the record: 20,000 and 15,000, a page a frame", externals: 20000, accounts: 15000, action: "page", frames: 120, held: false },
 ];
+// The entry grid's: typing into the first row, held at a size a person types
+// and recorded where a message's coming and going moves a thousand rows.
+const ENTRY_SCENARIOS = [
+  { name: "entry budget: typing a number into the first of 1,000 rows, a sum and a page's rule on every key", rows: 1000, values: "number", held: true },
+  { name: "entry budget: a cell's message coming and going, every other key, in the first of 100 rows", rows: 100, values: "messages", held: true },
+  { name: "for the record: the same in the first of 1,000 rows; then 500 rows pasted", rows: 1000, values: "messages", paste: 500, held: false },
+];
 // A page of rows (50), the head of a group a page opens inside, and one row's choices.
 const MAP_ROWS_MOST = 52;
 
@@ -59,8 +75,21 @@ function serve() {
   const server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
     const prefix = `/.meridian/ui/${VERSION}/`;
+    // A form's post, answered with the fields it carried, in order, as JSON
+    // (as plain text, so the browser shows it as it is).
+    if (req.method === "POST" && path === "/bench/echo") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify([...new URLSearchParams(body)]));
+      });
+      return;
+    }
     let file = null;
     if (path.startsWith(prefix)) file = join(KIT, normalize(path.slice(prefix.length)));
+    // The kit beside the bench pages too, so a page can link it without script.
+    else if (path.startsWith("/bench/kit/")) file = join(KIT, normalize(path.slice("/bench/kit/".length)));
     else if (path.startsWith("/bench/")) file = join(ROOT, "tests/bench", normalize(path.slice("/bench/".length)));
     const inside = file && (file.startsWith(KIT) || file.startsWith(join(ROOT, "tests/bench")));
     if (!inside || !existsSync(file) || !statSync(file).isFile()) {
@@ -97,6 +126,149 @@ function line(r) {
   );
 }
 
+/** What the echo answered: the fields a form posted, in order. */
+async function echoed(page) {
+  await page.waitForURL(/\/bench\/echo$/, { timeout: 10000 });
+  return JSON.parse(await page.evaluate(() => (document.querySelector("pre") || document.body).textContent));
+}
+
+const names = (fields) => fields.map(([k]) => k);
+
+/**
+ * The entry grid in a real browser. Each check pushes what failed onto
+ * `failed`, and returns what it measured.
+ */
+async function entryChecks(browser, base, failed) {
+  const url = `${base}/bench/entry-grid.html`;
+  const check = (ok, what) => {
+    if (!ok) failed.push(`entry grid: ${what}`);
+    return ok;
+  };
+  const out = {};
+
+  // Where the kit is not served: script off, the page's own table is the form.
+  const plain = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+  const off = await plain.newPage();
+  await off.goto(url);
+  check(await off.locator("#fallback").isVisible(), "with script off, the page's own table is not shown");
+  await off.fill('input[name="lots[2].quantity"]', "1");
+  await off.fill('input[name="lots[2].terms.cost"]', "25.00");
+  await off.fill('input[name="lots[2].acquired"]', "2026-05-06");
+  await off.selectOption('select[name="lots[2].method"]', "specific");
+  await off.click("#save");
+  const without = await echoed(off);
+  out.noScript = without;
+  check(JSON.stringify(names(without)) === JSON.stringify(["csrf", ...[0, 1, 2].flatMap((i) => ["quantity", "terms.cost", "currency", "acquired", "method"].map((f) => `lots[${i}].${f}`))]), `with script off, the form posted ${JSON.stringify(names(without))}`);
+  check(without.some(([k, v]) => k === "lots[2].terms.cost" && v === "25.00"), "with script off, the row typed was not posted");
+  await plain.close();
+
+  // With the kit: checked as typed, the submit held, the server's word, paste, rows, and the post.
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  page.on("pageerror", (e) => failed.push(`entry grid: the page threw: ${e.message}`));
+  await page.goto(url);
+  await page.waitForFunction(() => window.entryReady === true, null, { timeout: 30000 });
+  check((await page.locator("#fallback").count()) === 0, "the page's own table is still there beside the kit's");
+  const declared = await page.evaluate(() => window.cellState(1, "acquired"));
+  check(declared.message === "Acquired after the opening day, 2026-09-30." && declared.invalid === "true", `the server's message is not on its cell: ${JSON.stringify(declared)}`);
+  check((await page.locator("#lots .om-entry-messages li").first().textContent()) === "Checked against the statement of 2026-09-30.", "the server's message for the table is not over it");
+  const cost = page.locator('#lots input[name="lots[0].terms.cost"]');
+  await cost.fill("1,500.00");
+  const typed = await page.evaluate(() => window.cellState(0, "cost"));
+  check(typed.message === "Write it without grouping commas, like 1234.5" && typed.invalid === "true" && typed.describedBy.includes("error"), `a bad cell is not said as it is typed: ${JSON.stringify(typed)}`);
+  await page.click("#save");
+  await page.waitForTimeout(300);
+  const held = page.url() === url;
+  const focused = await page.evaluate(() => document.activeElement.getAttribute("name"));
+  check(held, "a submit with a bad cell was not held");
+  check(focused === "lots[0].terms.cost", `a held submit took the keyboard to ${focused}`);
+  await cost.fill("1500.00");
+  await page.locator('#lots input[name="lots[1].acquired"]').fill("2026-09-30");
+  const pasted = await page.evaluate(() => window.pasteInto(1, "quantity", "4\t600.00\tusd\n7\t700.123\teur\n8\t800\tgbp\n"));
+  check(pasted.prevented && pasted.rows === 4, `a paste did not fill down, adding rows: ${JSON.stringify(pasted)}`);
+  const badPaste = await page.evaluate(() => [window.cellState(2, "cost"), window.cellState(2, "currency"), window.cellState(3, "acquired")]);
+  check(badPaste[0].message === "At most 2 decimal places" && badPaste[1].value === "EUR", `a pasted cell is not checked: ${JSON.stringify(badPaste)}`);
+  check(badPaste[2].message === "", "a pasted row's empty optional cell is said to be wrong");
+  await page.locator('#lots input[name="lots[2].terms.cost"]').fill("700.12");
+  // Enter on the last row adds one; Add a row adds another; a row is removed.
+  await page.locator('#lots input[name="lots[3].quantity"]').focus();
+  await page.keyboard.press("Enter");
+  const afterEnter = await page.evaluate(() => [document.querySelectorAll("#lots tbody tr[data-row]").length, document.activeElement.getAttribute("aria-label")]);
+  check(afterEnter[0] === 5 && afterEnter[1] === "Quantity, row 5", `Enter on the last row did not add one: ${JSON.stringify(afterEnter)}`);
+  await page.click("#lots .om-entry-add");
+  await page.click('#lots button[aria-label="Remove row 3"]');
+  const shown = await page.evaluate(() => document.querySelectorAll("#lots tbody tr[data-row]").length);
+  check(shown === 5, `after Add a row and a Remove, ${shown} rows are shown, not 5`);
+  await page.click("#save");
+  const sent = await echoed(page);
+  out.withScript = sent;
+  const lots = [0, 1, 2].flatMap((i) => ["quantity", "terms.cost", "currency", "acquired", "method"].map((f) => `lots[${i}].${f}`));
+  check(JSON.stringify(names(sent)) === JSON.stringify(["csrf", ...lots]), `the kit's form posted ${JSON.stringify(names(sent))}: the rows typed, by path, the blank ones not`);
+  const value = (k) => sent.find(([n]) => n === k)?.[1];
+  check(value("lots[1].quantity") === "4" && value("lots[1].currency") === "USD" && value("lots[2].quantity") === "8" && value("lots[2].currency") === "GBP", `the rows posted are not the rows shown: ${JSON.stringify(sent)}`);
+  await page.close();
+
+  // A phone, in light and dark.
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  phone.on("pageerror", (e) => failed.push(`entry grid at 390px: the page threw: ${e.message}`));
+  await phone.goto(url);
+  await phone.waitForFunction(() => window.entryReady === true, null, { timeout: 30000 });
+  for (const scheme of ["light", "dark"]) {
+    await phone.emulateMedia({ colorScheme: scheme });
+    const l = await phone.evaluate(() => window.layout());
+    out[`phone-${scheme}`] = l;
+    check(l.table === "block" && l.row === "block" && l.head === "absolute", `at 390px, ${scheme}: each row is not a card: ${JSON.stringify(l)}`);
+    check(l.smallestTarget >= 44, `at 390px, ${scheme}: a target is ${l.smallestTarget}px tall, under 44`);
+    check(l.scrollWidth <= l.width, `at 390px, ${scheme}: the page scrolls sideways (${l.scrollWidth}px of ${l.width})`);
+    check(l.errorInk === l.danger, `at 390px, ${scheme}: a cell's message is ${l.errorInk}, not the scheme's danger ${l.danger}`);
+    check(!["none", "normal", ""].includes(l.labels), `at 390px, ${scheme}: a card's cells are not named by their columns (${l.labels})`);
+  }
+  check(out["phone-light"].danger !== out["phone-dark"].danger, "the danger colour is the same in light and dark: the scheme is not followed");
+  const dialog = await phone.evaluate(() => window.openCsv());
+  out.phoneDialog = dialog;
+  check(dialog.open && dialog.left >= 0 && dialog.right <= dialog.width && dialog.scrollWidth <= dialog.width, `at 390px the CSV dialog does not fit: ${JSON.stringify(dialog)}`);
+  await phone.close();
+
+  // The budget: typing into a grid's first row (every rule run on each key),
+  // a number into 1,000 rows, and a cell's message coming and going in 100,
+  // held; the message in 1,000, and a paste of 500 rows, for the record. A
+  // message coming or going changes its row's height, and the browser lays
+  // out every row under it again: in a table or any other layout, that costs
+  // in proportion to the rows below (tests/bench/entry-grid.html).
+  const bench = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  bench.on("pageerror", (e) => failed.push(`entry grid bench: the page threw: ${e.message}`));
+  await bench.goto(url);
+  await bench.waitForFunction(() => window.entryReady === true, null, { timeout: 30000 });
+  out.budget = [];
+  for (const s of ENTRY_SCENARIOS) {
+    const r = await bench.evaluate((o) => window.runEntryBench(o), s);
+    r.name = s.name;
+    r.held = s.held;
+    out.budget.push(r);
+    if (s.held) check(r.frameTimeMs.p95 < BUDGET_MS, `${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${BUDGET_MS}`);
+    if (s.paste) check(r.rowsAfterPaste === s.rows + s.paste - 1, `a paste of ${s.paste} rows into the last of ${s.rows} left ${r.rowsAfterPaste} rows`);
+  }
+  await bench.close();
+  return out;
+}
+
+function entryLines(e) {
+  const lines = [
+    `entry grid: script off, the page's own table posted ${e.noScript.length} fields; with the kit, ${e.withScript.length} (the rows typed, by path, the blank ones not)`,
+    `entry grid: at 390px each row a card, the smallest target ${e["phone-light"].smallestTarget}px, ${e["phone-light"].scrollWidth}px wide of ${e["phone-light"].width}; danger ${e["phone-light"].danger} light, ${e["phone-dark"].danger} dark`,
+  ];
+  for (const r of e.budget) {
+    const f = r.frameTimeMs;
+    lines.push(
+      `\n${r.name}\n` +
+        `  ${r.rows} rows, ${r.frames} frames; declared JSON drawn in ${r.drawnMs} ms, painted by ${r.paintedMs} ms\n` +
+        `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)\n` +
+        `  of which the grid's script (ms) p50 ${r.scriptMs.p50}  p95 ${r.scriptMs.p95}` +
+        (r.paste ? `\n  ${r.paste} rows of 6 cells pasted at once into the last row in ${r.pasteMs} ms, painted by ${r.pastePaintedMs} ms` : ""),
+    );
+  }
+  return lines.join("\n");
+}
+
 async function main() {
   if (!existsSync(KIT)) throw new Error(`dist/${VERSION}/ is not built: run node tools/build.mjs first`);
   const server = await serve();
@@ -104,6 +276,7 @@ async function main() {
   const browser = await chromium.launch();
   const results = [];
   let failed = [];
+  let entry = null;
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.on("pageerror", (e) => failed.push(`the page threw: ${e.message}`));
@@ -163,6 +336,11 @@ async function main() {
       if (r.drawsPerFrameMax > 1) failed.push(`${s.name}: ${r.drawsPerFrameMax} draws in one frame; at most one`);
       if (r.rowsInDocumentMax > MAP_ROWS_MOST) failed.push(`${s.name}: ${r.rowsInDocumentMax} rows in the document; a page holds at most ${MAP_ROWS_MOST}`);
     }
+
+    // The entry grid.
+    entry = await entryChecks(browser, `http://127.0.0.1:${port}`, failed);
+    results.push({ name: "entry grid", ...entry });
+    console.log(entryLines(entry) + "\n");
   } finally {
     await browser.close();
     server.close();
@@ -174,7 +352,7 @@ async function main() {
   }
   const held = results.filter((r) => r.held && !r.action);
   const mapHeld = results.filter((r) => r.held && r.action);
-  console.log(`bench OK: grid frame time p95 ${held.map((r) => r.frameTimeMs.p95).join(", ")} ms; map ${mapHeld.map((r) => r.frameTimeMs.p95).join(", ")} ms; each under ${BUDGET_MS}`);
+  console.log(`bench OK: grid frame time p95 ${held.map((r) => r.frameTimeMs.p95).join(", ")} ms; map ${mapHeld.map((r) => r.frameTimeMs.p95).join(", ")} ms; entry grid ${entry.budget.filter((r) => r.held).map((r) => r.frameTimeMs.p95).join(", ")} ms; each under ${BUDGET_MS}`);
 }
 
 main().catch((e) => {

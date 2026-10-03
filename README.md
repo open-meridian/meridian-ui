@@ -5,22 +5,22 @@ Meridian with no design work: the brand's type, spacing, radii and shadows;
 the person's colour scheme, light or dark, and their market-direction
 convention (green-up or red-up), handed over by the dashboard's frame; the platform's components in CSS; and web components for what trading
 pages need: a data grid (with a high-rate mode for streams, and a layout for a
-phone), charts, an as-of control and an as-of moment, a status dot, an instrument picker, a
+phone), a grid of typed inputs a person enters rows in, charts, an as-of control and an as-of moment, a status dot, an instrument picker, a
 live feed that never misses a change, resizable, rearrangeable panels, and the
 map a plugin links its external accounts with.
 
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.8.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.9.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
-- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map)
-- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [nothing here](#nothing-here), [empty](#empty)
+- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
+- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [nothing here](#nothing-here), [empty](#empty)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
 - [The scheme contract](#the-scheme-contract)
@@ -41,8 +41,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.8.0/meridian.css">
-  <script src="/.meridian/ui/0.8.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.9.0/meridian.css">
+  <script src="/.meridian/ui/0.9.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -122,7 +122,11 @@ with nothing to show once the host draws its parts dropped whole (see
 but not create one. 0.8.0 added icon buttons: a button marked
 `data-om-icon="refresh"` is drawn as a circular arrow, its words its name,
 and a header action so marked is drawn by the host as that icon (see
-[the frame: seamless](#the-frame-seamless)).
+[the frame: seamless](#the-frame-seamless)). 0.9.0 added `om-entry-grid`, a
+table of typed inputs a person enters rows in, posted with the page's own
+form, the server's messages placed on their cells by path, a spreadsheet's
+paste and a CSV in a dialog (see [om-entry-grid](#om-entry-grid)); and
+`addDecimals` to `lib/decimal.js`.
 
 ## Never raw colours
 
@@ -173,7 +177,8 @@ strings the plugin sent and sorted exactly, never through floating point.
 A page in any language gives a component its data as JSON in its HTML, and
 writes no script: a `<script type="application/json">` directly inside the
 element, read once when the element is first drawn. `om-grid` takes
-`{ "columns": […], "rows": […] }` this way and `om-account-map` its data. The
+`{ "columns": […], "rows": […] }` this way, `om-account-map` its data, and
+`om-entry-grid` its columns, rows, the server's messages and its rules. The
 JSON must not close the element early: write `<`, `>` and `&` in strings as
 `\u003c`, `\u003e` and `\u0026`. What else the page puts inside (a plain
 `<table>`, plain forms) is what a browser shows without the kit, and the
@@ -761,12 +766,214 @@ the document. Twenty thousand and fifteen thousand are measured for the
 record. The gallery's [many-accounts page](src/gallery/accounts-many.html)
 shows 2,000 and 1,500.
 
+### om-entry-grid
+
+Rows a person types, since 0.9.0: a table with a typed input per cell, rows
+added as needed, posted as part of the page's own `<form>`. It is how a page
+takes tabular data (an opening balance's lots, an instrument's identifiers):
+the product owner ruled on 2026-10-03 that data entry defaults to a table
+with typed column inputs, with a CSV a secondary way in, because a CSV says no
+schema and cannot point at the one bad cell. It is its own element rather
+than a mode of `om-grid`, which is built to show records that change (keyed
+rows replaced in place, sorted, conflated per frame, virtual in high-rate
+mode); a row being typed must neither move nor be redrawn under the person.
+
+```html
+<form method="post" action="/opening/lots">
+  <input type="hidden" name="csrf" value="…">
+  <om-entry-grid name="lots" caption="Lots" min-rows="1" csv>
+    <script type="application/json">{
+      "columns": [
+        { "key": "quantity", "label": "Quantity", "type": "decimal", "required": true },
+        { "key": "cost", "label": "Cost", "type": "decimal", "places": 2, "min": "0", "path": "terms.cost", "hint": "The lot's, in all" },
+        { "key": "currency", "label": "Currency", "type": "code", "length": 3, "default": "USD" },
+        { "key": "acquired", "label": "Acquired", "type": "date", "max": "2026-09-30" },
+        { "key": "method", "label": "Method", "type": "choice", "options": [{ "value": "fifo", "label": "First in, first out" }, "specific"] },
+        { "key": "lot_id", "label": "Lot", "type": "readonly" }],
+      "rows": [{ "quantity": "10", "cost": "1500.00", "currency": "USD", "acquired": "2026-01-02", "lot_id": "L-1" }],
+      "errors": [{ "path": "lots[0].terms.cost", "message": "A cost is the lot's in all, not a price." }],
+      "rules": [{ "sum": "quantity", "equals": "15", "message": "Lots add up to {sum}; the position is {equals}." }]
+    }</script>
+    …the same rows as a plain table of inputs, for a browser without the kit…
+  </om-entry-grid>
+  <button class="primary">Save</button>
+</form>
+```
+
+| Attribute | |
+|---|---|
+| `name` | Where the rows sit, a path in the data dictionary's grammar (`lots`, `positions[0].lots`; default `rows`): every input is named under it |
+| `caption` | The table's caption, for a screen reader; also how its messages name it |
+| `min-rows`, `max-rows` | The fewest rows posted (default 0) and the most shown (default 1,000). The grid shows at least `min-rows` rows, blank ones to fill, and a grid given no rows starts with one blank row; Remove is offered above `min-rows`, Add a row below `max-rows` |
+| `csv` | Offer "Import a CSV" (below), a link under the table |
+| `add-label`, `csv-label`, `empty` | The words of Add a row, of the CSV link, and of a grid with no rows ("No rows yet.") |
+| `narrow` | `none` keeps the table where it is narrow, scrolling sideways; otherwise each row is a card under 40rem |
+
+**The columns** are declared as `om-grid`'s are, `key`, `label` and `type`,
+each with only the options it sets, all plain JSON:
+
+| `type` | Takes | Options |
+|---|---|---|
+| `text` (default) | Any text | `max_length` (characters) |
+| `decimal` | A decimal, exactly, as a string: `-12`, `1500.25`; never a float, and never a grouping comma ("Write it without grouping commas, like 1234.5") | `places` (the most decimal places, trailing zeros aside; `0` for a whole number), `min`, `max` (decimal strings, compared exactly) |
+| `date` | A day in the calendar, `YYYY-MM-DD` (a text input, so a pasted or imported bad date stays to be fixed rather than vanishing from a date picker) | `min`, `max` |
+| `code` | A currency's or an asset's code: letters, digits, `.`, `_` and `-`, posted in capitals | `length` (exactly), `max_length` (default 32) |
+| `choice` | One of its options, a `<select>`; a value given that it does not offer is kept, marked "(not a choice)", until one is chosen | `options`: strings, or `{ value, label }`; `placeholder` (default "Choose…") |
+| `readonly` | Nothing typed: shown as text and posted as it was given (a lot's ID, say) | |
+
+And on any column: `required` (in a row that is not blank), `hint` (the
+column's words for what to type, under its heading and describing each of its
+inputs; not `om-grid`'s `hint`, which names a field), `path` (where the column
+sits under a row, in the dictionary's grammar, such as `terms.cost`; default
+the `key`), `default` (a new row's value), `placeholder` and `width`. A column
+the grid cannot use (an unknown type, a key that is not a field's name, a bound
+that is not a decimal) is refused with `om-error`, never guessed: the page's
+own table then stays, and posts as it is.
+
+**Posting.** Each cell is a real input in the page's form, named by its
+path: `name[n].path`, `lots[0].quantity`, `lots[0].terms.cost`. So the form
+posts with its own token and its own submit, and the server reads the same
+names a refusal will name. A row with nothing typed in it (every cell its
+column's default, and no read-only value) is blank: it is not checked and not
+posted, and the rows posted are numbered from 0 without a gap, so `n` is a
+row's index as posted. A server reads the rows as lists, for example in Python:
+
+```python
+rows = {}
+for name, value in form.multi_items():
+    m = re.fullmatch(r"lots\[(\d+)\]\.(.+)", name)
+    if m:
+        rows.setdefault(int(m[1]), {})[m[2]] = value.strip()
+lots = [rows[i] for i in sorted(rows)]
+```
+
+and treats a row whose every value is empty as no row, since the page's own
+table (below) posts its blank rows. CSRF stays the page's form's job: the grid
+adds no field of its own and reads none.
+
+**Checked as typed.** Each cell is checked against its column as it is typed
+(lib/entry.js holds the words, for a server to share): its type and bounds at
+once, and `required` once its row is left (or the cell emptied). The message
+is under the input, which is `aria-invalid` and described by it, and is said
+once by a polite live region. A cell with a problem holds the form's submit as
+any invalid input does (`setCustomValidity`); a held submit shows every
+problem in the grid and takes the keyboard to the first, with no browser
+bubble over a message already on the cell. A button with `formnovalidate` (a
+draft's "Check") still posts what is there. A committed value is shown as it
+posts: trimmed, a code in capitals.
+
+**The server's word, by path.** The server answers with the page again,
+its messages in the grid's JSON as `errors`, or a page with script calls
+`setErrors(errors)`. Each is `{ path, message }`, the path in the data
+dictionary's grammar (meridian-design
+`spec/every-store-publishes-a-versioned-data-dictionary.md`, "Paths"), as a
+refusal's `fields` name them:
+
+| Path | Shown |
+|---|---|
+| `lots[2].terms.cost` | On the cell: row 2 as posted, the column whose `path` is `terms.cost` (or, for `terms.cost.units`, the column it goes on beneath) |
+| `lots[2]`, or a field no column has | Under the row, describing each of its cells |
+| `lots`, or no path | Over the table, with the grid's own (`role="alert"`) |
+| `lots[9].quantity`, past the rows | Over the table: "Row 10: …" |
+| `positions[0].pending`, not under `name` | Over the table when declared (the page put it here); handed back by `setErrors` for the page to show elsewhere |
+
+A message from the server is shown until its cell is changed (its row's,
+until any of the row's cells; the table's, until any cell), since the server
+will check again; it does not hold the submit. A refusal naming several
+fields with one reason is one item per path.
+
+**Rules over the rows.** A sum declared in the JSON, `{ "sum": "<a decimal
+column>", "equals": "<a decimal>", "message": "…{sum}…{equals}…" }`, is
+checked exactly as the rows change (the words default to "Quantity adds up to
+{sum}; it should be {equals}."); a page's script adds any rule with
+`addRule(rule)`, a function of the rows returning nothing, a message, `{ path,
+message }` or a list of them (a path the grid's own or under it, `[1].cost`).
+A rule's message on a cell or a row is shown at once; over the table, once a
+value is committed (so its words do not change under every key). Each holds
+the submit (the table's through the element itself, a form-associated custom
+element, where the browser has `ElementInternals`).
+
+**Paste from a spreadsheet.** Cells copied from a spreadsheet (tab-separated
+lines, a quoted cell holding a line break as spreadsheets write it) and pasted
+into a cell fill across and down from it, skipping read-only columns and
+adding rows as needed up to `max-rows`, each cell checked and each pasted
+row's required cells asked for. What is past the last column or past
+`max-rows` is left out, and the grid says so under the table and to a screen
+reader: "Pasted 12 rows. 3 cells to fix." One value pasted is the browser's
+own paste.
+
+**Import a CSV.** With `csv`, a link under the table opens a dialog (placed
+where the link is, since a framed page's viewport is the whole page): the
+columns the table takes, each with what it takes in words, so the schema is
+said; a file to upload, or the CSV pasted (a comma, semicolon or tab, found
+from its header line; at most 2 MB, read in the browser and sent nowhere).
+Its headers are matched to the columns by key, label or path, case, spacing
+and punctuation aside; where one does not match, the mapping is open to
+choose each column's header by hand (a column not in the CSV takes its
+default). Every row is previewed with each cell's problem ("3 cells to fix,
+in rows 2 and 9"), and nothing in the table changes until Apply, which
+replaces the table's rows or adds them after (asked only when it has some).
+Applied, each problem is on its cell, to fix there. Nothing in the dialog is
+posted with the page's form.
+
+**The keyboard and a screen reader.** It is a real table: a caption, a
+column header (`th scope="col"`) per column with its hint, a row header with
+the row's number, and each input labelled "Quantity, row 3". Tab moves
+through the cells in order; the arrow keys move between rows from a text
+input, and left and right at the edge of its text (a choice keeps its own
+arrows); Enter moves down a row and, on the last row, adds a row at the end
+(Shift+Enter up), and never submits the form from inside the grid. Every
+control is at least 44px tall, a touch target. A row added or removed, a
+paste, a held submit and a cell's new message are said by a polite live
+region; the table's messages are an alert.
+
+**At a phone's width** (the grid's own width under 40rem), each row is a
+card: "Row 3" with its Remove at the corner, then each input under its
+column's name, its hint under it. In light, dark or any scheme, the grid uses
+the scheme's properties only: a message in `--danger`, on the card.
+
+**Where the kit is not served.** The page puts inside the element a plain
+table of the same inputs, named the same way, each with its `aria-label`, and
+a blank row or two for more (see [the pattern](#entry-grid)). Without the
+kit's script that table is the form, and it posts; with it, the grid replaces
+it, keeping anything typed into it before the kit arrived. A page that wants
+more rows than it offers without script answers a submit button of its own
+("Add a row", `name="do" value="add-row"`) by drawing the page again with one
+more.
+
+**How fast.** `make bench` holds it in headless Chromium, typing a key a
+frame into a grid's first row (the worst place), a sum and a page's rule run
+on every key: a number typed into 1,000 rows, and a cell's message coming and
+going every other key in 100, each frame's main-thread time under 16.7 ms at
+the 95th percentile; the grid's own script is under a millisecond a key at
+1,000 rows. A message coming or going changes its row's height, and the
+browser lays out every row under it again, in a table or any other layout, so
+that frame costs in proportion to the rows below: at 1,000 rows, measured for
+the record, about 80 ms in the bench's container. A page whose people
+enter thousands of rows at once is better split into parts.
+
+| Property or method | |
+|---|---|
+| `rows` | The rows as they would post (each not blank, its values as posted, keyed by column). Setting it replaces every row, and is what the form's reset returns to |
+| `columns` | The columns; setting them redraws, keeping each row's values by key |
+| `addRow(values)`, `removeRow(index)` | Add a row at the end (its index, or -1 at `max-rows`); remove one (false at `min-rows`) |
+| `setErrors(errors)`, `clearErrors()` | The server's messages, by path (above); returns those not inside the grid |
+| `addRule(rule)` | A rule over the rows (above); returns a function removing it |
+| `checkValidity()`, `reportValidity()` | Whether every row is as its columns and rules want; the second shows every problem and takes the keyboard to the first |
+| `openImport()` | Open the CSV dialog |
+| `name`, `minRows`, `maxRows`, `size` | The attributes, and how many rows are shown |
+
+| Event | `detail` |
+|---|---|
+| `om-change` | `{ rows }`, the rows as they would post, after a person's change: a cell typed in, a row added or removed, a paste, a CSV applied |
+| `om-error` | `{ error }`: a column, a rule or the JSON the grid cannot use, or a page's rule that threw |
+
 ## Patterns
 
 The markup every plugin's page writes for the same few things: the head with
 its status and a header action, a status, a one-button form, a notice, a
-badge, tiles, a moment, a grid, the page for somebody who may read nothing
-here, and an empty state. Each is plain kit HTML, the same from any language.
+badge, tiles, a moment, a grid, an entry grid, the page for somebody who may
+read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
 An SDK's helpers that write them write exactly this, and a page written by
 hand is as good. The Python SDK's `meridian/kit.html`, coming in
 open-meridian 0.14.0 (meridian-design's
@@ -940,6 +1147,44 @@ table beside them for a browser without the kit.
   nothing.
 - With no rows, the table's body is one row of one cell across every column,
   saying `empty`: `<tr><td colspan="3">No holdings.</td></tr>`.
+
+### Entry grid
+
+Rows a person types, in an [om-entry-grid](#om-entry-grid) inside the page's
+form: its columns, rows, the server's messages and its rules declared as JSON,
+and the same rows as a plain table of inputs beside them, which is the form
+where the kit is not served. The entry grid (0.9.0) has no SDK macro yet.
+
+```html
+<form method="post" action="/opening/lots">
+  <input type="hidden" name="csrf" value="…">
+  <om-entry-grid name="lots" caption="Lots" min-rows="1" csv>
+    <script type="application/json">{"columns": [{"key": "quantity", "label": "Quantity", "type": "decimal", "required": true}, {"key": "cost", "label": "Cost", "type": "decimal", "places": 2, "path": "terms.cost", "hint": "The lot's, in all"}, {"key": "acquired", "label": "Acquired", "type": "date"}], "rows": [{"quantity": "10", "cost": "1500.00", "acquired": "2026-01-02"}, {"quantity": "4", "cost": "610.25", "acquired": "2026-10-04"}], "errors": [{"path": "lots[1].acquired", "message": "Acquired after the opening day, 2026-09-30."}], "rules": [{"sum": "quantity", "equals": "15", "message": "Lots add up to {sum}; the position is {equals}."}]}</script>
+    <div class="table-wrap"><table><caption>Lots</caption><thead><tr><th class="num">Quantity</th><th class="num">Cost <span class="hint">The lot's, in all</span></th><th>Acquired</th></tr></thead><tbody>
+      <tr><td class="num"><input name="lots[0].quantity" value="10" aria-label="Quantity, row 1"></td><td class="num"><input name="lots[0].terms.cost" value="1500.00" aria-label="Cost, row 1"></td><td><input name="lots[0].acquired" value="2026-01-02" aria-label="Acquired, row 1"></td></tr>
+      <tr><td class="num"><input name="lots[1].quantity" value="4" aria-label="Quantity, row 2"></td><td class="num"><input name="lots[1].terms.cost" value="610.25" aria-label="Cost, row 2"></td><td><input name="lots[1].acquired" value="2026-10-04" aria-label="Acquired, row 2" aria-invalid="true" aria-describedby="lots-1-acquired"><span class="hint bad-ink" id="lots-1-acquired">Acquired after the opening day, 2026-09-30.</span></td></tr>
+      <tr><td class="num"><input name="lots[2].quantity" aria-label="Quantity, row 3"></td><td class="num"><input name="lots[2].terms.cost" aria-label="Cost, row 3"></td><td><input name="lots[2].acquired" aria-label="Acquired, row 3"></td></tr>
+    </tbody></table></div>
+  </om-entry-grid>
+  <button class="primary">Save</button>
+</form>
+```
+
+- `name` always: the path the rows sit at; `caption`, `min-rows`,
+  `max-rows` and `csv` only when given.
+- The JSON is the columns, each with only the options it sets; the rows,
+  each with a value for each column it has one for; `errors`, the server's
+  messages by path, only when it has some; `rules` only when there are some.
+- The table has a `caption`, a `th` per column (a `decimal`'s `num`) with its
+  `hint`, when it has one, as a `span.hint` after a space; then a row per row
+  given, a `td` per column holding an `input` named `name[n].path`, its value
+  the row's (a `choice`, a `select` of its options; a `readonly` value as text
+  and a hidden input), each with its `aria-label`, "Label, row n"; a cell the
+  server named carries `aria-invalid="true"` and `aria-describedby` naming
+  its message, a `span.hint.bad-ink` after the input; then one blank row, or
+  more, for another row. A message on a row or the table goes over the
+  table, as a [notice](#notice) `bad`.
+- The page's own submit button follows the grid; its token is the form's.
 
 ### Nothing here
 
@@ -1417,8 +1662,8 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty |
-| `make bench` | The high-rate grid's budget, and the account map's at 2,000 and 1,500 accounts, in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width |
+| `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 100, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
 

@@ -58,3 +58,27 @@ export function groupDigits(value, separator = ",") {
   if (!m) return text;
   return m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, separator) + (m[3] || "");
 }
+
+/** The exact sum of decimal strings, as a decimal string ("10.5" + "4.25" is
+ * "14.75"): scaled to whole numbers (BigInt) and back, never through a float.
+ * Anything that is not a decimal is left out; no decimals sum to "0". */
+export function addDecimals(values) {
+  const parsed = [];
+  let places = 0;
+  for (const v of values) {
+    const d = parseDecimal(v);
+    if (!d) continue;
+    parsed.push(d);
+    places = Math.max(places, d.frac.length);
+  }
+  let total = 0n;
+  for (const d of parsed) {
+    const whole = BigInt(d.int + d.frac.padEnd(places, "0"));
+    total += d.sign < 0 ? -whole : whole;
+  }
+  const negative = total < 0n;
+  const digits = (negative ? -total : total).toString().padStart(places + 1, "0");
+  const int = digits.slice(0, digits.length - places);
+  const frac = places ? digits.slice(-places).replace(/0+$/, "") : "";
+  return `${negative ? "-" : ""}${int}${frac ? `.${frac}` : ""}`;
+}

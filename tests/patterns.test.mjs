@@ -24,8 +24,8 @@ function galleryPatterns() {
 test("each of the README's patterns is the gallery's, in order", () => {
   const readme = readmePatterns();
   const gallery = galleryPatterns();
-  assert.equal(readme.length, 10, "the head, status, action, notice, badge, tiles, a moment, grid, nothing here, empty");
-  assert.deepEqual(gallery.map((g) => g.name), ["the-head", "status", "action", "notice", "badge", "tiles", "a-moment", "grid", "nothing-here", "empty"]);
+  assert.equal(readme.length, 11, "the head, status, action, notice, badge, tiles, a moment, grid, entry grid, nothing here, empty");
+  assert.deepEqual(gallery.map((g) => g.name), ["the-head", "status", "action", "notice", "badge", "tiles", "a-moment", "grid", "entry-grid", "nothing-here", "empty"]);
   for (let i = 0; i < readme.length; i++) assert.equal(gallery[i].block, readme[i], gallery[i].name);
 });
 
@@ -36,4 +36,8 @@ test("every pattern's markup is shown under it, and the grid's JSON parses", () 
   const declared = JSON.parse(grid.match(/<script type="application\/json">([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(declared.columns.map((c) => c.key), ["instrument", "quantity", "state"]);
   assert.equal(declared.rows.length, 2);
+  const entry = galleryPatterns().find((g) => g.name === "entry-grid").block;
+  const given = JSON.parse(entry.match(/<script type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.deepEqual(given.columns.map((c) => c.key), ["quantity", "cost", "acquired"]);
+  assert.deepEqual(given.errors.map((e) => e.path), ["lots[1].acquired"]);
 });

@@ -554,6 +554,93 @@ om-instrument-picker .om-picker-status { padding: .45rem .6rem; color: var(--ink
 om-instrument-picker .om-picker-status.bad { color: var(--danger); }
 om-instrument-picker .om-picker-chosen { margin-top: .4rem; }
 
+/* ── om-entry-grid ───────────────────────────────────────────────────────── */
+
+/* Rows a person types: a table of typed inputs in the page's own form. Every
+ * control is at least 44px tall (2.75rem), a touch target; a cell's message
+ * is under its input in the danger colour, and the table's messages over the
+ * table. Where the grid is narrow (a phone), each row is a card, each input
+ * under its column's name, unless narrow="none". */
+om-entry-grid { display: block; container: om-entry-grid / inline-size; }
+om-entry-grid .om-entry-messages { margin: var(--space-3) var(--space-4); }
+om-entry-grid table.om-entry th { vertical-align: bottom; white-space: normal; padding: .5rem; }
+om-entry-grid table.om-entry td { vertical-align: top; padding: .4rem .5rem; }
+om-entry-grid table.om-entry tbody tr:hover :is(td, th) { background: none; }
+om-entry-grid table.om-entry th .hint { text-transform: none; letter-spacing: normal; font-family: var(--sans); font-weight: 400; }
+om-entry-grid .om-entry-req { color: var(--danger); }
+/* Each control sized by its box, never its text (contain: size layout), so
+ * typing in one does not lay out the whole table again. */
+om-entry-grid .om-entry :is(input[type="text"], select) { min-height: 2.75rem; min-width: 6.5rem; contain: size layout; }
+om-entry-grid .om-entry td.num input { text-align: right; font-variant-numeric: tabular-nums; }
+om-entry-grid .om-entry input[autocapitalize="characters"] { text-transform: uppercase; }
+om-entry-grid .om-entry .om-entry-n { width: 1%; padding-top: .95rem; vertical-align: top; text-align: right; color: var(--ink-soft); font-weight: 400; font-variant-numeric: tabular-nums; }
+om-entry-grid .om-entry thead .om-entry-n, om-entry-grid .om-entry .om-entry-act { width: 1%; }
+om-entry-grid .om-entry .om-entry-ro { display: inline-block; padding-top: .55rem; color: var(--ink-soft); overflow-wrap: anywhere; }
+om-entry-grid .om-entry-error { display: block; margin-top: .25rem; color: var(--danger); font-size: .82rem; line-height: 1.35; white-space: normal; text-align: left; }
+om-entry-grid tr.om-entry-invalid .om-entry-n { color: var(--danger); font-weight: 650; }
+om-entry-grid tr.om-entry-row-message td { padding-top: 0; color: var(--danger); font-size: .86rem; }
+om-entry-grid tr.om-entry-empty td { text-align: center; color: var(--ink-soft); padding: 1.5rem 1rem; }
+om-entry-grid :is(button.om-entry-remove, button.om-entry-add) { min-height: 2.75rem; }
+om-entry-grid button.om-entry-remove { min-width: 2.75rem; }
+om-entry-grid button.link.om-entry-csv { min-height: 2.75rem; padding: 0 .25rem; }
+om-entry-grid .om-entry-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4); border-top: 1px solid var(--line-soft);
+}
+om-entry-grid .om-entry-note { margin: 0; }
+om-entry-grid .om-entry-note:empty { display: none; }
+
+/* The CSV dialog: wide enough for the preview, and placed by the grid where
+ * it was opened (a framed page's viewport is the whole page). */
+om-entry-grid dialog.om-entry-dialog { position: absolute; inset: auto 0; margin: 0 auto; width: min(60rem, calc(100% - 2rem)); }
+om-entry-grid .om-entry-dialog .dialog-body > * + * { margin-top: var(--space-3); }
+om-entry-grid .om-entry-dialog :is(.om-entry-step-read, .om-entry-step-map) > * + * { margin-top: var(--space-3); }
+om-entry-grid .om-entry-dialog .om-entry-takes { font-size: .9rem; }
+om-entry-grid .om-entry-dialog .om-entry-takes summary { cursor: pointer; color: var(--accent); }
+om-entry-grid .om-entry-dialog .om-entry-takes ul { margin-top: var(--space-2); }
+om-entry-grid .om-entry-dialog .om-entry-map summary { cursor: pointer; font-weight: 550; }
+om-entry-grid .om-entry-dialog .om-entry-map-fields { margin-top: var(--space-3); }
+om-entry-grid .om-entry-dialog .om-entry-problem:empty { display: none; }
+om-entry-grid .om-entry-dialog .om-entry-preview { max-height: 24rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+om-entry-grid .om-entry-dialog .om-entry-preview th { position: sticky; top: 0; background: var(--card); }
+om-entry-grid .om-entry-dialog .om-entry-preview td[data-invalid] { box-shadow: inset 3px 0 0 var(--danger); }
+om-entry-grid .om-entry-dialog .dialog-foot { flex-wrap: wrap; align-items: center; }
+om-entry-grid .om-entry-dialog .dialog-foot .om-entry-back { margin-right: auto; }
+om-entry-grid .om-entry-dialog .dialog-foot button { min-height: 2.75rem; }
+
+@container om-entry-grid (max-width: 40rem) {
+  om-entry-grid:not([narrow="none"]) .om-entry,
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody,
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr,
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr > :is(td, th) { display: block; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[hidden] { display: none; }
+  om-entry-grid:not([narrow="none"]) .om-entry > thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] {
+    position: relative; padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--line-soft);
+  }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row]:first-child { border-top: 0; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > th.om-entry-n {
+    width: auto; padding: 0 3.5rem .5rem 0; min-height: 2.75rem; line-height: 2.75rem; text-align: left; color: var(--ink); font-weight: 600;
+  }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > th.om-entry-n::before { content: "Row "; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td { padding: 0 0 var(--space-3); border: 0; text-align: left; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td:not(.om-entry-act)::before {
+    content: attr(data-label); content: attr(data-label) / "";
+    display: block; margin-bottom: .3rem; font-size: .84rem; font-weight: 550; color: var(--ink);
+  }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td[data-required]::before { content: attr(data-label) " *"; content: attr(data-label) " *" / ""; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td[data-hint]::after {
+    content: attr(data-hint); content: attr(data-hint) / "";
+    display: block; margin-top: .25rem; font-size: .82rem; color: var(--ink-faint);
+  }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td.om-entry-act { position: absolute; top: var(--space-3); right: var(--space-4); width: auto; padding: 0; }
+  om-entry-grid:not([narrow="none"]) .om-entry :is(input[type="text"], select) { min-width: 0; }
+  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr.om-entry-row-message > td { padding: 0 var(--space-4) var(--space-3); }
+  om-entry-grid .om-entry-foot { padding-inline: var(--space-4); }
+}
+
 /* ── om-account-map ──────────────────────────────────────────────────────── */
 
 /* A dense table of external accounts, each with its link and its actions,

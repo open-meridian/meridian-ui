@@ -122,6 +122,25 @@
     <div class="panel-body"><details class="notice quiet markup" data-markup="grid"><summary>Markup</summary></details></div>
   </section>
 
+  <section class="section-head"><h2>Entry grid</h2><p>Rows typed into typed cells, in the page's own form; without the kit, the same inputs in a plain table. Shown here rather than sent.</p></section>
+  <section class="panel padded">
+<!-- pattern: entry-grid -->
+<form method="post" action="/opening/lots">
+  <input type="hidden" name="csrf" value="…">
+  <om-entry-grid name="lots" caption="Lots" min-rows="1" csv>
+    <script type="application/json">{"columns": [{"key": "quantity", "label": "Quantity", "type": "decimal", "required": true}, {"key": "cost", "label": "Cost", "type": "decimal", "places": 2, "path": "terms.cost", "hint": "The lot's, in all"}, {"key": "acquired", "label": "Acquired", "type": "date"}], "rows": [{"quantity": "10", "cost": "1500.00", "acquired": "2026-01-02"}, {"quantity": "4", "cost": "610.25", "acquired": "2026-10-04"}], "errors": [{"path": "lots[1].acquired", "message": "Acquired after the opening day, 2026-09-30."}], "rules": [{"sum": "quantity", "equals": "15", "message": "Lots add up to {sum}; the position is {equals}."}]}</script>
+    <div class="table-wrap"><table><caption>Lots</caption><thead><tr><th class="num">Quantity</th><th class="num">Cost <span class="hint">The lot's, in all</span></th><th>Acquired</th></tr></thead><tbody>
+      <tr><td class="num"><input name="lots[0].quantity" value="10" aria-label="Quantity, row 1"></td><td class="num"><input name="lots[0].terms.cost" value="1500.00" aria-label="Cost, row 1"></td><td><input name="lots[0].acquired" value="2026-01-02" aria-label="Acquired, row 1"></td></tr>
+      <tr><td class="num"><input name="lots[1].quantity" value="4" aria-label="Quantity, row 2"></td><td class="num"><input name="lots[1].terms.cost" value="610.25" aria-label="Cost, row 2"></td><td><input name="lots[1].acquired" value="2026-10-04" aria-label="Acquired, row 2" aria-invalid="true" aria-describedby="lots-1-acquired"><span class="hint bad-ink" id="lots-1-acquired">Acquired after the opening day, 2026-09-30.</span></td></tr>
+      <tr><td class="num"><input name="lots[2].quantity" aria-label="Quantity, row 3"></td><td class="num"><input name="lots[2].terms.cost" aria-label="Cost, row 3"></td><td><input name="lots[2].acquired" aria-label="Acquired, row 3"></td></tr>
+    </tbody></table></div>
+  </om-entry-grid>
+  <button class="primary">Save</button>
+</form>
+<!-- /pattern -->
+    <details class="notice quiet markup" data-markup="entry-grid"><summary>Markup</summary></details>
+  </section>
+
   <section class="section-head"><h2>Nothing here</h2><p>For somebody who may read none of the plugin's accounts: in a plugin, the page's whole content.</p></section>
 <!-- pattern: nothing-here -->
 <section class="panel padded narrow">

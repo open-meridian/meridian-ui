@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>om-entry-grid benchmark</title>
+<!-- Run by tools/bench.mjs in a real headless browser, with the built kit
+     served at kit/ beside this page, so the page links it without script of
+     its own: a browser with script turned off is one of the checks. The form
+     posts to echo, which answers with the fields it was sent, as JSON. -->
+<link rel="stylesheet" href="kit/meridian.css">
+<script src="kit/meridian.js"></script>
+</head>
+<body>
+<main class="page">
+  <p id="status">Loading.</p>
+  <form method="post" action="echo" id="form">
+    <input type="hidden" name="csrf" value="bench-token">
+    <section class="panel">
+      <om-entry-grid id="lots" name="lots" caption="Lots" min-rows="1" csv>
+        <script type="application/json">{"columns": [{"key": "quantity", "label": "Quantity", "type": "decimal", "required": true}, {"key": "cost", "label": "Cost", "type": "decimal", "places": 2, "path": "terms.cost", "hint": "The lot's, in all"}, {"key": "currency", "label": "Currency", "type": "code", "length": 3, "default": "USD"}, {"key": "acquired", "label": "Acquired", "type": "date"}, {"key": "method", "label": "Method", "type": "choice", "options": [{"value": "fifo", "label": "First in, first out"}, {"value": "specific", "label": "Specific lot"}]}], "rows": [{"quantity": "10", "cost": "1500.00", "currency": "USD", "acquired": "2026-01-02", "method": "fifo"}, {"quantity": "4", "cost": "610.25", "currency": "USD", "acquired": "2026-10-04", "method": "fifo"}], "errors": [{"path": "lots[1].acquired", "message": "Acquired after the opening day, 2026-09-30."}, {"path": "lots", "message": "Checked against the statement of 2026-09-30."}]}</script>
+        <div class="table-wrap"><table id="fallback"><caption>Lots</caption><thead><tr><th class="num">Quantity</th><th class="num">Cost</th><th>Currency</th><th>Acquired</th><th>Method</th></tr></thead><tbody>
+          <tr><td class="num"><input name="lots[0].quantity" value="10" aria-label="Quantity, row 1"></td><td class="num"><input name="lots[0].terms.cost" value="1500.00" aria-label="Cost, row 1"></td><td><input name="lots[0].currency" value="USD" aria-label="Currency, row 1"></td><td><input name="lots[0].acquired" value="2026-01-02" aria-label="Acquired, row 1"></td><td><select name="lots[0].method" aria-label="Method, row 1"><option value="">Choose…</option><option value="fifo" selected>First in, first out</option><option value="specific">Specific lot</option></select></td></tr>
+          <tr><td class="num"><input name="lots[1].quantity" value="4" aria-label="Quantity, row 2"></td><td class="num"><input name="lots[1].terms.cost" value="610.25" aria-label="Cost, row 2"></td><td><input name="lots[1].currency" value="USD" aria-label="Currency, row 2"></td><td><input name="lots[1].acquired" value="2026-10-04" aria-label="Acquired, row 2" aria-invalid="true" aria-describedby="lots-1-acquired"><span class="hint bad-ink" id="lots-1-acquired">Acquired after the opening day, 2026-09-30.</span></td><td><select name="lots[1].method" aria-label="Method, row 2"><option value="">Choose…</option><option value="fifo" selected>First in, first out</option><option value="specific">Specific lot</option></select></td></tr>
+          <tr><td class="num"><input name="lots[2].quantity" aria-label="Quantity, row 3"></td><td class="num"><input name="lots[2].terms.cost" aria-label="Cost, row 3"></td><td><input name="lots[2].currency" value="USD" aria-label="Currency, row 3"></td><td><input name="lots[2].acquired" aria-label="Acquired, row 3"></td><td><select name="lots[2].method" aria-label="Method, row 3"><option value="" selected>Choose…</option><option value="fifo">First in, first out</option><option value="specific">Specific lot</option></select></td></tr>
+        </tbody></table></div>
+      </om-entry-grid>
+    </section>
+    <p><button class="primary" id="save">Save</button></p>
+  </form>
+  <section class="panel" id="slot"></section>
+</main>
+<script type="module">
+  await customElements.whenDefined("om-entry-grid");
+  const status = document.getElementById("status");
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const pct = (xs, p) => {
+    if (!xs.length) return null;
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1))];
+  };
+  const round = (x) => (x === null ? null : Math.round(x * 100) / 100);
+  const grid = () => document.getElementById("lots");
+  const control = (g, row, key) => g.querySelectorAll("tbody tr[data-row]")[row]?.querySelector(`[data-key="${key}"]`);
+
+  /** A spreadsheet's cells pasted into a cell, as a browser hands them over. */
+  window.pasteInto = (row, key, text, g = grid()) => {
+    const target = control(g, row, key);
+    target.focus();
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    const e = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return { prevented: e.defaultPrevented, rows: g.querySelectorAll("tbody tr[data-row]").length };
+  };
+
+  /** What a cell says. */
+  window.cellState = (row, key) => {
+    const c = control(grid(), row, key);
+    const err = c.closest("td").querySelector(".om-entry-error");
+    return { value: c.value, name: c.getAttribute("name"), invalid: c.getAttribute("aria-invalid"), message: err && !err.hidden ? err.textContent : "", describedBy: c.getAttribute("aria-describedby") || "" };
+  };
+
+  /** How the grid is laid out: cards or a table, its targets, and whether the page scrolls sideways. */
+  window.layout = () => {
+    const g = grid();
+    const row = g.querySelector("tbody tr[data-row]");
+    const targets = [...g.querySelectorAll("tbody input[type=text], tbody select, button")].filter((b) => b.offsetParent !== null);
+    const err = g.querySelector(".om-entry-error:not([hidden])");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--danger)";
+    document.body.append(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      table: getComputedStyle(g.querySelector("table.om-entry")).display,
+      row: getComputedStyle(row).display,
+      head: getComputedStyle(g.querySelector("table.om-entry thead")).position,
+      smallestTarget: Math.min(...targets.map((t) => t.getBoundingClientRect().height)),
+      narrowestInput: Math.min(...[...g.querySelectorAll("tbody input[type=text]")].map((t) => t.getBoundingClientRect().width)),
+      scrollWidth: document.documentElement.scrollWidth,
+      width: innerWidth,
+      errorInk: err ? getComputedStyle(err).color : null,
+      danger,
+      labels: getComputedStyle(row.querySelector("td"), "::before").content,
+    };
+  };
+
+  /** The CSV dialog, opened: where it is and how wide. */
+  window.openCsv = () => {
+    grid().querySelector(".om-entry-csv").click();
+    const d = grid().querySelector("dialog");
+    const r = d.getBoundingClientRect();
+    const out = { open: d.open, left: r.left, right: r.right, top: r.top, width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
+    d.querySelector(".om-entry-cancel").click();
+    return out;
+  };
+
+  /**
+   * The budget: a grid of `rows` rows (a sum over them and a page's rule run
+   * on every change), typed into a key a frame in its first row (the worst
+   * place: a row whose height changes moves every row under it), each frame's
+   * main-thread time measured. `values` "number" types a number, every key
+   * good; "messages" makes the cell's message come and go every other key.
+   * Then, with `paste`, a spreadsheet's `paste` rows of six cells pasted at
+   * once into the last row, timed.
+   */
+  window.runEntryBench = async ({ rows: n = 1000, values: kind = "number", frames: count = 150, paste = 0 }) => {
+    status.textContent = `Running ${n} rows, ${kind}.`;
+    const slot = document.getElementById("slot");
+    slot.replaceChildren();
+    await frame();
+    const columns = [
+      { key: "quantity", label: "Quantity", type: "decimal", required: true },
+      { key: "cost", label: "Cost", type: "decimal", places: 2 },
+      { key: "currency", label: "Currency", type: "code", length: 3 },
+      { key: "acquired", label: "Acquired", type: "date" },
+      { key: "method", label: "Method", type: "choice", options: ["fifo", "specific"] },
+      { key: "source", label: "Source", type: "text", max_length: 200 },
+    ];
+    const rows = Array.from({ length: n }, (_, i) => ({ quantity: String(i + 1), cost: `${i}.25`, currency: "USD", acquired: "2026-01-02", method: "fifo", source: `line ${i}` }));
+    const el = document.createElement("om-entry-grid");
+    el.setAttribute("name", "big");
+    el.setAttribute("max-rows", String(n + paste + 10));
+    el.innerHTML = `<script type="application/json">${JSON.stringify({ columns, rows, rules: [{ sum: "quantity", equals: "1" }] })}<\/script>`;
+    const start = performance.now();
+    slot.append(el);
+    const drawnMs = performance.now() - start;
+    await frame();
+    const paintedMs = performance.now() - start;
+    el.addRule((all) => (all.some((r) => r.source === "forbidden") ? "No." : null));
+    for (let k = 0; k < 5; k++) await frame();
+
+    const target = control(el, 0, "quantity");
+    target.focus();
+    const values = kind === "messages" ? ["1234", "1234."] : ["1", "12", "123", "1234", "1234.5", "1234.56", "1234.5", "1234", "123", "12"];
+    const work = [];
+    const script = [];
+    let frameStart = null;
+    let left = count;
+    let i = 0;
+    const channel = new MessageChannel();
+    let done;
+    const finished = new Promise((r) => (done = r));
+    channel.port1.onmessage = () => {
+      if (frameStart !== null) work.push(performance.now() - frameStart);
+      frameStart = null;
+    };
+    const loop = (ts) => {
+      frameStart = ts;
+      if (left-- > 0) {
+        target.value = values[i++ % values.length];
+        const t0 = performance.now();
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+        script.push(performance.now() - t0);
+        requestAnimationFrame(loop);
+      } else requestAnimationFrame(() => done());
+      channel.port2.postMessage(0);
+    };
+    requestAnimationFrame(loop);
+    await finished;
+    await frame();
+    const result = {
+      rows: n,
+      values: kind,
+      frames: work.length,
+      frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },
+      framesOver16_7Ms: work.filter((w) => w > 16.7).length,
+      scriptMs: { p50: round(pct(script, 50)), p95: round(pct(script, 95)) },
+      drawnMs: round(drawnMs),
+      paintedMs: round(paintedMs),
+    };
+    if (paste) {
+      const tsv = Array.from({ length: paste }, (_, k) => [`${k}`, `${k}.5`, "eur", "2026-02-03", "specific", `pasted ${k}`].join("\t")).join("\n");
+      const pasteStart = performance.now();
+      const pasted = window.pasteInto(n - 1, "quantity", tsv, el);
+      result.paste = paste;
+      result.pasteMs = round(performance.now() - pasteStart);
+      await frame();
+      result.pastePaintedMs = round(performance.now() - pasteStart);
+      result.rowsAfterPaste = pasted.rows;
+    }
+    status.textContent = `Done: ${n} rows, ${kind}.`;
+    return result;
+  };
+
+  await frame();
+  window.entryReady = true;
+  status.textContent = "Ready.";
+</script>
+</body>
+</html>

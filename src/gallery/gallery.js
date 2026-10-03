@@ -18,6 +18,7 @@ const phone = document.getElementById("phone");
 const many = document.getElementById("many");
 const manyPhone = document.getElementById("many-phone");
 const patterns = document.getElementById("patterns");
+const patternsPhone = document.getElementById("patterns-phone");
 const sent = document.getElementById("sent");
 
 for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
@@ -69,6 +70,8 @@ function build() {
   patterns.classList.toggle("one", modes().length === 1);
   for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}`, "patterns.html", m));
   for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}, framed by the host`, "host.html", m, "page=patterns.html"));
+  patternsPhone.replaceChildren();
+  for (const m of modes()) patternsPhone.append(figure(`390px, ${m}`, "patterns.html", m));
   sent.textContent = "Frames loaded with query parameters.";
 }
 
