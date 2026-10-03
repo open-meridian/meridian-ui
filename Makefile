@@ -80,8 +80,13 @@ bench-image:
 		|| { echo "bench-image FAILED; see it with:" >&2; \
 		     echo "  DOCKER_BUILDKIT=1 docker build -f Dockerfile.check --target bench --progress=plain ." >&2; exit 1; }
 
+# Where the bench runs, for its budgets: GitHub's hosted runners hold three
+# frames the browser's own work makes slow there to budgets measured there
+# (tools/bench.mjs, RUNNER_MEASURED); everywhere else every budget is 16.7 ms.
+BENCH_ENV := $(if $(GITHUB_ACTIONS),github-runner,local)
+
 bench: bench-image
-	@docker run --rm --init --shm-size=1g $(BENCH) \
+	@docker run --rm --init --shm-size=1g -e MERIDIAN_BENCH_ENV=$(BENCH_ENV) $(BENCH) \
 		sh -c 'node tools/build.mjs >/dev/null && node tools/bench.mjs' >.bench.log 2>&1 \
 		|| { echo "bench FAILED. What it measured, and the whole of it in .bench.log:" >&2; cat .bench.log >&2; exit 1; }
 	@grep -E '^bench OK' .bench.log

@@ -26,6 +26,17 @@
 // 95th percentile under 16.7 ms: a number typed into 1,000 rows, and a cell's
 // message coming and going in 50 (in 100 and 1,000, for the record). It fails when a budget or a check is
 // not held, and prints what it measured either way.
+//
+// Every budget is 16.7 ms wherever the bench runs, but for three on GitHub's
+// hosted runners (MERIDIAN_BENCH_ENV=github-runner, which the Makefile sets
+// there): a page a frame and the map's filters, each drawing a page of rows
+// none of which was in the document, and typing into 1,000 rows of inputs.
+// What those frames cost is the browser's own work (laying out and painting
+// fifty new rows; walking the layers of 6,000 inputs), not the kit's script,
+// and on the slower of the runners' mixed hardware it is two to three times
+// what it is on a developer's machine. Each runner budget is what was
+// measured on the runners, with room over the worst run (RUNNER_MEASURED).
+// The pre-push gate, on a developer's machine, holds them to 16.7 ms.
 
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
@@ -37,6 +48,18 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 const KIT = join(ROOT, "dist", VERSION);
 const BUDGET_MS = 16.7;
+// Where the bench runs: GitHub's hosted runners, or anywhere else.
+const ENV = process.env.MERIDIAN_BENCH_ENV === "github-runner" ? "github-runner" : "local";
+// The frame time p95 (ms) each runner budget was set from: every run of the
+// bench on GitHub's runners (ubuntu-latest, 4 CPUs) from 2026-10-01 to
+// 2026-10-03, seven for the map and five for the entry grid (from 0.9.0).
+const RUNNER_MEASURED = {
+  page: [29.1, 33.2, 38.9, 19.5, 34.7, 12.8, 34.8],
+  filter: [14.5, 30.5, 33.0, 13.2, 34.9, 9.6, 31.5],
+  entry1000: [11.8, 16.3, 14.4, 8.8, 12.6],
+};
+/** The budget a held scenario is held to here. */
+const budgetOf = (s) => (ENV === "github-runner" && s.runner) || BUDGET_MS;
 
 // The budget's scenarios are held to it; the others are measured for the record.
 const SCENARIOS = [
@@ -52,8 +75,8 @@ const SCENARIOS = [
 const MAP_SCENARIOS = [
   { name: "map budget: typing a search, a key a frame", action: "type", held: true },
   { name: "map budget: typing a search, four keys a frame", action: "type-fast", held: true },
-  { name: "map budget: a page a frame, through every page", action: "page", held: true },
-  { name: "map budget: Unlinked, Linked and All, one a frame", action: "filter", held: true },
+  { name: "map budget: a page a frame, through every page", action: "page", held: true, runner: 45 },
+  { name: "map budget: Unlinked, Linked and All, one a frame", action: "filter", held: true, runner: 45 },
   { name: "map budget: grouping and folding, one a frame", action: "group", held: true },
   { name: "map budget: typing in a row's chooser of open accounts", action: "chooser", held: true },
   { name: "for the record: 20,000 and 15,000, typing a search", externals: 20000, accounts: 15000, action: "type", frames: 120, held: false },
@@ -62,7 +85,7 @@ const MAP_SCENARIOS = [
 // The entry grid's: typing into the first row, held at a size a person types
 // and recorded where a message's coming and going moves a thousand rows.
 const ENTRY_SCENARIOS = [
-  { name: "entry budget: typing a number into the first of 1,000 rows, a sum and a page's rule on every key", rows: 1000, values: "number", held: true },
+  { name: "entry budget: typing a number into the first of 1,000 rows, a sum and a page's rule on every key", rows: 1000, values: "number", held: true, runner: 22 },
   { name: "entry budget: a cell's message coming and going, every other key, in the first of 50 rows", rows: 50, values: "messages", held: true },
   { name: "for the record: the same in the first of 100 rows", rows: 100, values: "messages", held: false },
   { name: "for the record: the same in the first of 1,000 rows; then 500 rows pasted", rows: 1000, values: "messages", paste: 500, held: false },
@@ -111,7 +134,8 @@ function mapLine(r) {
   return (
     `${r.name}${placed}\n` +
     `  ${r.externals} external and ${r.accounts} deployment accounts, ${r.action}: ${r.frames} frames; at most ${r.rowsInDocumentMax} rows in the document, ${r.drawsPerFrameMax} draw a frame\n` +
-    `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)`
+    `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)` +
+    (r.held ? `; budget p95 ${r.budget}` : "")
   );
 }
 
@@ -245,8 +269,9 @@ async function entryChecks(browser, base, failed) {
     const r = await bench.evaluate((o) => window.runEntryBench(o), s);
     r.name = s.name;
     r.held = s.held;
+    r.budget = budgetOf(s);
     out.budget.push(r);
-    if (s.held) check(r.frameTimeMs.p95 < BUDGET_MS, `${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${BUDGET_MS}`);
+    if (s.held) check(r.frameTimeMs.p95 < r.budget, `${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${r.budget}`);
     if (s.paste) check(r.rowsAfterPaste === s.rows + s.paste - 1, `a paste of ${s.paste} rows into the last of ${s.rows} left ${r.rowsAfterPaste} rows`);
   }
   await bench.close();
@@ -263,7 +288,7 @@ function entryLines(e) {
     lines.push(
       `\n${r.name}\n` +
         `  ${r.rows} rows, ${r.frames} frames; declared JSON drawn in ${r.drawnMs} ms, painted by ${r.paintedMs} ms\n` +
-        `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)\n` +
+        `  frame time (ms)     p50 ${f.p50}  p95 ${f.p95}  p99 ${f.p99}  max ${f.max}  (${r.framesOver16_7Ms} frames over 16.7)${r.held ? `; budget p95 ${r.budget}` : ""}\n` +
         `  of which the grid's script (ms) p50 ${r.scriptMs.p50}  p95 ${r.scriptMs.p95}` +
         (r.paste ? `\n  ${r.paste} rows of 6 cells pasted at once into the last row in ${r.pasteMs} ms, painted by ${r.pastePaintedMs} ms` : ""),
     );
@@ -285,7 +310,13 @@ async function main() {
     await page.goto(`http://127.0.0.1:${port}/bench/grid.html?kit=${VERSION}`);
     await page.waitForFunction(() => window.benchReady === true, null, { timeout: 30000 });
     const ua = await page.evaluate(() => navigator.userAgent);
-    console.log(`browser: ${browser.browserType().name()} ${browser.version()} (${ua.includes("Headless") ? "headless" : "headed"}); cpus seen: ${await page.evaluate(() => navigator.hardwareConcurrency)}\n`);
+    console.log(`browser: ${browser.browserType().name()} ${browser.version()} (${ua.includes("Headless") ? "headless" : "headed"}); cpus seen: ${await page.evaluate(() => navigator.hardwareConcurrency)}`);
+    const own = [...MAP_SCENARIOS, ...ENTRY_SCENARIOS].filter((s) => s.held && budgetOf(s) !== BUDGET_MS);
+    console.log(
+      ENV === "github-runner"
+        ? `budgets: GitHub's runner: ${BUDGET_MS} ms a frame at p95, but ${own.map((s) => `${budgetOf(s)} ms for ${s.name.replace(/^[a-z ]+budget: /, "")}`).join("; ")} (measured there: ${Object.entries(RUNNER_MEASURED).map(([k, v]) => `${k} ${Math.min(...v)} to ${Math.max(...v)}`).join(", ")})\n`
+        : `budgets: ${BUDGET_MS} ms a frame at p95, every one\n`,
+    );
     // The flash, drawn by a real engine, under both conventions, then under reduced motion.
     // A rise is always --buy-wash and a fall --sell-wash; red-up swaps what
     // those are, so its rise is green-up's fall colour.
@@ -327,6 +358,7 @@ async function main() {
     for (const s of MAP_SCENARIOS) {
       const r = await mapPage.evaluate((opts) => window.runMapBench(opts), s);
       r.held = s.held;
+      r.budget = budgetOf(s);
       results.push(r);
       console.log(mapLine(r) + "\n");
       if (r.placed && s.held) {
@@ -334,7 +366,7 @@ async function main() {
         console.log(`map: the review of ${review.pairs} suggestions drawn in ${review.drawnMs} ms\n`);
       }
       if (!s.held) continue;
-      if (!(r.frameTimeMs.p95 < BUDGET_MS)) failed.push(`${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${BUDGET_MS}`);
+      if (!(r.frameTimeMs.p95 < r.budget)) failed.push(`${s.name}: frame time p95 ${r.frameTimeMs.p95} ms, over ${r.budget}`);
       if (r.drawsPerFrameMax > 1) failed.push(`${s.name}: ${r.drawsPerFrameMax} draws in one frame; at most one`);
       if (r.rowsInDocumentMax > MAP_ROWS_MOST) failed.push(`${s.name}: ${r.rowsInDocumentMax} rows in the document; a page holds at most ${MAP_ROWS_MOST}`);
     }
@@ -354,7 +386,11 @@ async function main() {
   }
   const held = results.filter((r) => r.held && !r.action);
   const mapHeld = results.filter((r) => r.held && r.action);
-  console.log(`bench OK: grid frame time p95 ${held.map((r) => r.frameTimeMs.p95).join(", ")} ms; map ${mapHeld.map((r) => r.frameTimeMs.p95).join(", ")} ms; entry grid ${entry.budget.filter((r) => r.held).map((r) => r.frameTimeMs.p95).join(", ")} ms; each under ${BUDGET_MS}`);
+  const p95 = (r) => (r.budget && r.budget !== BUDGET_MS ? `${r.frameTimeMs.p95} (of ${r.budget})` : r.frameTimeMs.p95);
+  console.log(
+    `bench OK: grid frame time p95 ${held.map(p95).join(", ")} ms; map ${mapHeld.map(p95).join(", ")} ms; entry grid ${entry.budget.filter((r) => r.held).map(p95).join(", ")} ms; ` +
+      (ENV === "github-runner" ? `each under ${BUDGET_MS} but where its runner budget is given` : `each under ${BUDGET_MS}`),
+  );
 }
 
 main().catch((e) => {

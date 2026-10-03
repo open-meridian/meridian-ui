@@ -762,7 +762,16 @@ external accounts and 1,500 of the deployment's declared as JSON: typing a
 search (a key a frame, and four), a page a frame, the filters, grouping and
 folding, and typing in a row's chooser, each at a frame time under 16.7 ms at
 the 95th percentile, at most one draw a frame, and at most a page of rows in
-the document. Twenty thousand and fifteen thousand are measured for the
+the document. A draw leaves the rows that stay where they are and puts in
+only those arriving, so a search narrowing or a group folded lays out little.
+A page a frame, and Unlinked to Linked, put in fifty rows none of which was in
+the document, and what that frame costs is the browser laying out and
+painting them (the map's own script is a millisecond or two): on GitHub's
+hosted runners, shared machines of mixed hardware, it measured 10 to 39 ms at
+the 95th percentile over seven runs, against about 11 on a developer's
+machine. So there, and only there, those two are held to 45 ms (the measured
+runs are in `tools/bench.mjs`, `RUNNER_MEASURED`); the pre-push gate holds
+them to 16.7. Twenty thousand and fifteen thousand are measured for the
 record. The gallery's [many-accounts page](src/gallery/accounts-many.html)
 shows 2,000 and 1,500.
 
@@ -946,7 +955,12 @@ frame into a grid's first row (the worst place), a sum and a page's rule run
 on every key: a number typed into 1,000 rows, and a cell's message coming and
 going every other key in 50, each frame's main-thread time under 16.7 ms at
 the 95th percentile; the grid's own script is under a millisecond a key at
-1,000 rows. A message coming or going changes its row's height, and the
+1,000 rows. The rest of a key's frame at 1,000 rows is the browser's: each
+text input is a layer of its own, and every frame it walks all 6,000 of them
+(to update them, and to find what is under the pointer). On GitHub's hosted
+runners that measured 9 to 16 ms at the 95th percentile over five runs, so
+there, and only there, it is held to 22 ms (`tools/bench.mjs`,
+`RUNNER_MEASURED`); the pre-push gate holds it to 16.7. A message coming or going changes its row's height, and the
 browser lays out every row under it again, in a table or any other layout, so
 that frame costs in proportion to the rows below: measured for the record,
 at the 95th percentile, about 13 ms at 100 rows and 100 ms at 1,000 in the
@@ -1664,7 +1678,7 @@ Playwright's (Chromium, pinned).
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
 | `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width |
-| `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when the budget is not held |
+| `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
 
