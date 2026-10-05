@@ -20,8 +20,9 @@
 // script, a cell is checked as it is typed and holds the submit, the server's
 // messages are on their cells, a spreadsheet's paste fills across and down,
 // rows are added and removed, and the form posts each row by its path; at a
-// phone's width each row is a card with 44px targets and nothing scrolls
-// sideways, in light and dark; and typing into a grid's first row, a sum and
+// phone's width each row is one line with 44px targets, its other fields in
+// the row opened over the page, and nothing scrolls sideways, in light and
+// dark; and typing into a grid's first row, a sum and
 // a page's rule run on every key, keeps each frame's main-thread time at the
 // 95th percentile under 16.7 ms: a number typed into 1,000 rows, and a cell's
 // message coming and going in 50 (in 100 and 1,000, for the record). It fails when a budget or a check is
@@ -241,13 +242,19 @@ async function entryChecks(browser, base, failed) {
     await phone.emulateMedia({ colorScheme: scheme });
     const l = await phone.evaluate(() => window.layout());
     out[`phone-${scheme}`] = l;
-    check(l.table === "block" && l.row === "block" && l.head === "absolute", `at 390px, ${scheme}: each row is not a card: ${JSON.stringify(l)}`);
+    check(l.table === "table" && l.row === "table-row" && l.head !== "none", `at 390px, ${scheme}: the grid is not a table of rows: ${JSON.stringify(l)}`);
+    check(l.onTheLine === 4 && l.rowHeight <= 64, `at 390px, ${scheme}: a row is not one line of its number, two fields and "…": ${JSON.stringify(l)}`);
     check(l.smallestTarget >= 44, `at 390px, ${scheme}: a target is ${l.smallestTarget}px tall, under 44`);
     check(l.scrollWidth <= l.width, `at 390px, ${scheme}: the page scrolls sideways (${l.scrollWidth}px of ${l.width})`);
     check(l.errorInk === l.danger, `at 390px, ${scheme}: a cell's message is ${l.errorInk}, not the scheme's danger ${l.danger}`);
-    check(!["none", "normal", ""].includes(l.labels), `at 390px, ${scheme}: a card's cells are not named by their columns (${l.labels})`);
   }
   check(out["phone-light"].danger !== out["phone-dark"].danger, "the danger colour is the same in light and dark: the scheme is not followed");
+  const opened = await phone.evaluate(() => window.openRow(1));
+  out.phoneRow = opened;
+  check(opened.open && opened.left >= 0 && opened.top >= 0 && opened.right <= opened.width && opened.bottom <= opened.height, `at 390px the row opened is not within the screen: ${JSON.stringify(opened)}`);
+  check(opened.shown === 5 && opened.labels.every((c) => !["none", "normal", ""].includes(c)), `at 390px the row opened does not show its five fields, each named by its column: ${JSON.stringify(opened)}`);
+  check(opened.smallestTarget >= 44, `at 390px a target in the row opened is ${opened.smallestTarget}px tall, under 44`);
+  check(opened.back, "at 390px Done does not put the row back in its place");
   const dialog = await phone.evaluate(() => window.openCsv());
   out.phoneDialog = dialog;
   check(dialog.open && dialog.left >= 0 && dialog.right <= dialog.width && dialog.scrollWidth <= dialog.width, `at 390px the CSV dialog does not fit: ${JSON.stringify(dialog)}`);
@@ -281,7 +288,7 @@ async function entryChecks(browser, base, failed) {
 function entryLines(e) {
   const lines = [
     `entry grid: script off, the page's own table posted ${e.noScript.length} fields; with the kit, ${e.withScript.length} (the rows typed, by path, the blank ones not)`,
-    `entry grid: at 390px each row a card, the smallest target ${e["phone-light"].smallestTarget}px, ${e["phone-light"].scrollWidth}px wide of ${e["phone-light"].width}; danger ${e["phone-light"].danger} light, ${e["phone-dark"].danger} dark`,
+    `entry grid: at 390px each row one line (${e["phone-light"].rowHeight}px, its number, two fields and "…"), its other fields in the row opened (${e.phoneRow.shown} fields, within the screen), the smallest target ${e["phone-light"].smallestTarget}px, ${e["phone-light"].scrollWidth}px wide of ${e["phone-light"].width}; danger ${e["phone-light"].danger} light, ${e["phone-dark"].danger} dark`,
   ];
   for (const r of e.budget) {
     const f = r.frameTimeMs;

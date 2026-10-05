@@ -43,7 +43,22 @@
 // the grid's; a row with nothing typed in it is blank, and is neither checked
 // nor posted. Without the kit, what the page puts inside the element (a plain
 // table of the same inputs) is what posts.
+//
+// Every page fits one screen (meridian-design tasks/design/every-page-fits-
+// one-screen.md; the entry grid on a phone ruled 2026-10-05):
+//
+// - Rows a page: as many as fit the page's height budget (lib/budget.js, as
+//   om-pager works it out), the rest behind Previous and Next under the
+//   table; a row the keyboard is sent to (a new row, a problem, an arrow)
+//   is turned to first. All of them fitting, no pager.
+// - Where the grid is narrow (a phone), each row is one line: its number,
+//   the grid's first two columns and "…"; the row's other fields are a tap
+//   away, on "…", which opens the whole row over the page (the row itself,
+//   moved into a dialog, every field under its column's name, and back in
+//   its place on Done or Escape), so every input stays in the form. A row
+//   whose hidden fields have a problem marks its "…".
 
+import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
 import { addDecimals, compareDecimal, parseDecimal } from "../lib/decimal.js";
 import {
@@ -66,6 +81,11 @@ const MOST_ROWS = 1000;
 const MOST_CSV = 2 * 1024 * 1024;
 /** Rows the CSV preview draws; every row is checked. */
 const PREVIEWED = 200;
+/** The columns a row shows on its one line where the grid is narrow; the
+ * stylesheet says the same (the cells after the row's number). */
+const ON_THE_LINE = 2;
+/** A row's cells and its message, off the page shown. */
+const PAGED = "om-entry-paged";
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const isBlankText = (v) => v === undefined || v === null || String(v).trim() === "";
@@ -154,6 +174,23 @@ export class OmEntryGrid extends HTMLElement {
   #live = null;
   #dialog = null;
   #import = null;
+  // The pager: the page shown, rows a page (null: every row), and its parts.
+  #page = 0;
+  #per = null;
+  #pager = null;
+  #prev = null;
+  #pagerSaid = null;
+  #next = null;
+  #frame = null;
+  #seenWidth = -1;
+  #watch = null;
+  #onResize = () => this.#schedule();
+  // A row opened over the page, and the dialog it is moved into.
+  #open = null;
+  #rowDialog = null;
+  #rowBody = null;
+  #rowTitle = null;
+  #rowSaid = null;
 
   constructor() {
     super();
@@ -165,6 +202,8 @@ export class OmEntryGrid extends HTMLElement {
   }
 
   connectedCallback() {
+    globalThis.addEventListener?.("resize", this.#onResize);
+    if (this.#built) this.#schedule();
     if (this.#built || this.#waiting) return;
     // Upgraded before the document is parsed: wait for the declared JSON and
     // the table the page shows without the kit.
@@ -173,6 +212,10 @@ export class OmEntryGrid extends HTMLElement {
       this.#waiting = false;
       if (!this.#built && this.isConnected) this.#build();
     });
+  }
+
+  disconnectedCallback() {
+    globalThis.removeEventListener?.("resize", this.#onResize);
   }
 
   attributeChangedCallback(name) {
@@ -186,6 +229,7 @@ export class OmEntryGrid extends HTMLElement {
     if (name === "name" || name === "min-rows" || name === "max-rows") {
       this.#renumber();
       this.#evaluate(true);
+      this.#paged();
     }
   }
 
@@ -243,7 +287,7 @@ export class OmEntryGrid extends HTMLElement {
     if (this.#built) this.#load(this.#seed, []);
   }
 
-  /** How many rows are shown, blank ones included. */
+  /** How many rows the grid holds, blank ones included, on every page. */
   get size() {
     return this.#rows.length;
   }
@@ -256,6 +300,7 @@ export class OmEntryGrid extends HTMLElement {
     this.#renumber();
     this.#evaluate(true);
     this.#paintRow(row);
+    this.#paged();
     return row.n;
   }
 
@@ -263,6 +308,7 @@ export class OmEntryGrid extends HTMLElement {
   removeRow(index) {
     const row = this.#rows[index];
     if (!row || this.#rows.length <= this.minRows) return false;
+    if (this.#open === row) this.#closeRow(false);
     row.tr.remove();
     row.msgTr.remove();
     this.#rows.splice(index, 1);
@@ -270,6 +316,7 @@ export class OmEntryGrid extends HTMLElement {
     for (const cell of row.cells.values()) this.#ruleCells.delete(cell);
     this.#renumber();
     this.#evaluate(true);
+    this.#paged();
     return true;
   }
 
@@ -287,6 +334,7 @@ export class OmEntryGrid extends HTMLElement {
     const rest = this.#placeErrors(errors, false);
     this.#paintAll();
     this.#renderMessages();
+    this.#schedule();
     const cells = this.#rows.reduce((n, r) => n + [...r.cells.values()].filter((c) => c.server).length + (r.server ? 1 : 0), 0);
     const said = cells + this.#serverTable.length;
     if (said) this.#say(`${plural(said, "problem")} to look at in ${this.getAttribute("caption") || "the table"}.`);
@@ -297,6 +345,7 @@ export class OmEntryGrid extends HTMLElement {
     this.#clearServer();
     this.#paintAll();
     this.#renderMessages();
+    this.#schedule();
   }
 
   /**
@@ -326,7 +375,7 @@ export class OmEntryGrid extends HTMLElement {
   reportValidity() {
     this.#revealAll();
     const first = this.#firstProblem();
-    if (first) first.focus();
+    if (first) this.#focus(first);
     return !first;
   }
 
@@ -371,6 +420,18 @@ export class OmEntryGrid extends HTMLElement {
     this.#tbody = el("tbody");
     this.#table.append(this.#caption, this.#thead, this.#tbody);
     wrap.append(this.#table);
+    // The pager: shown only when the rows do not all fit.
+    this.#pager = el("nav", "pager om-entry-pager");
+    this.#pager.setAttribute("aria-label", "Pages of rows");
+    this.#pager.hidden = true;
+    this.#prev = el("button", "", "← Previous");
+    this.#next = el("button", "", "Next →");
+    this.#pagerSaid = el("span", "pager-said");
+    this.#pagerSaid.setAttribute("aria-live", "polite");
+    for (const b of [this.#prev, this.#next]) b.type = "button";
+    this.#pager.append(this.#prev, this.#pagerSaid, this.#next);
+    this.#prev.addEventListener("click", () => this.#turn(-1));
+    this.#next.addEventListener("click", () => this.#turn(1));
     const foot = el("div", "om-entry-foot");
     this.#add = el("button", "om-entry-add", this.getAttribute("add-label") || "Add a row");
     this.#add.type = "button";
@@ -382,7 +443,7 @@ export class OmEntryGrid extends HTMLElement {
     foot.append(this.#add, this.#csv, this.#note);
     this.#live = el("div", "visually-hidden om-entry-live");
     this.#live.setAttribute("aria-live", "polite");
-    this.append(this.#messages, wrap, foot, this.#live);
+    this.append(this.#messages, wrap, this.#pager, foot, this.#live);
     this.#empty = el("tr", "om-entry-empty");
     this.#empty.append(el("td", "", this.#emptyText()));
 
@@ -394,20 +455,38 @@ export class OmEntryGrid extends HTMLElement {
       this.#changed();
     });
     this.#csv.addEventListener("click", () => this.#openImport());
-    this.#tbody.addEventListener("input", (e) => this.#onInput(e, "input"));
-    this.#tbody.addEventListener("change", (e) => this.#onInput(e, "change"));
-    this.#tbody.addEventListener("keydown", (e) => this.#onKey(e));
-    this.#tbody.addEventListener("paste", (e) => this.#onPaste(e));
-    this.#tbody.addEventListener("focusout", (e) => this.#onLeave(e));
-    this.#tbody.addEventListener("click", (e) => {
-      const b = e.target.closest && e.target.closest("button.om-entry-remove");
-      if (b) this.#onRemove(b);
-    });
+    this.#listen(this.#tbody);
     // A submit held for this grid's problems: show every one, the keyboard to
     // the first, and no browser bubble over a message already on the cell.
     this.addEventListener("invalid", (e) => this.#onInvalid(e), true);
 
     this.#load(this.#seed, Array.isArray(data.errors) ? data.errors : [], typed);
+    // Paged again when the grid is drawn at another width, or first shown (a
+    // tab opened): not when only its height changes, which paging does.
+    if (globalThis.ResizeObserver) {
+      this.#watch = new ResizeObserver(([entry]) => {
+        const width = Math.round(entry.contentRect.width);
+        if (width === this.#seenWidth) return;
+        this.#seenWidth = width;
+        this.#schedule();
+      });
+      this.#watch.observe(this);
+    }
+  }
+
+  // A person's edits, wherever the row is: in the table, or opened over the page.
+  #listen(tbody) {
+    tbody.addEventListener("input", (e) => this.#onInput(e, "input"));
+    tbody.addEventListener("change", (e) => this.#onInput(e, "change"));
+    tbody.addEventListener("keydown", (e) => this.#onKey(e));
+    tbody.addEventListener("paste", (e) => this.#onPaste(e));
+    tbody.addEventListener("focusout", (e) => this.#onLeave(e));
+    tbody.addEventListener("click", (e) => {
+      const remove = e.target.closest && e.target.closest("button.om-entry-remove");
+      if (remove) this.#onRemove(remove);
+      const more = e.target.closest && e.target.closest("button.om-entry-more");
+      if (more) this.#onMore(more);
+    });
   }
 
   #emptyText() {
@@ -433,6 +512,7 @@ export class OmEntryGrid extends HTMLElement {
 
   // Draw the head, and every row from `rows`, with `errors` placed.
   #load(rows, errors, typed = null) {
+    if (this.#open) this.#closeRow(false);
     for (const row of this.#rows) row.tr.remove(), row.msgTr.remove();
     this.#rows = [];
     this.#ruleCells.clear();
@@ -461,6 +541,8 @@ export class OmEntryGrid extends HTMLElement {
     this.#evaluate(true);
     this.#paintAll();
     this.#renderMessages();
+    this.#page = 0;
+    this.#paged();
   }
 
   // Blank rows to the minimum; a grid with no rows given starts with one.
@@ -503,7 +585,7 @@ export class OmEntryGrid extends HTMLElement {
   }
 
   // A row's model and its drawing: { id, n, posted, values, blank, left,
-  // server, rule, tr, num, remove, msgTr, msg, cells: key -> cell }; a cell is
+  // server, rule, tr, num, more, remove, msgTr, msg, cells: key -> cell }; a cell is
   // { col, td, control, shown, err, own, block, rule, server, touched }.
   #makeRow(given) {
     const row = {
@@ -549,9 +631,15 @@ export class OmEntryGrid extends HTMLElement {
       tr.append(td);
     }
     const act = el("td", "om-entry-act");
+    // The row's other fields, where the grid is narrow; there only (the stylesheet).
+    const more = el("button", "om-entry-more", "…");
+    more.type = "button";
+    more.setAttribute("aria-haspopup", "dialog");
+    more.setAttribute("aria-expanded", "false");
+    more.hidden = this.#columns.length <= ON_THE_LINE;
     const remove = el("button", "om-entry-remove", "Remove");
     remove.type = "button";
-    act.append(remove);
+    act.append(more, remove);
     tr.append(act);
     const msgTr = el("tr", "om-entry-row-message");
     msgTr.hidden = true;
@@ -559,7 +647,7 @@ export class OmEntryGrid extends HTMLElement {
     msg.id = `${this.#uid}-${row.id}-message`;
     msg.colSpan = this.#columns.length + 2;
     msgTr.append(msg);
-    Object.assign(row, { tr, num, remove, msgTr, msg });
+    Object.assign(row, { tr, num, more, remove, msgTr, msg });
     row.blank = this.#isBlank(row);
     return row;
   }
@@ -643,6 +731,8 @@ export class OmEntryGrid extends HTMLElement {
         row.n = n;
         row.num.textContent = String(n + 1);
         row.remove.setAttribute("aria-label", `Remove row ${n + 1}`);
+        row.moreLabel = `Every field of row ${n + 1}`;
+        this.#markMore(row);
         for (const cell of row.cells.values()) {
           if (cell.col.type !== "readonly") cell.control.setAttribute("aria-label", `${cell.col.label}, row ${n + 1}`);
         }
@@ -726,6 +816,19 @@ export class OmEntryGrid extends HTMLElement {
     row.msgTr.hidden = !message;
     row.tr.classList.toggle("om-entry-invalid", Boolean(message));
     for (const cell of row.cells.values()) this.#paintCell(row, cell, announce);
+    this.#markMore(row);
+    if (this.#open === row) this.#sayOpen(row);
+  }
+
+  // "…" says how many of the fields it opens have a problem shown.
+  #markMore(row) {
+    if (!row.moreLabel) return;
+    let bad = 0;
+    let i = 0;
+    for (const cell of row.cells.values()) if (i++ >= ON_THE_LINE && cell.shownMessage) bad++;
+    const label = bad ? `${row.moreLabel}, ${plural(bad, "problem")}` : row.moreLabel;
+    if (row.more.getAttribute("aria-label") !== label) row.more.setAttribute("aria-label", label);
+    row.more.classList.toggle("om-entry-more-bad", bad > 0);
   }
 
   #paintAll() {
@@ -860,7 +963,7 @@ export class OmEntryGrid extends HTMLElement {
     const cells = this.#rows.reduce((n, r) => n + [...r.cells.values()].filter((c) => c.block).length, 0);
     const table = this.#tableProblems().length;
     this.#say(`Not sent: ${[cells ? `${plural(cells, "cell")} to fix` : "", table ? plural(table, "problem") + " with the rows" : ""].filter(Boolean).join(" and ")}.`);
-    first?.focus();
+    if (first) this.#focus(first);
   }
 
   // The table's messages: the server's, the rules' (as of the last committed
@@ -877,12 +980,14 @@ export class OmEntryGrid extends HTMLElement {
     if (!said.length) {
       this.#messages.replaceChildren();
       this.#messages.hidden = true;
+      this.#schedule();
       return;
     }
     const ul = el("ul", "plain");
     for (const t of said) ul.append(el("li", "", t));
     this.#messages.replaceChildren(ul);
     this.#messages.hidden = false;
+    this.#schedule();
   }
 
   // ── The server's messages ────────────────────────────────────────────────
@@ -996,8 +1101,15 @@ export class OmEntryGrid extends HTMLElement {
     if (!this.removeRow(at)) return;
     this.#say(`Row ${at + 1} removed.`);
     const next = this.#rows[Math.min(at, this.#rows.length - 1)];
-    (next ? next.remove : this.#add).focus();
-    if (next && next.remove.disabled) this.#focusCell(next.n, 0);
+    // The next row's Remove; where the grid is narrow, its "…" (Remove is in the row opened).
+    if (!next) this.#add.focus();
+    else {
+      this.#showRow(next);
+      if (next.remove.disabled) this.#focusCell(next.n, 0);
+      else if (this.#laidOut(next.remove)) next.remove.focus();
+      else if (this.#laidOut(next.more)) next.more.focus();
+      else this.#focusCell(next.n, 0);
+    }
     this.#changed();
   }
 
@@ -1015,7 +1127,34 @@ export class OmEntryGrid extends HTMLElement {
     const row = this.#rows[rowIndex];
     const col = this.#editable()[columnIndex];
     if (!row || !col) return false;
-    row.cells.get(col.key).control.focus();
+    this.#focus(row.cells.get(col.key).control);
+    return true;
+  }
+
+  /** The keyboard to a control of the grid: its row's page turned to first,
+   * and where the grid is narrow and its field is off the line, its row
+   * opened over the page; an open row closed for a control of another. */
+  #focus(control) {
+    const tr = control.closest && control.closest("tr[data-row]");
+    const row = tr && this.#rows.find((r) => r.tr === tr);
+    if (row) {
+      if (this.#open && this.#open !== row) this.#closeRow(false);
+      this.#showRow(row);
+      if (this.#open !== row && !this.#laidOut(control)) {
+        this.#openRow(row, control);
+        return;
+      }
+    }
+    control.focus();
+  }
+
+  /** Whether the stylesheet lays `el` out: not display: none, nor in a cell that is. */
+  #laidOut(el) {
+    const view = this.ownerDocument.defaultView;
+    if (!view || !view.getComputedStyle) return true;
+    for (let e = el; e && e !== this; e = e.parentElement) {
+      if (e.hidden || view.getComputedStyle(e).display === "none") return false;
+    }
     return true;
   }
 
@@ -1031,6 +1170,19 @@ export class OmEntryGrid extends HTMLElement {
     const text = cell.control.localName === "input";
     const r = row.n;
     let to = null;
+    if (this.#open === row) {
+      // A row opened over the page, its fields one under another: up and
+      // down (from a text input) and Enter go between them, Enter on the
+      // last is Done; never to another row.
+      const back = (e.key === "ArrowUp" && text) || (e.key === "Enter" && e.shiftKey);
+      const on = (e.key === "ArrowDown" && text) || (e.key === "Enter" && !e.shiftKey);
+      if (e.key === "Enter") e.preventDefault();
+      if (!back && !on) return;
+      e.preventDefault();
+      if (on && c === editable.length - 1 && e.key === "Enter") this.#closeRow(true);
+      else this.#focusCell(r, c + (on ? 1 : -1));
+      return;
+    }
     switch (e.key) {
       case "ArrowUp":
         if (text) to = [r - 1, c];
@@ -1127,6 +1279,7 @@ export class OmEntryGrid extends HTMLElement {
     ].filter(Boolean).join(" ");
     this.#note.textContent = words;
     this.#say(words);
+    this.#paged();
     this.#changed();
     return filled;
   }
@@ -1142,6 +1295,190 @@ export class OmEntryGrid extends HTMLElement {
     this.#setControl(cell, value);
     cell.touched = true;
     cell.server = "";
+  }
+
+  // ── Pages of rows ────────────────────────────────────────────────────────
+
+  // The rows changed: the page shown at once, and how many fit on the next frame.
+  #paged() {
+    this.#applyPage();
+    this.#schedule();
+  }
+
+  #schedule() {
+    if (this.#frame !== null || !this.#built) return;
+    const raf = globalThis.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+    this.#frame = raf(() => {
+      this.#frame = null;
+      this.#layout();
+    });
+  }
+
+  // How many rows fit the page's height budget (lib/budget.js): measured
+  // with the rows shown now, then one fewer while the page is still too tall
+  // (a row with a message is taller). Every row when the grid is not drawn,
+  // or none is laid out yet.
+  #layout() {
+    if (!this.isConnected || !this.#rows.length) {
+      this.#per = null;
+      this.#applyPage();
+      return;
+    }
+    // The row with the keyboard stays in view; else the first shown.
+    const active = this.ownerDocument.activeElement;
+    const focused = active ? this.#rows.findIndex((r) => r.tr.contains(active)) : -1;
+    const anchor = focused >= 0 ? focused : this.#per ? this.#page * this.#per : 0;
+    const shown = this.#rows.filter((r) => !r.tr.classList.contains(PAGED)).map((r) => r.tr);
+    const fit = rowsThatFit(shown);
+    if (fit === null || fit >= this.#rows.length) {
+      this.#per = null;
+      this.#applyPage();
+      if (fit === null) return;
+      // Every row and no pager: still too tall, it pages after all.
+      if (contentHeight() <= pageBudget() + 0.5) return;
+    }
+    let per = Math.min(fit ?? this.#rows.length, this.#rows.length - 1);
+    const budget = pageBudget();
+    this.#per = Math.max(1, per);
+    this.#page = Math.floor(anchor / this.#per);
+    this.#applyPage();
+    for (let i = 0; i < 200 && per > 1 && contentHeight() > budget + 0.5; i++) {
+      this.#per = --per;
+      this.#page = Math.floor(anchor / per);
+      this.#applyPage();
+    }
+  }
+
+  // Show the page's rows, hide the rest, and say which.
+  #applyPage() {
+    if (!this.#built) return;
+    const total = this.#rows.length;
+    const per = this.#per && this.#per < total ? this.#per : total || 1;
+    const pages = Math.max(1, Math.ceil(total / per));
+    this.#page = Math.min(Math.max(0, this.#page), pages - 1);
+    const start = this.#page * per;
+    this.#rows.forEach((row, i) => {
+      const off = i < start || i >= start + per;
+      if (row.tr.classList.contains(PAGED) !== off) {
+        row.tr.classList.toggle(PAGED, off);
+        row.msgTr.classList.toggle(PAGED, off);
+      }
+    });
+    this.#pager.hidden = pages <= 1;
+    const last = Math.min(total, start + per);
+    this.#pagerSaid.textContent = `Rows ${start + 1}–${last} of ${total}`;
+    this.#prev.disabled = this.#page <= 0;
+    this.#next.disabled = this.#page >= pages - 1;
+  }
+
+  // The page holding `row`.
+  #showRow(row) {
+    const i = this.#rows.indexOf(row);
+    if (i < 0 || !this.#per || this.#per >= this.#rows.length) return;
+    const page = Math.floor(i / this.#per);
+    if (page === this.#page) return;
+    this.#page = page;
+    this.#applyPage();
+  }
+
+  #turn(by) {
+    if (this.#open) this.#closeRow(false);
+    this.#page += by;
+    this.#applyPage();
+    this.#say(this.#pagerSaid.textContent + ".");
+  }
+
+  // ── A row opened over the page ───────────────────────────────────────────
+
+  #onMore(button) {
+    const row = this.#rows.find((r) => r.more === button);
+    if (!row) return;
+    if (this.#open === row) this.#closeRow(true);
+    else this.#openRow(row);
+  }
+
+  /** Open `row` over the page: the row itself moved into a dialog, so its
+   * inputs stay in the form, the keyboard to `control` or the first field
+   * off the line. */
+  #openRow(row, control = null) {
+    if (this.#open) this.#closeRow(false);
+    if (!this.#rowDialog) this.#buildRowDialog();
+    this.#showRow(row);
+    const d = this.#rowDialog;
+    this.#open = row;
+    this.#rowTitle.textContent = `Row ${row.n + 1}`;
+    this.#rowBody.append(row.tr);
+    this.#sayOpen(row);
+    row.more.setAttribute("aria-expanded", "true");
+    if (d.showModal) d.showModal();
+    else d.setAttribute("open", "");
+    const off = [...row.cells.values()].slice(ON_THE_LINE).find((c) => c.col.type !== "readonly");
+    (control || off?.control || this.#firstControl(row) || row.remove).focus();
+  }
+
+  /** Put the opened row back in its place; `back` gives the keyboard to its "…". */
+  #closeRow(back) {
+    const row = this.#open;
+    if (!row) return;
+    this.#open = null;
+    if (this.#rows.includes(row)) row.msgTr.before(row.tr);
+    row.more.setAttribute("aria-expanded", "false");
+    const d = this.#rowDialog;
+    if (d.open) {
+      if (d.close) d.close();
+      else d.removeAttribute("open");
+    }
+    // Its fields were left: its required cells say so.
+    if (!row.blank && !row.left) {
+      row.left = true;
+      this.#paintRow(row);
+    }
+    if (back && row.more.isConnected) row.more.focus();
+  }
+
+  // The opened row's own message, over its fields.
+  #sayOpen(row) {
+    const message = row.rule || row.server || "";
+    this.#rowSaid.textContent = message;
+    this.#rowSaid.hidden = !message;
+  }
+
+  #buildRowDialog() {
+    const d = el("dialog", "om-entry-row-dialog");
+    const title = `${this.#uid}-row-title`;
+    d.setAttribute("aria-labelledby", title);
+    const head = el("div", "dialog-head");
+    this.#rowTitle = el("h2", "", "Row");
+    this.#rowTitle.id = title;
+    head.append(this.#rowTitle);
+    const body = el("div", "dialog-body");
+    this.#rowSaid = el("p", "bad-ink om-entry-row-said");
+    this.#rowSaid.hidden = true;
+    const table = el("table", "om-entry-one");
+    table.append(el("caption", "visually-hidden", this.getAttribute("caption") || ""));
+    this.#rowBody = el("tbody");
+    table.append(this.#rowBody);
+    body.append(this.#rowSaid, table);
+    const foot = el("div", "dialog-foot");
+    const done = el("button", "primary om-entry-done", "Done");
+    done.type = "button";
+    foot.append(done);
+    d.append(head, body, foot);
+    this.append(d);
+    this.#rowDialog = d;
+    this.#listen(this.#rowBody);
+    done.addEventListener("click", () => this.#closeRow(true));
+    // Escape, or a click on the backdrop: put back at once, the keyboard to its "…".
+    d.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      this.#closeRow(true);
+    });
+    d.addEventListener("close", () => {
+      if (!d.open) this.#closeRow(true);
+    });
+    d.addEventListener("click", (e) => {
+      if (e.target === d) this.#closeRow(true);
+    });
   }
 
   // ── CSV, in a dialog ─────────────────────────────────────────────────────
@@ -1430,7 +1767,8 @@ export class OmEntryGrid extends HTMLElement {
     this.#pad();
     this.#renumber();
     const first = filled.flatMap((row) => [...row.cells.values()]).find((c) => c.block);
-    (first ? first.control : filled[0]?.cells.get(editable[0].key).control)?.focus();
+    const to = first ? first.control : filled[0]?.cells.get(editable[0].key).control;
+    if (to) this.#focus(to);
   }
 
   // ── Saying ───────────────────────────────────────────────────────────────

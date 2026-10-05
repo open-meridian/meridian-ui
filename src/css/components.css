@@ -659,8 +659,9 @@ om-instrument-picker .om-picker-chosen { margin-top: .4rem; }
 /* Rows a person types: a table of typed inputs in the page's own form. Every
  * control is at least 44px tall (2.75rem), a touch target; a cell's message
  * is under its input in the danger colour, and the table's messages over the
- * table. Where the grid is narrow (a phone), each row is a card, each input
- * under its column's name, unless narrow="none". */
+ * table. As many rows a page as fit, the pager under them. Where the grid is
+ * narrow (a phone), each row is one line, its other fields a tap away,
+ * unless narrow="none". */
 om-entry-grid { display: block; container: om-entry-grid / inline-size; }
 om-entry-grid .om-entry-messages { margin: var(--space-3) var(--space-4); }
 om-entry-grid table.om-entry th { vertical-align: bottom; white-space: normal; padding: .5rem; }
@@ -708,37 +709,58 @@ om-entry-grid .om-entry-dialog .dialog-foot { flex-wrap: wrap; align-items: cent
 om-entry-grid .om-entry-dialog .dialog-foot .om-entry-back { margin-right: auto; }
 om-entry-grid .om-entry-dialog .dialog-foot button { min-height: 2.75rem; }
 
+/* Pages of rows: a row off the page shown, and its message, are not drawn. */
+om-entry-grid tr.om-entry-paged { display: none; }
+om-entry-grid .om-entry-pager { margin: 0; padding: .3rem var(--space-4); border-top: 1px solid var(--line-soft); }
+/* "…" opens a row's other fields; drawn only where the grid is narrow. */
+om-entry-grid button.om-entry-more { display: none; min-width: 2.75rem; min-height: 2.75rem; padding: 0 .5rem; }
+om-entry-grid button.om-entry-more.om-entry-more-bad { border-color: var(--danger); color: var(--danger); }
+
+/* A row opened over the page (where the grid is narrow, its "…"): the row
+ * itself, moved into a dialog, every field under its column's name, its hint
+ * under it; Remove at its foot, Done in the dialog's. */
+om-entry-grid dialog.om-entry-row-dialog { max-height: calc(var(--om-page-height) - 2rem); overflow: auto; }
+om-entry-grid .om-entry-row-said { margin: 0 0 var(--space-3); }
+om-entry-grid .om-entry-row-dialog .dialog-foot button { min-height: 2.75rem; }
+om-entry-grid .om-entry-one,
+om-entry-grid .om-entry-one > tbody,
+om-entry-grid .om-entry-one > tbody > tr,
+om-entry-grid .om-entry-one > tbody > tr > td { display: block; }
+om-entry-grid .om-entry-one { width: 100%; }
+om-entry-grid .om-entry-one > tbody > tr > th.om-entry-n { display: none; }
+om-entry-grid .om-entry-one > tbody > tr > td { padding: 0 0 var(--space-3); border: 0; text-align: left; }
+om-entry-grid .om-entry-one > tbody > tr:hover > td { background: none; }
+om-entry-grid .om-entry-one > tbody > tr > td:not(.om-entry-act)::before {
+  content: attr(data-label); content: attr(data-label) / "";
+  display: block; margin-bottom: .3rem; font-size: .84rem; font-weight: 550; color: var(--ink);
+}
+om-entry-grid .om-entry-one > tbody > tr > td[data-required]::before { content: attr(data-label) " *"; content: attr(data-label) " *" / ""; }
+om-entry-grid .om-entry-one > tbody > tr > td[data-hint]::after {
+  content: attr(data-hint); content: attr(data-hint) / "";
+  display: block; margin-top: .25rem; font-size: .82rem; color: var(--ink-faint);
+}
+om-entry-grid .om-entry-one :is(input[type="text"], select) { min-height: 2.75rem; }
+om-entry-grid .om-entry-one td.num input { text-align: right; font-variant-numeric: tabular-nums; }
+om-entry-grid .om-entry-one input[autocapitalize="characters"] { text-transform: uppercase; }
+om-entry-grid .om-entry-one .om-entry-ro { display: inline-block; color: var(--ink-soft); overflow-wrap: anywhere; }
+om-entry-grid .om-entry-one > tbody > tr > td.om-entry-act { padding: 0; }
+om-entry-grid .om-entry-one button.om-entry-more { display: none; }
+
+/* Where the grid is narrow (a phone), unless narrow="none": each row one
+ * line, its number, the grid's first two columns and "…"; its other columns
+ * (heading and cells), its hints and its Remove a tap away, in the row
+ * opened. (The meridian-design ruling of 2026-10-05; the cards of 0.9.0, a
+ * row three lines of three fields, are retired.) */
 @container om-entry-grid (max-width: 40rem) {
-  om-entry-grid:not([narrow="none"]) .om-entry,
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody,
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr,
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr > :is(td, th) { display: block; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[hidden] { display: none; }
-  om-entry-grid:not([narrow="none"]) .om-entry > thead {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-  }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] {
-    position: relative; padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--line-soft);
-  }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row]:first-child { border-top: 0; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > th.om-entry-n {
-    width: auto; padding: 0 3.5rem .5rem 0; min-height: 2.75rem; line-height: 2.75rem; text-align: left; color: var(--ink); font-weight: 600;
-  }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > th.om-entry-n::before { content: "Row "; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td { padding: 0 0 var(--space-3); border: 0; text-align: left; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td:not(.om-entry-act)::before {
-    content: attr(data-label); content: attr(data-label) / "";
-    display: block; margin-bottom: .3rem; font-size: .84rem; font-weight: 550; color: var(--ink);
-  }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td[data-required]::before { content: attr(data-label) " *"; content: attr(data-label) " *" / ""; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td[data-hint]::after {
-    content: attr(data-hint); content: attr(data-hint) / "";
-    display: block; margin-top: .25rem; font-size: .82rem; color: var(--ink-faint);
-  }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr[data-row] > td.om-entry-act { position: absolute; top: var(--space-3); right: var(--space-4); width: auto; padding: 0; }
+  om-entry-grid:not([narrow="none"]) .om-entry > :is(thead, tbody) > tr > :is(th, td):nth-child(n+4):not(.om-entry-act) { display: none; }
+  om-entry-grid:not([narrow="none"]) .om-entry > thead th .hint { display: none; }
+  om-entry-grid:not([narrow="none"]) .om-entry { width: 100%; }
   om-entry-grid:not([narrow="none"]) .om-entry :is(input[type="text"], select) { min-width: 0; }
-  om-entry-grid:not([narrow="none"]) .om-entry > tbody > tr.om-entry-row-message > td { padding: 0 var(--space-4) var(--space-3); }
-  om-entry-grid .om-entry-foot { padding-inline: var(--space-4); }
+  om-entry-grid:not([narrow="none"]) .om-entry th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  om-entry-grid:not([narrow="none"]) .om-entry button.om-entry-more { display: inline-flex; align-items: center; justify-content: center; }
+  om-entry-grid:not([narrow="none"]) .om-entry button.om-entry-remove { display: none; }
+  om-entry-grid:not([narrow="none"]) .om-entry .om-entry-n { padding-inline: .25rem; }
+  om-entry-grid .om-entry-foot, om-entry-grid .om-entry-pager { padding-inline: var(--space-3); }
 }
 
 /* ── om-account-map ──────────────────────────────────────────────────────── */

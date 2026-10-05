@@ -134,7 +134,8 @@ a framed page's host holds to the screen under its chrome; compact chrome
 (`table.one-line`, `.list-row.one-line`, `om-grid`'s `one-line`) with the
 whole row a click away (`details.row-detail`) and `.wide-only` columns a
 phone leaves out; `om-pager`, as many rows a page as fit, in place or from
-the server; `om-account-map`'s `page-size="auto"`; and the overflow check,
+the server; `om-account-map`'s `page-size="auto"`; `om-entry-grid` paged to the screen and, on a phone,
+one line a row with the rest a tap away; and the overflow check,
 `lib/fit.js` and `make fit`.
 
 ## Never raw colours
@@ -878,7 +879,7 @@ mode); a row being typed must neither move nor be redrawn under the person.
 | `min-rows`, `max-rows` | The fewest rows posted (default 0) and the most shown (default 1,000). The grid shows at least `min-rows` rows, blank ones to fill, and a grid given no rows starts with one blank row; Remove is offered above `min-rows`, Add a row below `max-rows` |
 | `csv` | Offer "Import a CSV" (below), a link under the table |
 | `add-label`, `csv-label`, `empty` | The words of Add a row, of the CSV link, and of a grid with no rows ("No rows yet.") |
-| `narrow` | `none` keeps the table where it is narrow, scrolling sideways; otherwise each row is a card under 40rem |
+| `narrow` | `none` keeps the table where it is narrow, every column, scrolling sideways; otherwise under 40rem each row is one line, its first two columns and "…" for the rest (below) |
 
 **The columns** are declared as `om-grid`'s are, `key`, `label` and `type`,
 each with only the options it sets, all plain JSON:
@@ -998,10 +999,27 @@ control is at least 44px tall, a touch target. A row added or removed, a
 paste, a held submit and a cell's new message are said by a polite live
 region; the table's messages are an alert.
 
-**At a phone's width** (the grid's own width under 40rem), each row is a
-card: "Row 3" with its Remove at the corner, then each input under its
-column's name, its hint under it. In light, dark or any scheme, the grid uses
-the scheme's properties only: a message in `--danger`, on the card.
+**One screen** (0.10.0; meridian-design
+`tasks/design/every-page-fits-one-screen.md`). The grid shows as many rows a
+page as fit the page's [height budget](#one-screen), as `om-pager` works it
+out, with Previous, "Rows 1–8 of 40" and Next under them when they do not all
+fit; every row is in the form and posts, whichever page shows. The keyboard
+sent to a row (Add a row, Enter on the last row, an arrow, a held submit's
+first problem, a CSV applied) turns to its page first.
+
+**At a phone's width** (the grid's own width under 40rem), each row is one
+line (the entry grid on a phone, ruled 2026-10-05): its number, the grid's
+first two columns, under their headings, and "…". "…" opens the whole row
+over the page, a dialog titled "Row 3" with every field under its column's
+name and its hint under it, a field's message on it, and Remove; Done,
+Escape or a click outside puts the row back in its place, the keyboard on
+its "…". The row itself is moved into the dialog, so every input stays in
+the form; up, down and Enter go between its fields, Enter on the last is
+Done. A field off the line that the keyboard is sent to opens its row, and a
+row whose fields off the line have a problem marks its "…" in `--danger`
+("Every field of row 3, 1 problem"). The 0.9.0 layout, each row a card of
+every field, is retired. In light, dark or any scheme, the grid uses the
+scheme's properties only: a message in `--danger`.
 
 **Where the kit is not served.** The page puts inside the element a plain
 table of the same inputs, named the same way, each with its `aria-label`, and
@@ -1739,9 +1757,10 @@ wrap" at a phone's width). Since 0.10.0 the kit carries what that takes:
   href="#id">`), and, for a page in a host's frame, the framed page against
   its frame. `make fit` holds every page of the gallery to it, each tab, on
   its own and framed by the stand-in host; `make shots SHOTS=<dir>` writes a
-  screenshot of each. What it measures but does not yet fail on is listed in
-  `tools/fit.mjs`'s `HELD_BACK`, each with why: the entry grid's cards at a
-  phone's width, until a ruling.
+  screenshot of each, and holds the entry grid on a phone: a row one line,
+  the row opened over the page within it, forty rows paged. What it measures
+  but does not yet fail on, until a ruling, would be listed in
+  `tools/fit.mjs`'s `HELD_BACK`, each with why; nothing is.
 
 ## The scheme contract
 

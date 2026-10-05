@@ -61,10 +61,11 @@
     return { value: c.value, name: c.getAttribute("name"), invalid: c.getAttribute("aria-invalid"), message: err && !err.hidden ? err.textContent : "", describedBy: c.getAttribute("aria-describedby") || "" };
   };
 
-  /** How the grid is laid out: cards or a table, its targets, and whether the page scrolls sideways. */
+  /** How the grid is laid out on a phone: each row one line (its number, two
+   * fields and "…"), its targets, and whether the page scrolls sideways. */
   window.layout = () => {
     const g = grid();
-    const row = g.querySelector("tbody tr[data-row]");
+    const row = g.querySelector("table.om-entry > tbody > tr[data-row]");
     const targets = [...g.querySelectorAll("tbody input[type=text], tbody select, button")].filter((b) => b.offsetParent !== null);
     const err = g.querySelector(".om-entry-error:not([hidden])");
     const probe = document.createElement("span");
@@ -75,21 +76,40 @@
     return {
       table: getComputedStyle(g.querySelector("table.om-entry")).display,
       row: getComputedStyle(row).display,
-      head: getComputedStyle(g.querySelector("table.om-entry thead")).position,
+      head: getComputedStyle(g.querySelector("table.om-entry thead")).display,
+      onTheLine: [...row.cells].filter((c) => getComputedStyle(c).display !== "none").length,
+      rowHeight: Math.round(row.getBoundingClientRect().height),
       smallestTarget: Math.min(...targets.map((t) => t.getBoundingClientRect().height)),
-      narrowestInput: Math.min(...[...g.querySelectorAll("tbody input[type=text]")].map((t) => t.getBoundingClientRect().width)),
+      narrowestInput: Math.min(...[...g.querySelectorAll("tbody input[type=text]")].filter((t) => t.offsetParent !== null).map((t) => t.getBoundingClientRect().width)),
       scrollWidth: document.documentElement.scrollWidth,
       width: innerWidth,
       errorInk: err ? getComputedStyle(err).color : null,
       danger,
-      labels: getComputedStyle(row.querySelector("td"), "::before").content,
     };
+  };
+
+  /** Row `n` opened over the page by its "…": where the dialog is, its
+   * fields named by their columns; then put back, by Done. */
+  window.openRow = (n) => {
+    const g = grid();
+    g.querySelectorAll("table.om-entry > tbody > tr[data-row]")[n].querySelector(".om-entry-more").click();
+    const d = g.querySelector("dialog.om-entry-row-dialog");
+    const r = d.getBoundingClientRect();
+    const out = {
+      open: d.open, left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: innerWidth, height: innerHeight,
+      labels: [...d.querySelectorAll("td[data-label]")].map((td) => getComputedStyle(td, "::before").content),
+      shown: [...d.querySelectorAll("td[data-label]")].filter((td) => getComputedStyle(td).display !== "none").length,
+      smallestTarget: Math.min(...[...d.querySelectorAll("input[type=text], select, button")].filter((t) => t.getClientRects().length > 0).map((t) => t.getBoundingClientRect().height)),
+    };
+    d.querySelector(".om-entry-done").click();
+    out.back = g.querySelectorAll("table.om-entry > tbody > tr[data-row]")[n]?.isConnected === true && !d.open;
+    return out;
   };
 
   /** The CSV dialog, opened: where it is and how wide. */
   window.openCsv = () => {
     grid().querySelector(".om-entry-csv").click();
-    const d = grid().querySelector("dialog");
+    const d = grid().querySelector("dialog.om-entry-dialog");
     const r = d.getBoundingClientRect();
     const out = { open: d.open, left: r.left, right: r.right, top: r.top, width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
     d.querySelector(".om-entry-cancel").click();

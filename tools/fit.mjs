@@ -42,13 +42,11 @@ export const GALLERY = [
 ];
 
 // What the check measures but does not fail on, each until a ruling: the
-// page, its tab and the screen, and why. Printed with every run.
-const ENTRY_AT_PHONE =
-  "om-entry-grid's cards at a phone's width (ruled in design/the-kit-fits-a-phone-and-richer-cells): the pattern's three rows of three fields do not fit 390×844; the entry grid's phone layout under the one-screen rule needs the product owner's word";
-export const HELD_BACK = {
-  "gallery/patterns.html#p-entry@phone": ENTRY_AT_PHONE,
-  "gallery/host.html?page=patterns.html, the framed page#p-entry@phone": ENTRY_AT_PHONE,
-};
+// page, its tab and the screen (`page#tab@phone`), and why. Printed with
+// every run. Empty: the entry grid's phone layout, held back here until the
+// product owner's word, was ruled on 2026-10-05 and is built (one line a row,
+// the rest a tap away, paged).
+export const HELD_BACK = {};
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
@@ -218,6 +216,92 @@ async function rowChecks(browser, base, shots) {
   return failed;
 }
 
+/**
+ * The entry grid on a phone (ruled 2026-10-05), in a real browser: each row
+ * one line, its number, the first two columns and "…"; "…" opens the row
+ * over the page with every field, which still fits, and Escape puts it back
+ * in its place; with forty rows more it pages, Add a row turning to the new
+ * one, and the page still fits. Returns what failed.
+ */
+async function entryChecks(browser, base, shots) {
+  const failed = [];
+  const check = (ok, what) => ok || failed.push(`entry grid at 390×844: ${what}`);
+  const size = SIZES.find((s) => s.name === "phone");
+  const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
+  page.on("pageerror", (e) => failed.push(`entry grid at 390×844: the page threw: ${e.message}`));
+  await page.goto(`${base}gallery/patterns.html#p-entry`);
+  await settled(page);
+  const line = await page.evaluate(() => {
+    const g = document.querySelector("#p-entry om-entry-grid");
+    return [...g.querySelectorAll("table.om-entry > tbody > tr[data-row]")].map((tr) => ({
+      cells: [...tr.cells].filter((c) => getComputedStyle(c).display !== "none").length,
+      height: Math.round(tr.getBoundingClientRect().height),
+      more: getComputedStyle(tr.querySelector(".om-entry-more")).display !== "none",
+      marked: tr.querySelector(".om-entry-more").classList.contains("om-entry-more-bad"),
+    }));
+  });
+  check(line.length === 2, `${line.length} rows, not the pattern's 2`);
+  check(line.every((r) => r.cells === 4), `a row shows other than its number, two fields and "…": ${JSON.stringify(line)}`);
+  check(line.every((r) => r.more && r.height <= 64), `a row is not one line: ${JSON.stringify(line)}`);
+  check(line[1]?.marked && !line[0]?.marked, `"…" does not mark the row whose hidden field has the server's message: ${JSON.stringify(line)}`);
+  await page.locator("#p-entry tbody tr[data-row]").nth(1).locator(".om-entry-more").click();
+  const opened = await page.evaluate(() => {
+    const d = document.querySelector("#p-entry dialog.om-entry-row-dialog");
+    const r = d.getBoundingClientRect();
+    const acquired = d.querySelector('input[data-key="acquired"]');
+    const err = acquired && acquired.closest("td").querySelector(".om-entry-error");
+    return {
+      open: d.open,
+      inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+      title: d.querySelector("h2").textContent,
+      fields: [...d.querySelectorAll("td[data-label]")].map((td) => getComputedStyle(td, "::before").content),
+      message: err && !err.hidden ? err.textContent : "",
+      focused: document.activeElement?.getAttribute("data-key"),
+      inForm: acquired?.form === document.querySelector("#p-entry form"),
+    };
+  });
+  check(opened.open && opened.inside, `"…" does not open the row over the page: ${JSON.stringify(opened)}`);
+  check(opened.title === "Row 2" && opened.fields.length === 3 && opened.fields.every((c) => c.includes("Quantity") || c.includes("Cost") || c.includes("Acquired")), `the row opened does not show every field under its name: ${JSON.stringify(opened)}`);
+  check(opened.message === "Acquired after the opening day, 2026-09-30.", `the hidden field's message is not on it in the row opened: ${JSON.stringify(opened)}`);
+  check(opened.focused === "acquired" && opened.inForm, `the keyboard is not on the first field off the line, or it left the form: ${JSON.stringify(opened)}`);
+  const fits = fitProblems(await page.evaluate(measureFit), size);
+  check(!fits.length, `with a row opened the page does not fit: ${fits.join("; ")}`);
+  if (shots) await page.screenshot({ path: join(shots, `patterns-p-entry-row-open-${size.name}.png`) });
+  await page.keyboard.press("Escape");
+  const back = await page.evaluate(() => {
+    const g = document.querySelector("#p-entry om-entry-grid");
+    const rows = [...g.querySelectorAll("table.om-entry > tbody > tr[data-row]")];
+    return { open: g.querySelector("dialog.om-entry-row-dialog").open, rows: rows.length, second: rows[1]?.querySelector('[data-key="quantity"]').value, focused: document.activeElement?.classList.contains("om-entry-more") };
+  });
+  check(!back.open && back.rows === 2 && back.second === "4" && back.focused, `Escape does not put the row back in its place, the keyboard on its "…": ${JSON.stringify(back)}`);
+  // Many rows: paged, the page still fitting; Add a row turns to the new one.
+  await page.evaluate(() => {
+    const g = document.querySelector("#p-entry om-entry-grid");
+    for (let i = 0; i < 40; i++) g.addRow({ quantity: String(i + 1) });
+  });
+  await settled(page);
+  const paged = await page.evaluate(() => {
+    const g = document.querySelector("#p-entry om-entry-grid");
+    const nav = g.querySelector("nav.om-entry-pager");
+    return { shown: g.querySelectorAll("table.om-entry > tbody > tr[data-row]:not(.om-entry-paged)").length, pager: !nav.hidden, said: nav.querySelector(".pager-said").textContent };
+  });
+  check(paged.pager && paged.shown > 1 && paged.shown < 42 && paged.said === `Rows 1–${paged.shown} of 42`, `42 rows are not paged: ${JSON.stringify(paged)}`);
+  const pagedFits = fitProblems(await page.evaluate(measureFit), size);
+  check(!pagedFits.length, `paged, the page does not fit: ${pagedFits.join("; ")}`);
+  if (shots) await page.screenshot({ path: join(shots, `patterns-p-entry-paged-${size.name}.png`) });
+  await page.locator("#p-entry .om-entry-add").click();
+  await settled(page);
+  const added = await page.evaluate(() => {
+    const g = document.querySelector("#p-entry om-entry-grid");
+    return { label: document.activeElement?.getAttribute("aria-label"), said: g.querySelector(".pager-said").textContent };
+  });
+  check(added.label === "Quantity, row 43" && / of 43$/.test(added.said) && added.said.includes("–43 "), `Add a row does not turn to the new row: ${JSON.stringify(added)}`);
+  const addedFits = fitProblems(await page.evaluate(measureFit), size);
+  check(!addedFits.length, `a row added, the page does not fit: ${addedFits.join("; ")}`);
+  await page.close();
+  return failed;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   let shots = null;
@@ -252,6 +336,9 @@ async function main() {
     const rows = await rowChecks(browser, base, shots);
     console.log(rows.length ? `one-line rows and the pager: FAILED\n  ${rows.join("\n  ")}` : "one-line rows and the pager: a row's detail opens on a click on its row and over the page, which still fits; Escape closes it; with script off its … opens it; a pager turns its pages");
     failed.push(...rows);
+    const entry = await entryChecks(browser, base, shots);
+    console.log(entry.length ? `the entry grid on a phone: FAILED\n  ${entry.join("\n  ")}` : `the entry grid on a phone: a row one line, its number, two fields and "…"; "…" opens the row over the page with every field and the hidden field's message, the page still fitting; Escape puts it back; 42 rows paged, the page fitting; Add a row turns to the new one`);
+    failed.push(...entry);
   } finally {
     await browser.close();
     server.close();

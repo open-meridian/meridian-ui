@@ -667,19 +667,141 @@ async function at(width, attrs = "") {
   return (sel) => win.getComputedStyle(doc.querySelector(sel));
 }
 
-test("at a phone's width each row is a card, each input under its column's name; touch targets are 44px", async () => {
+test("at a phone's width each row is one line: its number, the first two columns and \"…\"; touch targets are 44px", async () => {
   const phone = await at(390);
-  assert.equal(phone("table.om-entry").display, "block");
-  assert.equal(phone("tbody tr[data-row]").display, "block");
-  assert.equal(phone("tbody tr[data-row] td").display, "block");
-  assert.equal(phone("thead").position, "absolute", "the head kept for a screen reader, out of sight");
-  assert.equal(phone("tbody tr[data-row] td.om-entry-act").position, "absolute", "Remove at the card's corner");
-  for (const sel of ["tbody input[type=text]", "tbody select", ".om-entry-remove", ".om-entry-add"]) assert.equal(phone(sel).minHeight, "44px", sel);
+  assert.equal(phone("table.om-entry").display, "table", "still a table of rows");
+  assert.notEqual(phone("tbody tr[data-row]").display, "block", "a row is not a card");
+  assert.notEqual(phone("thead").display, "none", "the head names the columns on the line");
+  for (const n of [1, 2, 3]) assert.notEqual(phone(`tbody tr[data-row] > :nth-child(${n})`).display, "none", `cell ${n} is on the line`);
+  for (const n of [4, 5, 6, 7, 8]) assert.equal(phone(`tbody tr[data-row] > :nth-child(${n})`).display, "none", `cell ${n} is a tap away`);
+  assert.equal(phone("thead tr > :nth-child(4)").display, "none", "and its heading");
+  assert.notEqual(phone("tbody tr[data-row] td.om-entry-act").display, "none", "the row's last cell holds \"…\"");
+  assert.notEqual(phone(".om-entry-more").display, "none", "\"…\" on the line");
+  assert.equal(phone(".om-entry-remove").display, "none", "Remove is in the row opened");
+  for (const sel of ["tbody input[type=text]", "tbody select", ".om-entry-more", ".om-entry-add"]) assert.equal(phone(sel).minHeight, "44px", sel);
   const desk = await at(1200);
-  assert.notEqual(desk("table.om-entry").display, "block");
+  assert.notEqual(desk("tbody tr[data-row] > :nth-child(6)").display, "none", "every column at a desktop's width");
+  assert.equal(desk(".om-entry-more").display, "none", "and no \"…\"");
   assert.equal(desk("tbody input[type=text]").minHeight, "44px", "a touch target at any width");
   const none = await at(390, 'narrow="none"');
-  assert.notEqual(none("table.om-entry").display, "block", "narrow=none keeps the table, scrolling sideways");
+  assert.notEqual(none("tbody tr[data-row] > :nth-child(6)").display, "none", "narrow=none keeps every column, scrolling sideways");
+  assert.equal(none(".om-entry-more").display, "none");
+});
+
+test("\"…\" opens the row over the page, every field still in the form; Done puts it back in its place", async () => {
+  const g = await grid();
+  const form = g.closest("form");
+  const before = posted(form);
+  const [first, second] = rowsOf(g);
+  const more = second.querySelector("button.om-entry-more");
+  assert.equal(more.textContent, "…");
+  assert.equal(more.getAttribute("aria-label"), "Every field of row 2");
+  assert.equal(more.getAttribute("aria-expanded"), "false");
+  assert.equal(more.hidden, false, "more columns than the line holds");
+  more.click();
+  const d = g.querySelector("dialog.om-entry-row-dialog");
+  assert.ok(d.open, "the row's dialog is open");
+  assert.equal(d.querySelector("h2").textContent, "Row 2");
+  assert.equal(second.parentElement.closest("dialog"), d, "the row itself, moved into it");
+  assert.equal(more.getAttribute("aria-expanded"), "true");
+  assert.equal(document.activeElement, second.querySelector('[data-key="currency"]'), "the keyboard on the first field off the line");
+  assert.deepEqual(posted(form), before, "every input is still in the form, in order of the rows");
+  // Typed in the row opened: checked, and posted.
+  type(second.querySelector('[data-key="currency"]'), "US");
+  assert.ok(second.querySelector('[data-key="currency"]').closest("td").querySelector(".om-entry-error").textContent, "its message on its cell");
+  d.querySelector(".om-entry-done").click();
+  assert.equal(d.open, false);
+  assert.equal(rowsOf(g)[1], second, "back in its place");
+  assert.equal(second.nextElementSibling.classList.contains("om-entry-row-message"), true, "before its message");
+  assert.equal(first.nextElementSibling.nextElementSibling, second);
+  assert.equal(document.activeElement, more, "the keyboard back on its \"…\"");
+  assert.equal(more.getAttribute("aria-label"), "Every field of row 2, 1 problem", "\"…\" says a field it opens has a problem");
+  assert.ok(more.classList.contains("om-entry-more-bad"));
+});
+
+test("Remove in the row opened closes it; a grid of two columns has no \"…\"", async () => {
+  const g = await grid();
+  const second = rowsOf(g)[1];
+  second.querySelector("button.om-entry-more").click();
+  const d = g.querySelector("dialog.om-entry-row-dialog");
+  second.querySelector("button.om-entry-remove").click();
+  assert.equal(d.open, false);
+  assert.equal(rowsOf(g).length, 1);
+  assert.equal(d.querySelectorAll("tr[data-row]").length, 0, "nothing left in the dialog");
+  const two = await grid({ columns: COLUMNS.slice(0, 2), rows: ROWS });
+  assert.ok(rowsOf(two).every((r) => r.querySelector("button.om-entry-more").hidden), "everything is on the line");
+});
+
+// ── Pages of rows ────────────────────────────────────────────────────────────
+
+const ROW_H = 40;
+const REST_H = 100;
+
+/** Heights as a browser would lay the grid out: each row drawn 40px, the
+ * pager 40px when shown, and 100px of the rest of the page; the budget is
+ * the window's height. */
+function laidOut(height) {
+  window.happyDOM.setViewport({ width: 1440, height });
+  const drawn = (el) => !el.hidden && !el.closest("[hidden]") && !el.classList.contains("om-entry-paged");
+  const proto = window.HTMLElement.prototype;
+  const original = proto.getBoundingClientRect;
+  proto.getBoundingClientRect = function () {
+    let h = 0;
+    if (this.localName === "tr" && this.dataset.row) h = drawn(this) ? ROW_H : 0;
+    else if (this.matches("nav.om-entry-pager")) h = drawn(this) ? ROW_H : 0;
+    else if (this.localName === "form") {
+      const rows = [...this.querySelectorAll("table.om-entry tr[data-row]")].filter(drawn).length;
+      const nav = [...this.querySelectorAll("nav.om-entry-pager")].filter(drawn).length;
+      h = REST_H + rows * ROW_H + nav * ROW_H;
+    }
+    return { x: 0, y: 0, left: 0, top: 0, right: 1000, width: 1000, height: h, bottom: h };
+  };
+  return () => (proto.getBoundingClientRect = original);
+}
+
+const onPage = (g) => rowsOf(g).filter((r) => !r.classList.contains("om-entry-paged")).map((r) => r.querySelector('[data-key="quantity"]').value);
+const frames = () => new Promise((r) => setTimeout(r, 40));
+
+test("as many rows a page as fit the budget, the pager under them; Add a row turns to the new one", async () => {
+  const undo = laidOut(400);
+  try {
+    const rows = Array.from({ length: 20 }, (_, i) => ({ ...ROWS[0], quantity: String(i + 1) }));
+    const g = await grid({ columns: COLUMNS, rows });
+    await frames();
+    // 400 less the rest (100) and the pager (40), over 40 a row: 6.
+    assert.deepEqual(onPage(g), ["1", "2", "3", "4", "5", "6"]);
+    const nav = g.querySelector("nav.om-entry-pager");
+    assert.equal(nav.hidden, false);
+    assert.equal(nav.querySelector(".pager-said").textContent, "Rows 1–6 of 20");
+    const [prev, next] = nav.querySelectorAll("button");
+    assert.equal(prev.disabled, true);
+    next.click();
+    assert.deepEqual(onPage(g), ["7", "8", "9", "10", "11", "12"]);
+    assert.equal(posted(g.closest("form")).filter(([k]) => k.endsWith(".quantity")).length, 20, "every row posts, on every page");
+    g.querySelector(".om-entry-add").click();
+    assert.equal(document.activeElement.getAttribute("aria-label"), "Quantity, row 21");
+    assert.equal(nav.querySelector(".pager-said").textContent, "Rows 19–21 of 21", "turned to the new row's page");
+    // A held submit takes the keyboard to the first problem, on its page.
+    type(cell(g, 1, "cost"), "x");
+    g.querySelector(".om-entry-add").click();
+    assert.equal(g.reportValidity(), false);
+    assert.equal(document.activeElement, cell(g, 1, "cost"));
+    assert.equal(nav.querySelector(".pager-said").textContent, "Rows 1–6 of 22");
+  } finally {
+    undo();
+  }
+});
+
+test("every row fitting, no pager", async () => {
+  const undo = laidOut(2000);
+  try {
+    const g = await grid();
+    await frames();
+    assert.equal(onPage(g).length, 2);
+    assert.equal(g.querySelector("nav.om-entry-pager").hidden, true);
+  } finally {
+    undo();
+  }
 });
 
 test("the grid's CSS names only the scheme's properties, and its error ink is the danger colour", () => {
