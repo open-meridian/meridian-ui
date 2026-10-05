@@ -702,7 +702,8 @@ test("on its own, the page is exactly as it was before the frame rules", () => {
   // And it draws what the frame would drop.
   assert.equal(now.style("h1").display, "block");
   assert.equal(now.style("#page-tabs").display, "flex");
-  assert.equal(now.style("#first").marginTop, "20px");
+  // The gap between the page's parts is the compact one (0.10.0), a token.
+  assert.match(COMPONENTS, /\.page > \* \+ \* \{ margin-top: var\(--space-4\); \}/);
   assert.equal(now.style(".page").maxWidth, "1152px", "72rem");
 });
 

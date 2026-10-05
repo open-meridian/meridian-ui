@@ -9,9 +9,16 @@
 <script type="module" src="host.js"></script>
 <style>
   /* The stand-in's own layout; colours are still only the scheme's. The
-   * frame has no border and no background: the page is drawn on this one. */
-  #plugin { display: block; width: 100%; height: 12rem; border: 0; }
-  #said, #offered, #told { margin-top: var(--space-4); font: .8rem var(--mono); }
+   * frame has no border and no background: the page is drawn on this one.
+   * As the dashboard does, the frame takes the viewport's height under this
+   * page's chrome, whatever its page says it needs: that is the page's
+   * height budget, and a page that fits it fits one screen. */
+  main.host { display: flex; flex-direction: column; height: var(--om-page-height); }
+  main.host > * { flex: none; }
+  #plugin { display: block; width: 100%; flex: 1 1 0; min-height: 8rem; border: 0; }
+  #log { margin-top: var(--space-2); padding: .3rem .75rem; }
+  #log > summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #said, #offered, #told { margin: var(--space-2) 0 0; font: .8rem var(--mono); }
   /* The header, as the dashboard draws it on every tab and at every level:
    * on the left the plugin's name and its status dot right after it; on the
    * right the page's actions immediately left of the level switch, which is
@@ -43,12 +50,12 @@
 </style>
 </head>
 <body>
-<main class="page wide">
+<main class="page wide host">
   <header class="page-head" id="host-head">
     <div class="host-title"><h1 id="name" title="Sample plugin">Sample plugin</h1><span id="dot"></span></div>
     <p><span class="faint mono">sample-1</span>. A stand-in for the dashboard's view of one plugin. This page
       draws the heading and the tab row, and frames the plugin's page seamlessly: the page drops its own, and
-      the frame takes its height from the page's <code>meridian:size</code> messages. The dot after the
+      the frame takes the viewport's height under this page's chrome, the page's height budget. The dot after the
       plugin's name is the page's status, drawn here from its <code>meridian:status</code>. The buttons left of
       the level switch are the page's header actions, drawn here from its <code>meridian:actions</code> (an icon
       where the kit knows one, its words the button's name and tooltip); pressing one sends
@@ -68,9 +75,11 @@
     <a class="tab on" aria-current="page" href="#positions">Positions</a>
   </nav>
   <div id="slot"></div>
-  <p class="faint" id="said">Waiting for the page's first size.</p>
-  <p class="faint" id="offered">No header actions from the page yet.</p>
-  <p class="faint" id="told">No status from the page yet.</p>
+  <details class="notice quiet" id="log"><summary>What the page told this host</summary>
+    <p class="faint" id="said">Waiting for the page's first size.</p>
+    <p class="faint" id="offered">No header actions from the page yet.</p>
+    <p class="faint" id="told">No status from the page yet.</p>
+  </details>
 </main>
 </body>
 </html>

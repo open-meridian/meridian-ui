@@ -10,3 +10,7 @@ import "./om-account-map.js";
 import "./om-moment.js";
 import "./om-status.js";
 import "./om-entry-grid.js";
+import "./om-pager.js";
+// Not an element: one-line rows' detail by a click on the row, Escape, and a
+// cut cell's whole text on hover (lib/rows.js).
+import "../lib/rows.js";

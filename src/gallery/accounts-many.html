@@ -35,13 +35,12 @@
   <div class="notice info" role="status" id="said">2,000 external accounts, 1,500 of the deployment's. A link here is shown, not sent.</div>
 
   <section class="panel">
-    <div class="panel-body">
-      <h2>Link each account</h2>
-      <p class="muted" id="summary">Each account the plugin reaches is recorded against the deployment's account it is
+    <div class="panel-body" style="padding-block: var(--space-2)">
+      <p class="muted" id="summary" style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Each account the plugin reaches is recorded against the deployment's account it is
         linked to, and one nothing links is not recorded. Link it to an existing account; a deployment admin may also
-        create one for it.</p>
+        create one for it. As many a page as fit (<code>page-size="auto"</code>).</p>
     </div>
-    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several no-new-account status-heading="Sync state"
+    <om-account-map id="map" action="accounts/link" token-name="csrf" token="gallery-token" group-by="connection" link-several no-new-account status-heading="Sync state" page-size="auto"
                     empty="No accounts yet: they appear here once the venue is read."></om-account-map>
   </section>
 

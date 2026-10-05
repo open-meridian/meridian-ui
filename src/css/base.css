@@ -7,6 +7,14 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+/* The page's height budget: the screen it is to fit (meridian-design
+ * tasks/design/every-page-fits-one-screen.md). It is the page's own viewport:
+ * on its own, the window's; framed, the frame's, which the host holds to the
+ * viewport under its own chrome. A pager and a panel size from it; a page
+ * placed in a box of another height may set it. */
+:root { --om-page-height: 100vh; }
+@supports (height: 100dvh) { :root { --om-page-height: 100dvh; } }
+
 body {
   margin: 0;
   color: var(--ink);

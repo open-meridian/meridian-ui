@@ -12,13 +12,11 @@ const select = document.getElementById("scheme");
 const layout = document.getElementById("layout");
 const direction = document.getElementById("direction");
 const frames = document.getElementById("frames");
-const framed = document.getElementById("framed");
+const framed = document.getElementById("framed-frames");
 const accounts = document.getElementById("accounts");
 const phone = document.getElementById("phone");
 const many = document.getElementById("many");
-const manyPhone = document.getElementById("many-phone");
 const patterns = document.getElementById("patterns");
-const patternsPhone = document.getElementById("patterns-phone");
 const sent = document.getElementById("sent");
 
 for (const s of schemes) select.add(new Option(`${s.name} (${s.id})`, s.id));
@@ -40,51 +38,45 @@ function figure(title, page, mode, extra = "") {
   frame.title = `${title}: ${page}, ${mode}`;
   frame.dataset.mode = mode;
   frame.src = `gallery/${page}?${extra ? `${extra}&` : ""}om-scheme=${encodeURIComponent(select.value)}&om-mode=${mode}&om-direction=${direction.value}`;
-  frame.addEventListener("load", () => fit(frame));
   fig.append(cap, frame);
+  return fig;
+}
+
+/** A figure at a phone's width, 390px wide. */
+function phoneFigure(title, page, mode, extra = "") {
+  const fig = figure(title, page, mode, extra);
+  fig.classList.add("phone");
   return fig;
 }
 
 function build() {
   frames.replaceChildren();
-  frames.classList.toggle("one", modes().length === 1);
   for (const mode of modes()) frames.append(figure(`${mode[0].toUpperCase()}${mode.slice(1)}`, "sample.html", mode));
-  // The round trip: the stand-in host frames the page seamlessly and sizes
-  // it from the page's messages; beside it, the page as it is on its own.
+  // The round trip: the stand-in host frames the page seamlessly, holding the
+  // frame to its screen; beside it, the page as it is on its own.
   const mode = modes()[0];
   framed.replaceChildren(figure("Framed seamlessly by a host", "host.html", mode), figure("On its own", "sample.html", mode));
-  // The account links page, at the gallery's width and at a phone's: in each
-  // mode on its own, and framed by the host.
+  // The account links page: in each mode on its own, and framed by the host;
+  // then each at a phone's width.
   accounts.replaceChildren();
-  accounts.classList.toggle("one", modes().length === 1);
   for (const m of modes()) accounts.append(figure(`${m[0].toUpperCase()}${m.slice(1)}`, "accounts.html", m));
+  accounts.append(figure(`Framed by the host, ${mode}`, "host.html", mode, "page=accounts.html"));
   phone.replaceChildren();
-  for (const m of modes()) phone.append(figure(`390px, ${m}`, "accounts.html", m));
-  for (const m of modes()) phone.append(figure(`390px, ${m}, framed by the host`, "host.html", m, "page=accounts.html"));
+  for (const m of modes()) phone.append(phoneFigure(`390px, ${m}`, "accounts.html", m));
+  for (const m of modes()) phone.append(phoneFigure(`390px, ${m}, framed`, "host.html", m, "page=accounts.html"));
   // Thousands of accounts: on its own and framed, then at a phone's width.
-  many.replaceChildren(figure(`On its own, ${mode}`, "accounts-many.html", mode), figure(`Framed by the host, ${mode}`, "host.html", mode, "page=accounts-many.html"));
-  manyPhone.replaceChildren();
-  for (const m of modes()) manyPhone.append(figure(`390px, ${m}`, "accounts-many.html", m));
-  // The patterns: in each mode on its own, then framed by the host.
-  patterns.replaceChildren();
-  patterns.classList.toggle("one", modes().length === 1);
-  for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}`, "patterns.html", m));
-  for (const m of modes()) patterns.append(figure(`${m[0].toUpperCase()}${m.slice(1)}, framed by the host`, "host.html", m, "page=patterns.html"));
-  patternsPhone.replaceChildren();
-  for (const m of modes()) patternsPhone.append(figure(`390px, ${m}`, "patterns.html", m));
+  many.replaceChildren(
+    figure(`On its own, ${mode}`, "accounts-many.html", mode),
+    figure(`Framed by the host, ${mode}`, "host.html", mode, "page=accounts-many.html"),
+    phoneFigure(`390px, ${mode}`, "accounts-many.html", mode),
+  );
+  // The patterns: on its own, framed by the host, and at a phone's width.
+  patterns.replaceChildren(
+    figure(`On its own, ${mode}`, "patterns.html", mode),
+    figure(`Framed by the host, ${mode}`, "host.html", mode, "page=patterns.html"),
+    phoneFigure(`390px, ${mode}`, "patterns.html", mode),
+  );
   sent.textContent = "Frames loaded with query parameters.";
-}
-
-function fit(frame) {
-  const doc = frame.contentDocument;
-  if (!doc) return;
-  const size = () => {
-    frame.style.height = `${doc.documentElement.scrollHeight + 4}px`;
-  };
-  size();
-  // The frame's own observer: one from this window does not hear a framed
-  // document grow (the stand-in host growing to its page).
-  new frame.contentWindow.ResizeObserver(size).observe(doc.documentElement);
 }
 
 // A scheme or direction change is the frame's theme message, as the dashboard sends it.

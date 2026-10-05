@@ -9,20 +9,32 @@
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
 /* The frame draws the plugin's name, the way back and the person; a page
- * draws only its content, inside .page. */
-.page { max-width: 72rem; margin: 0 auto; padding: var(--space-8) var(--space-10) 4rem; }
-.page > * + * { margin-top: 1.25rem; }
+ * draws only its content, inside .page. Compact, so the content starts high:
+ * every page fits one screen (meridian-design
+ * tasks/design/every-page-fits-one-screen.md). */
+.page { max-width: 72rem; margin: 0 auto; padding: var(--space-5) var(--space-8); }
+.page > * + * { margin-top: var(--space-4); }
 .page.wide { max-width: none; }
 
+/* The head is one row of a fixed, small height: the heading, a line under it
+ * cut with an ellipsis (its whole text on hover), and the actions beside,
+ * never wrapping; on a phone they scroll within their row. */
 .page-head, .pagehead {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: var(--space-4); flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: nowrap; min-height: 2.75rem;
 }
-.page-head p, .pagehead p { margin: .3rem 0 0; color: var(--ink-soft); max-width: 44rem; }
-.page-head .actions, .pagehead .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.page-head > :not(.actions), .pagehead > :not(.actions) { min-width: 0; }
+.page-head > :first-child:not(.actions), .pagehead > :first-child:not(.actions) { flex: 1 1 0; }
+.page-head :is(h1, .om-page-title), .pagehead :is(h1, .om-page-title) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-head p, .pagehead p { margin: .1rem 0 0; color: var(--ink-soft); }
+/* A line holding something that opens over the page (a status's note, a
+ * menu) is not cut, or what opens would be. */
+.page-head p:not(:has(om-status, details)), .pagehead p:not(:has(om-status, details)) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-head .actions, .pagehead .actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; }
 
-.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin: var(--space-8) 0 .6rem; }
-.section-head p { margin: 0; color: var(--ink-soft); font-size: .9rem; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin: var(--space-5) 0 var(--space-2); min-width: 0; }
+.section-head > :is(h2, h3) { flex: none; white-space: nowrap; }
+.section-head p { margin: 0; color: var(--ink-soft); font-size: .9rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .spacer { flex: 1 1 auto; }
@@ -44,8 +56,17 @@ ul.plain li + li { margin-top: .2rem; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (max-width: 40rem) {
-  .page { padding: var(--space-4); }
+  .page { padding: var(--space-3) var(--space-4); }
+  .page > * + * { margin-top: var(--space-3); }
+  .card, .panel.padded, .panel > .panel-body { padding: var(--space-4); }
+  .section-head { margin: var(--space-3) 0 var(--space-2); }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  /* The heading keeps at least two fifths of the row; the actions scroll in the rest. */
+  .page-head > :first-child:not(.actions), .pagehead > :first-child:not(.actions) { flex: 1 0 40%; }
+  .page-head .actions, .pagehead .actions { overflow-x: auto; scrollbar-width: none; }
+  /* Fewer columns on a phone: what is marked wide-only goes (a table's
+   * column, a sentence's aside), and the rest stays on its line. */
+  .wide-only { display: none !important; }
 }
 
 /* ── Framed ──────────────────────────────────────────────────────────────── */
@@ -117,6 +138,13 @@ ul.plain li + li { margin-top: .2rem; }
 .list-row .grow { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
 .list-row .title { font-weight: 550; }
 .list-row .meta { color: var(--ink-soft); font-size: .85rem; }
+/* A one-line row: its text on one line, cut with an ellipsis, and its
+ * actions beside it at every width; the rest a click away (a row-detail). */
+.list-row.one-line { flex-wrap: nowrap; min-height: 2.75rem; padding-block: .3rem; }
+.list-row.one-line .grow { flex: 1 1 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.list-row.one-line .grow > * { display: inline; margin: 0; }
+.list-row.one-line .grow > * + * { margin-left: .5rem; }
+.list-row.one-line > :not(.grow) { flex: none; }
 
 .empty-state { padding: 2.5rem 1rem; text-align: center; color: var(--ink-soft); }
 .empty-state strong { display: block; color: var(--ink); font-size: 1rem; margin-bottom: .25rem; }
@@ -144,6 +172,71 @@ tr.picked td, tr.selected td, tr[aria-selected="true"] td { background: var(--ac
 tbody tr:hover :is(.hint, .faint), tr:is(.picked, .selected, [aria-selected="true"]) :is(.hint, .faint) { color: var(--ink-soft); }
 table.dense th, table.dense td { padding: .35rem .8rem; white-space: nowrap; }
 table.dense td { font-size: .86rem; }
+
+/* A one-line table (meridian-design tasks/design/every-page-fits-one-screen,
+ * after the platform's): every row one line of a fixed height, a long value
+ * cut with an ellipsis, its whole text on hover and the whole row a click
+ * away in its row-detail; at a phone's width the columns marked wide-only
+ * go, rather than the row wrapping. A cell's hint follows its value on the
+ * line. The .more cell holds the row's row-detail (or its menu). */
+table.one-line { table-layout: fixed; }
+table.one-line :is(th, td) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.one-line th { padding: .45rem .75rem; }
+table.one-line td { padding: 0 .75rem; height: 2.5rem; }
+table.one-line td > :is(div, p, .hint, .meta) { display: inline; margin: 0; }
+table.one-line td > * + :is(div, p, .hint, .meta) { margin-left: .4rem; }
+table.one-line :is(th, td).more { width: 3rem; padding-inline: .25rem; text-align: right; overflow: visible; }
+table.one-line .empty-state { white-space: normal; }
+@media (max-width: 40rem) {
+  table.one-line th { padding: .35rem .6rem; }
+  table.one-line td { padding-inline: .6rem; height: 2.75rem; }
+  table.one-line :is(th, td).more { width: 3.25rem; padding-inline: .25rem; }
+}
+
+/* A row's detail: the whole row, one click or tap away. A <details> whose
+ * summary is the row's "…" and whose .row-detail-pop holds everything the
+ * line cuts or a phone leaves out; open, it stands over the page as a dialog
+ * would, centred in the viewport (in a frame, the frame's), and never makes
+ * the page longer. It opens and closes without script; with the kit's
+ * script, Escape and a click outside close it, and a click anywhere on its
+ * row opens it. Give each the same name="…" and only one is open at once. */
+details.row-detail { display: inline-block; }
+details.row-detail > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 2rem; min-height: 2rem; padding: 0 .4rem; border-radius: var(--radius); color: var(--ink-soft); line-height: 1;
+}
+details.row-detail > summary::-webkit-details-marker { display: none; }
+details.row-detail > summary:hover, details.row-detail[open] > summary { background: var(--hover); color: var(--ink); }
+.row-detail-pop {
+  position: fixed; inset: 0; margin: auto; z-index: 40;
+  width: min(32rem, calc(100vw - 2rem)); height: fit-content; max-height: calc(var(--om-page-height) - 2rem); overflow: auto;
+  padding: var(--space-5); background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-pop), 0 0 0 100vmax var(--backdrop);
+  white-space: normal; text-align: left; overflow-wrap: anywhere; font-size: .93rem; cursor: auto;
+}
+.row-detail-pop > :first-child { margin-top: 0; }
+.row-detail-pop > :last-child { margin-bottom: 0; }
+.row-detail-pop :is(h2, h3) { margin: 0 0 .3rem; font-size: 1.05rem; }
+.row-detail-pop dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem 1rem; margin: .75rem 0 0; }
+.row-detail-pop dt { color: var(--ink-soft); }
+.row-detail-pop dd { margin: 0; }
+@media (max-width: 40rem) {
+  details.row-detail > summary { min-width: 2.75rem; min-height: 2.75rem; }
+  .row-detail-pop dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .row-detail-pop dd { margin-bottom: .5rem; }
+}
+
+/* ── Pager ───────────────────────────────────────────────────────────────── */
+
+/* Pages of rows instead of a long page: the way back, "Rows 1–12 of 240",
+ * and the way on, on one line. A server's own (the platform's markup) or
+ * om-pager's, which works out how many rows fit. */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: nowrap; min-height: 2.5rem; margin: var(--space-2) 0 0; }
+.pager > :is(span, .pager-said) { min-width: 0; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pager :is(a, button)[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+om-pager { display: block; }
+.panel om-pager > .pager, .panel > .pager { margin: 0; padding: .3rem var(--space-4); border-top: 1px solid var(--line-soft); }
+@media (max-width: 40rem) { .pager :is(a, button) { min-height: 2.75rem; } }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
@@ -230,15 +323,22 @@ button[data-om-icon="refresh"]::before {
 
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 
-.tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--line); margin-bottom: var(--space-4); overflow-x: auto; }
+/* One row at a fixed height at every width: tabs that do not fit scroll
+ * sideways within the row, never wrap to another. */
+.tabs {
+  display: flex; flex-wrap: nowrap; gap: .25rem; border-bottom: 1px solid var(--line); margin-bottom: var(--space-3);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; overscroll-behavior-x: contain;
+}
 .tab {
-  display: inline-flex; align-items: center; gap: .4rem; padding: .55rem .8rem; margin-bottom: -1px;
+  flex: none; min-height: 2.5rem;
+  display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; margin-bottom: -1px;
   color: var(--ink-soft); border: 0; border-bottom: 2px solid transparent; border-radius: 0;
   background: none; white-space: nowrap; font-weight: 400;
 }
 .tab:hover { color: var(--ink); background: none; text-decoration: none; }
 .tab.on, .tab[aria-selected="true"], .tab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
 .tab .count { color: var(--ink-faint); font-size: .8rem; font-weight: 400; }
+@media (max-width: 40rem) { .tab { min-height: 2.75rem; padding-inline: .65rem; } }
 
 /* ── Fields ──────────────────────────────────────────────────────────────── */
 
@@ -728,10 +828,16 @@ om-account-map .om-account-map-more { padding: .4rem .6rem; color: var(--ink-sof
 om-account-map .om-account-map-or { color: var(--ink-faint); font-size: .84rem; }
 om-account-map .om-account-map-close { font-size: .9rem; }
 om-account-map tr.om-account-map-none td { text-align: center; color: var(--ink-soft); padding: 2rem 1rem; }
+/* As many rows a page as fit (page-size="auto"): the page is one screen, so
+ * the pager over the rows is in reach and the one under them goes. */
+om-account-map[page-size="auto"] .om-account-map-foot { display: none; }
 om-account-map .om-account-map-empty { padding: 2.5rem 1rem; text-align: center; color: var(--ink-soft); }
 @container om-account-map (max-width: 40rem) {
   om-account-map .om-account-map-bar { padding: var(--space-3); }
   om-account-map .om-account-map-search { flex-basis: 100%; }
+  /* The state and the grouping share a line. */
+  om-account-map .om-account-map-grouping { flex: 1 1 8rem; min-width: 0; }
+  om-account-map .om-account-map-grouping select { flex: 1 1 0; width: 0; min-width: 0; }
   om-account-map .om-account-map-table, om-account-map .om-account-map-table :is(tbody, tr, td) { display: block; }
   om-account-map .om-account-map-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   om-account-map .om-account-map-table tr.om-account-map-row { padding: .6rem var(--space-3); border-bottom: 1px solid var(--line-soft); }

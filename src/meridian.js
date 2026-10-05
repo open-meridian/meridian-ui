@@ -37,12 +37,16 @@
  * the kit's CSS drops the page's own heading and tab row, its standalone
  * padding and width, and its background.
  *
- * And the frame grows to the page. Once the host's first theme message has
- * taught this page the host's origin (event.origin), the page posts its height
- * to its parent, to that origin alone, and again whenever it changes: rounded
- * up to a whole pixel, at most once a frame, from a ResizeObserver on <html>:
+ * The page's height. Once the host's first theme message has taught this
+ * page the host's origin (event.origin), the page posts its height to its
+ * parent, to that origin alone, and again whenever it changes: rounded up to
+ * a whole pixel, at most once a frame, from a ResizeObserver on <html>:
  *     { "type": "meridian:size", "version": 1, "height": <CSS pixels> }
- * Before that message it sends nothing, and it never sends to "*".
+ * Before that message it sends nothing, and it never sends to "*". A host
+ * before 0.10.0 grew its frame to it; under the one-screen rule the host holds
+ * the frame to the viewport under its chrome, so the frame is the page's
+ * height budget (--om-page-height, base.css), and the size says only whether
+ * the page fits it.
  *
  * Header actions. A button (or a form's submit button) in the page head's
  * .actions marked data-om-action="<id>" is one the host may draw in its own

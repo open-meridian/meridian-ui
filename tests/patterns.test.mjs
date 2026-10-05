@@ -24,8 +24,8 @@ function galleryPatterns() {
 test("each of the README's patterns is the gallery's, in order", () => {
   const readme = readmePatterns();
   const gallery = galleryPatterns();
-  assert.equal(readme.length, 11, "the head, status, action, notice, badge, tiles, a moment, grid, entry grid, nothing here, empty");
-  assert.deepEqual(gallery.map((g) => g.name), ["the-head", "status", "action", "notice", "badge", "tiles", "a-moment", "grid", "entry-grid", "nothing-here", "empty"]);
+  assert.equal(readme.length, 13, "the head, status, action, notice, badge, tiles, a moment, grid, entry grid, one-line rows, pager, nothing here, empty");
+  assert.deepEqual(gallery.map((g) => g.name), ["the-head", "status", "action", "notice", "badge", "tiles", "a-moment", "grid", "entry-grid", "one-line-rows", "pager", "nothing-here", "empty"]);
   for (let i = 0; i < readme.length; i++) assert.equal(gallery[i].block, readme[i], gallery[i].name);
 });
 

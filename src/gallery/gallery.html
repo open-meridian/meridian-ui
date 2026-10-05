@@ -7,84 +7,107 @@
 <link rel="stylesheet" href="meridian.css">
 <script src="meridian.js"></script>
 <script type="module" src="gallery/gallery.js"></script>
+<script type="module" src="gallery/tabs.js"></script>
 <style>
-  /* The gallery's own layout; colours are still only the scheme's. */
-  .frames { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-  .frames figure { margin: 0; }
-  .frames figcaption { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
-  .frames iframe { width: 100%; height: 1400px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--page); display: block; }
-  .frames.one { grid-template-columns: minmax(0, 1fr); }
+  /* The gallery's own layout; colours are still only the scheme's. One
+   * screen, as every page: the head and the tabs, then the tab's frames,
+   * as tall as the screen leaves. A frame's page fits its frame by its own
+   * budget; where the frames are wider than the screen, their row scrolls
+   * sideways within itself. */
+  main.gallery { display: flex; flex-direction: column; height: var(--om-page-height); }
+  main.gallery > * { flex: none; }
+  main.gallery > section { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  main.gallery > section[hidden] { display: none; }
+  .gallery .page-head .actions select { width: auto; min-width: 0; padding-block: .35rem; }
+  .gallery .page-head .actions label { display: inline-flex; align-items: center; gap: .35rem; font-size: .84rem; color: var(--ink-soft); white-space: nowrap; }
+  .frames { flex: 1 1 0; min-height: 0; display: flex; gap: var(--space-4); overflow-x: auto; overflow-y: hidden; }
+  .frames figure { margin: 0; flex: 1 0 0; min-width: min(100%, 24rem); display: flex; flex-direction: column; min-height: 0; }
+  .frames figcaption { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frames figcaption .faint { overflow: hidden; text-overflow: ellipsis; }
+  .frames iframe { flex: 1 1 0; min-height: 0; width: 100%; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--page); display: block; }
   /* A phone's width: each frame's viewport is 390px, as a phone's is. */
-  .frames.phone { display: flex; flex-wrap: wrap; gap: var(--space-4); }
-  .frames.phone iframe { box-sizing: content-box; width: 390px; }
+  .frames :is(.phone figure, figure.phone) { flex: 0 0 auto; min-width: 0; }
+  .frames :is(.phone figure, figure.phone) iframe { box-sizing: content-box; width: 390px; }
   .swatch { display: inline-block; width: 1.1rem; height: 1.1rem; border-radius: 4px; border: 1px solid var(--line); vertical-align: middle; }
-  @media (max-width: 60rem) { .frames { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 40rem) { .frames figure:not(.phone) { min-width: 100%; } .frames :is(.phone figure, figure.phone) iframe { width: calc(100vw - 2 * var(--space-4) - 2px); } }
 </style>
 </head>
 <body>
-<main class="page wide">
+<main class="page wide gallery">
   <header class="page-head">
     <div>
       <h1>Open Meridian UI kit <span class="faint mono">__KIT_VERSION__</span></h1>
       <p>Every component in light and dark, in each scheme the kit ships. This page stands in for the
         dashboard's frame: it hands each framed page its scheme, mode and market-direction convention, first
-        as query parameters and then, when you change them here, as the frame's theme message.</p>
+        as query parameters and then, when you change them here, as the frame's theme message.
+        <span class="faint" id="sent">Frames loaded with query parameters.</span></p>
+    </div>
+    <div class="actions">
+      <label>Scheme <select id="scheme"></select></label>
+      <label>Layout <select id="layout"><option value="both">Light and dark</option><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label>
+      <label>Direction <select id="direction"><option value="green-up">Green up</option><option value="red-up">Red up</option></select></label>
     </div>
   </header>
 
-  <section class="panel padded">
-    <div class="filters" style="margin: 0">
-      <label class="field" style="margin: 0"><span>Scheme</span><select id="scheme"></select></label>
-      <label class="field" style="margin: 0"><span>Layout</span>
-        <select id="layout"><option value="both">Light and dark, side by side</option><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
-      </label>
-      <label class="field" style="margin: 0"><span>Market direction</span>
-        <select id="direction"><option value="green-up">Green up</option><option value="red-up">Red up</option></select>
-      </label>
-      <span class="spacer"></span>
-      <span class="faint" id="sent">Frames loaded with query parameters.</span>
-    </div>
+  <nav class="tabs" aria-label="Sections" data-sections>
+    <a class="tab on" href="#pages" aria-current="page">A page</a>
+    <a class="tab" href="#framed">In the frame</a>
+    <a class="tab" href="#links">Account links</a>
+    <a class="tab" href="#links-phone">At 390px</a>
+    <a class="tab" href="#scale">At scale</a>
+    <a class="tab" href="#kit-patterns">Patterns</a>
+    <a class="tab" href="#contract">Scheme contract</a>
+    <a class="tab" href="#properties">Colour properties</a>
+  </nav>
+
+  <section id="pages" aria-label="A plugin's page">
+    <div class="frames" id="frames"></div>
   </section>
 
-  <div class="frames" id="frames"></div>
-
-  <section class="section-head"><h2>In the dashboard's frame</h2><p>The same page, framed seamlessly by a
-    <a href="gallery/host.html">stand-in host</a> that draws the heading and the tab row and sizes the frame from the
-    page's <code>meridian:size</code>, beside it <a href="gallery/sample.html">on its own</a>.</p></section>
-  <div class="frames" id="framed"></div>
-
-  <section class="section-head"><h2>Linking accounts, and a phone's width</h2><p>A plugin's
-    <a href="gallery/accounts.html">account links page</a>, written as tags and JSON with no script of its own:
-    <code>om-account-map</code>, a grid as cards and a grid by priority where narrow, list rows, options and a field
-    with its button, <code>om-moment</code>, and <code>om-status</code> in the head, which the host draws beside the plugin's
-    name when framed. At the gallery's width, then at 390px, on its own and framed by the host.</p></section>
-  <div class="frames" id="accounts"></div>
-  <div class="frames phone" id="phone"></div>
-
-  <section class="section-head"><h2>Linking at scale</h2><p>The same map with
-    <a href="gallery/accounts-many.html">2,000 external accounts and 1,500 of the deployment's</a>: searched,
-    filtered to the unlinked or by sync state, grouped by connection and paged, one row's choices opened at a time, and the
-    suggestions reviewed and sent as one form. Seen by a plugin admin who may not create an account
-    (<code>no-new-account</code>), so only an existing one is offered. On its own and framed by the host, then at 390px.</p></section>
-  <div class="frames" id="many"></div>
-  <div class="frames phone" id="many-phone"></div>
-
-  <section class="section-head"><h2>Patterns</h2><p>The
-    <a href="gallery/patterns.html">markup every plugin's page writes</a> for its head, status, actions (an icon among
-    them), notices, badges, tiles, moments, a grid, an entry grid, "nothing here" and an empty state, as the README's Patterns give it
-    and an SDK's helpers write it, each with its markup. On its own, then framed by the host, which draws its status and
-    its icon action and drops the head they leave empty. Then at 390px, where the entry grid's rows are cards.</p></section>
-  <div class="frames" id="patterns"></div>
-  <div class="frames phone" id="patterns-phone"></div>
-
-  <section class="section-head"><h2>The scheme contract</h2><p>Each pair a scheme must pass, and each shipped scheme's ratio.</p></section>
-  <section class="panel">
-    <om-grid id="pairs" row-key="id" dense sticky-head></om-grid>
+  <section id="framed" aria-label="In the dashboard's frame">
+    <p class="muted" style="margin: 0 0 var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The same page, framed seamlessly by a
+      <a href="gallery/host.html">stand-in host</a> that draws the heading and the tab row and holds the frame to the screen under
+      them, beside it <a href="gallery/sample.html">on its own</a>.</p>
+    <div class="frames" id="framed-frames"></div>
   </section>
 
-  <section class="section-head"><h2>Colour properties</h2><p>What a scheme defines, light and dark.</p></section>
-  <section class="panel">
-    <om-grid id="props" row-key="name"></om-grid>
+  <section id="links" aria-label="Linking accounts">
+    <p class="muted" style="margin: 0 0 var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">A plugin's
+      <a href="gallery/accounts.html">account links page</a>, written as tags and JSON with no script of its own:
+      <code>om-account-map</code>, grids where narrow, list rows, options and a field with its button, <code>om-moment</code>,
+      and <code>om-status</code> in the head, which the host draws beside the plugin's name when framed.</p>
+    <div class="frames" id="accounts"></div>
+  </section>
+
+  <section id="links-phone" aria-label="At a phone's width">
+    <div class="frames phone" id="phone"></div>
+  </section>
+
+  <section id="scale" aria-label="Linking at scale">
+    <p class="muted" style="margin: 0 0 var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The same map with
+      <a href="gallery/accounts-many.html">2,000 external accounts and 1,500 of the deployment's</a>, as many a page as fit:
+      searched, filtered, grouped and paged, seen by a plugin admin who may not create an account
+      (<code>no-new-account</code>). On its own and framed by the host, then at 390px.</p>
+    <div class="frames" id="many"></div>
+  </section>
+
+  <section id="kit-patterns" aria-label="Patterns">
+    <p class="muted" style="margin: 0 0 var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The
+      <a href="gallery/patterns.html">markup every plugin's page writes</a>, as the README's Patterns give it and an SDK's
+      helpers write it: on its own, framed by the host, and at 390px.</p>
+    <div class="frames" id="patterns"></div>
+  </section>
+
+  <section id="contract" aria-label="The scheme contract">
+    <section class="panel">
+      <om-pager><om-grid id="pairs" row-key="id" dense one-line narrow="priority" caption="Each pair a scheme must pass, and each shipped scheme's ratio"></om-grid></om-pager>
+    </section>
+  </section>
+
+  <section id="properties" aria-label="Colour properties">
+    <section class="panel">
+      <om-pager><om-grid id="props" row-key="name" one-line narrow="priority" caption="What a scheme defines, light and dark"></om-grid></om-pager>
+    </section>
   </section>
 </main>
 </body>

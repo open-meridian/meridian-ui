@@ -3,14 +3,15 @@
 await Promise.all(["om-grid", "om-chart", "om-live", "om-instrument-picker", "om-panels"].map((n) => customElements.whenDefined(n)));
 
 const positions = document.getElementById("positions");
+// Priorities, so a phone shows fewer columns, each row still one line.
 positions.columns = [
   { key: "symbol", label: "Instrument" },
-  { key: "account", label: "Account" },
-  { key: "state", label: "Side", type: "badge", tone: (v) => (v === "Short" ? "sell" : "buy") },
-  { key: "quantity", label: "Quantity", type: "decimal", group: true },
-  { key: "price", label: "Price", type: "decimal", group: true },
+  { key: "account", label: "Account", priority: 3 },
+  { key: "state", label: "Side", type: "badge", tone: (v) => (v === "Short" ? "sell" : "buy"), priority: 2 },
+  { key: "quantity", label: "Quantity", type: "decimal", group: true, priority: 3 },
+  { key: "price", label: "Price", type: "decimal", group: true, priority: 3 },
   { key: "market_value", label: "Market value", type: "decimal", group: true },
-  { key: "day_pnl", label: "Day P&L", type: "decimal", group: true, tone: "sign" },
+  { key: "day_pnl", label: "Day P&L", type: "decimal", group: true, tone: "sign", priority: 2 },
 ];
 
 const orders = document.getElementById("orders");
@@ -18,19 +19,79 @@ orders.columns = [
   { key: "order_id", label: "Order", type: "code" },
   { key: "side", label: "Side", type: "badge", tone: (v) => (v === "Sell" ? "sell" : "buy") },
   { key: "symbol", label: "Instrument" },
-  { key: "quantity", label: "Quantity", type: "decimal", group: true },
-  { key: "limit", label: "Limit", type: "decimal" },
-  { key: "filled", label: "Filled", type: "decimal", group: true },
-  { key: "status", label: "Status", type: "badge", tone: (v) => ({ Working: "warn", Filled: "good", Rejected: "bad" })[v] || "" },
-  { key: "sent", label: "Sent" },
+  { key: "quantity", label: "Quantity", type: "decimal", group: true, priority: 2 },
+  { key: "limit", label: "Limit", type: "decimal", priority: 3 },
+  { key: "filled", label: "Filled", type: "decimal", group: true, priority: 3 },
+  { key: "status", label: "Status", type: "badge", tone: (v) => ({ Working: "warn", Filled: "good", Rejected: "bad" })[v] || "", priority: 2 },
+  { key: "sent", label: "Sent", priority: 3 },
 ];
-orders.setRows([
-  { order_id: "ORD-5521", side: "Buy", symbol: "AAPL", quantity: "500", limit: "228.00", filled: "500", status: "Filled", sent: "09:31:02" },
-  { order_id: "ORD-5522", side: "Sell", symbol: "MSFT", quantity: "120", limit: "513.50", filled: "40", status: "Working", sent: "09:44:17" },
-  { order_id: "ORD-5523", side: "Buy", symbol: "NVDA", quantity: "1000", limit: "178.10", filled: "0", status: "Working", sent: "10:02:55" },
-  { order_id: "ORD-5524", side: "Sell", symbol: "ASML", quantity: "20", limit: "712.00", filled: "0", status: "Rejected", sent: "10:15:40" },
-  { order_id: "ORD-5525", side: "Buy", symbol: "IVV", quantity: "75", limit: "660.00", filled: "75", status: "Filled", sent: "11:20:09" },
-]);
+// Forty orders, so the pager has pages to turn.
+const SYMBOLS = ["AAPL", "MSFT", "NVDA", "ASML", "IVV", "TSLA", "AMZN", "META"];
+const STATUSES = ["Filled", "Working", "Working", "Rejected", "Filled"];
+orders.setRows(
+  Array.from({ length: 40 }, (_, i) => {
+    const quantity = 20 + ((i * 137) % 980);
+    const status = STATUSES[i % STATUSES.length];
+    const minutes = 31 + i * 7;
+    return {
+      order_id: `ORD-${5521 + i}`,
+      side: i % 3 === 1 ? "Sell" : "Buy",
+      symbol: SYMBOLS[i % SYMBOLS.length],
+      quantity: String(quantity),
+      limit: `${100 + ((i * 53) % 600)}.${String((i * 17) % 100).padStart(2, "0")}`,
+      filled: status === "Filled" ? String(quantity) : status === "Working" ? String(Math.floor(quantity / 3)) : "0",
+      status,
+      sent: `${String(9 + Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}:${String((i * 13) % 60).padStart(2, "0")}`,
+    };
+  }),
+);
+
+// Accounts as a server writes a one-line table: each row's cells, and its
+// whole in a row-detail, a click away. Thirty, so it has pages.
+const accountRows = document.getElementById("account-rows");
+const NAMES = ["Main", "Retirement", "Family trust", "Growth book", "Income book", "Treasury", "Hedge sleeve", "Endowment", "Operating cash", "Escrow"];
+const NOTES = [
+  "Rebalanced at the close; the margin call of the 28th was met in full the next morning.",
+  "Cash only. Contributions are matched quarterly and invested on the first business day.",
+  "Held for the trust's beneficiaries; distributions need two trustees to sign.",
+  "",
+];
+const text = (tag, value, className) => {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  el.textContent = value;
+  return el;
+};
+for (let i = 0; i < 30; i++) {
+  const name = `${NAMES[i % NAMES.length]}${i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : ""}`;
+  const id = `ACC-${(0x7b20c1e5 + i * 7919).toString(16).slice(-8)}`;
+  const cash = `${(1204500 - i * 38211).toLocaleString("en-US")}.${String((i * 37) % 100).padStart(2, "0")}`;
+  const asOf = `2026-09-${String(28 - (i % 20)).padStart(2, "0")}`;
+  const note = NOTES[i % NOTES.length];
+  const tr = document.createElement("tr");
+  const first = document.createElement("td");
+  first.append(text("strong", name), text("span", i % 2 ? "Cash" : "Margin", "hint"));
+  const idCell = document.createElement("td");
+  idCell.className = "wide-only";
+  idCell.append(text("code", id));
+  const more = document.createElement("td");
+  more.className = "more";
+  const details = document.createElement("details");
+  details.className = "row-detail";
+  details.name = "accounts";
+  const summary = text("summary", "…");
+  summary.setAttribute("aria-label", `Details of ${name}`);
+  summary.title = "Details";
+  const pop = document.createElement("div");
+  pop.className = "row-detail-pop";
+  const dl = document.createElement("dl");
+  for (const [k, v] of [["ID", id], ["Kind", i % 2 ? "Cash" : "Margin"], ["Cash", cash], ["As of", asOf], ["Note", note || "None"]]) dl.append(text("dt", k), text("dd", v));
+  pop.append(text("h3", name), dl);
+  details.append(summary, pop);
+  more.append(details);
+  tr.append(first, idCell, text("td", cash, "num"), text("td", asOf, "wide-only"), text("td", note, "wide-only muted"), more);
+  accountRows.append(tr);
+}
 
 // Thirty days of two books' values, as integer cents made into decimal strings.
 const days = [];

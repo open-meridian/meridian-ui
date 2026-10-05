@@ -33,7 +33,10 @@
 //   among thousands;
 // - pages (`page-size`, 50 by default), so the document holds a page of rows
 //   however many accounts there are, and each row, once drawn, is kept and
-//   moved rather than drawn again;
+//   moved rather than drawn again; `page-size="auto"` (0.10.0) makes a page
+//   as many rows as fit the page's height budget (lib/budget.js), so the
+//   page fits one screen, worked out again as the window changes but not
+//   while a row's choices are open;
 // - the choices for one row (an open account, found by typing; a new account,
 //   unless the page says `no-new-account` (0.7.1), because the person viewing
 //   it may not create one; Unlink) open under that row only, when asked for;
@@ -54,12 +57,15 @@
 // cancel it to send the link itself.
 
 import { declaredJson, whenParsed } from "../lib/declared.js";
+import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
 import { STATES } from "./om-status.js";
 
 let instances = 0;
 
 // Rows on a page, unless `page-size` says otherwise.
 const PAGE_SIZE = 50;
+// With page-size="auto", rows on the first page drawn, before any is measured.
+const AUTO_FIRST = 10;
 // Open accounts a row's chooser lists at once: typing narrows it.
 const CHOICES = 50;
 const FILTERS = [
@@ -366,8 +372,50 @@ export class OmAccountMap extends HTMLElement {
   }
 
   #pageSize() {
+    if (this.#isAuto()) return this.#auto || AUTO_FIRST;
     const n = Math.floor(Number(this.getAttribute("page-size")));
     return n > 0 ? n : PAGE_SIZE;
+  }
+
+  #isAuto() {
+    return (this.getAttribute("page-size") || "").trim().toLowerCase() === "auto";
+  }
+
+  // page-size="auto": as many rows a page as fit, measured once drawn.
+  #auto = 0;
+  #fitFrame = null;
+  #onResize = () => this.#scheduleFit();
+
+  disconnectedCallback() {
+    globalThis.removeEventListener?.("resize", this.#onResize);
+  }
+
+  #scheduleFit() {
+    if (this.#fitFrame !== null || !this.#isAuto() || !this.#parts) return;
+    const raf = globalThis.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+    this.#fitFrame = raf(() => {
+      this.#fitFrame = null;
+      this.#fitPage();
+    });
+  }
+
+  /** Make the page as many rows as fit, keeping its first row on it. */
+  #fitPage() {
+    if (!this.#isAuto() || !this.#parts || this.#editing !== null) return;
+    const rows = () => [...this.#parts.body.querySelectorAll(":scope > tr.om-account-map-row")];
+    const now = this.#pageSize();
+    let fit = rowsThatFit(rows());
+    if (!fit) return;
+    const resize = (size) => {
+      const first = this.#page * this.#pageSize();
+      this.#auto = size;
+      this.#page = Math.floor(first / size);
+      this.#draw(true);
+    };
+    if (fit !== now) resize(fit);
+    // Rows are not all one height: while the page is still too tall, one fewer.
+    const budget = pageBudget();
+    for (let i = 0; i < 50 && fit > 1 && rows().length >= fit && contentHeight() > budget + 0.5; i++) resize(--fit);
   }
 
   // ── The frame: drawn once per data ───────────────────────────────────────
@@ -620,7 +668,11 @@ export class OmAccountMap extends HTMLElement {
     return { tokens, counts, states, rows, page, pages, before: before[start], suggested };
   }
 
-  #draw() {
+  #draw(fitting = false) {
+    if (!fitting && this.#isAuto()) {
+      globalThis.addEventListener?.("resize", this.#onResize);
+      this.#scheduleFit();
+    }
     const p = this.#parts;
     const v = this.#view();
     const f = this.#filter;

@@ -6,3 +6,5 @@ dist
 .bench.log
 .claude
 CLAUDE.local.md
+.fit.log
+.shots

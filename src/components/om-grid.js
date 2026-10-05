@@ -33,6 +33,11 @@
 // At narrow width (`narrow="cards"` or `narrow="priority"`), each row is a
 // card, or the least wanted columns hide first; the CSS does it, by the
 // grid's own width, so a grid in a narrow panel is narrow too.
+//
+// `one-line` (0.10.0) draws the table as the kit's table.one-line: every row
+// one line of one height, a long value cut with an ellipsis and whole on
+// hover. With narrow="priority" it is the phone's way: fewer columns, each
+// row still one line. Inside an om-pager, a page of rows at a time.
 
 import { compareDecimal, compareParsed, groupDigits, parseDecimal, signOf } from "../lib/decimal.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
@@ -101,7 +106,7 @@ function reducedMotion() {
 
 export class OmGrid extends HTMLElement {
   static get observedAttributes() {
-    return ["dense", "sort", "empty", "caption", "high-rate", "freeze-sort", "row-height", "no-flash"];
+    return ["dense", "sort", "empty", "caption", "high-rate", "freeze-sort", "row-height", "no-flash", "one-line"];
   }
 
   #columns = [];
@@ -159,6 +164,7 @@ export class OmGrid extends HTMLElement {
 
   attributeChangedCallback(name, before, after) {
     if (!this.#table) return;
+    if (name === "one-line") this.#table.classList.toggle("one-line", this.hasAttribute("one-line"));
     if (name === "dense") {
       this.#table.classList.toggle("dense", this.hasAttribute("dense"));
       if (this.#fast) this.#setRowHeight();
@@ -202,6 +208,7 @@ export class OmGrid extends HTMLElement {
     this.#table = document.createElement("table");
     this.#table.className = "om-grid";
     this.#table.classList.toggle("dense", this.hasAttribute("dense"));
+    this.#table.classList.toggle("one-line", this.hasAttribute("one-line"));
     this.#caption = document.createElement("caption");
     this.#caption.className = "visually-hidden";
     this.#thead = document.createElement("thead");

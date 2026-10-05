@@ -10,6 +10,7 @@
 <script src="stand-in.js"></script>
 <script src="../meridian.js"></script>
 <script type="module" src="sample.js"></script>
+<script type="module" src="tabs.js"></script>
 </head>
 <body>
 <main class="page">
@@ -17,10 +18,10 @@
   <header class="page-head">
     <div>
       <h1>Positions</h1>
-      <p>A plugin's page built only from the kit. <span class="faint">Every colour is the scheme's.</span></p>
-      <!-- Its header status: framed, the host draws it right after the plugin's name. -->
-      <p><om-status data-om-header state="ok" label="Up to date" at="2026-09-30T13:12:00Z" at-label="Last read">Up to date. Last read 2026-09-30 13:12 UTC</om-status></p>
+      <p>A plugin's page built only from the kit, every colour the scheme's, and every section one screen.</p>
     </div>
+    <!-- Its header status: framed, the host draws it right after the plugin's name. -->
+    <om-status data-om-header state="ok" label="Up to date" at="2026-09-30T13:12:00Z" at-label="Last read">Up to date. Last read 2026-09-30 13:12 UTC</om-status>
     <div class="actions">
       <om-live id="feed" src="events" snapshot="snapshot.json" for="positions"></om-live>
       <button type="button">Export</button>
@@ -36,77 +37,106 @@
 
   <p class="notice good" id="acted" role="status" hidden></p>
 
-  <div class="notice info">The frame hands this page its scheme and mode. Links look <a href="#top">like this</a>.</div>
-  <div class="notice bad">The last read failed: the venue answered 503.</div>
-  <div class="notice warn">Two accounts have not synced for a day.</div>
-  <div class="notice good">Every account is current.</div>
-  <details class="notice quiet"><summary>Waiting for the account-side contract</summary><p>Held here until the SDK carries it.</p></details>
-
-  <section class="tiles">
-    <div class="panel tile"><div class="tile-label">Net asset value</div><div class="tile-value">12,480,112.50</div><div class="tile-delta buy-ink">+84,210.00 today</div></div>
-    <div class="panel tile"><div class="tile-label">Day P&amp;L</div><div class="tile-value sell-ink">-3,120.75</div><div class="tile-delta">-0.02%</div></div>
-    <div class="panel tile"><div class="tile-label">Open orders</div><div class="tile-value">14</div><div class="tile-delta">3 working</div></div>
-    <div class="panel tile"><div class="tile-label">Accounts</div><div class="tile-value">6</div><div class="tile-delta"><span class="badge good">All current</span></div></div>
-  </section>
-
-  <nav class="tabs" aria-label="Views">
-    <a class="tab on" href="#positions" aria-current="page">Positions <span class="count">8</span></a>
-    <a class="tab" href="#orders">Orders <span class="count">14</span></a>
-    <a class="tab" href="#history">History</a>
+  <!-- The page's sections, one screen each (the gallery's tabs.js). Not the
+       head's tab row, so a host framing the page leaves it. -->
+  <nav class="tabs" aria-label="Sections" data-sections>
+    <a class="tab on" href="#overview" aria-current="page">Overview</a>
+    <a class="tab" href="#holdings">Positions <span class="count">8</span></a>
+    <a class="tab" href="#book">Orders <span class="count">40</span></a>
+    <a class="tab" href="#accounts">Accounts</a>
+    <a class="tab" href="#charts">Charts</a>
+    <a class="tab" href="#flows-tab">Flows</a>
+    <a class="tab" href="#desk-tab">Panels</a>
+    <a class="tab" href="#controls">Controls</a>
+    <a class="tab" href="#form">Fields</a>
+    <a class="tab" href="#nothing">Empty</a>
   </nav>
 
-  <section class="panel padded">
-    <div class="filters">
+  <section id="overview" class="stack">
+    <div class="notice info">The frame hands this page its scheme and mode. Links look <a href="#overview">like this</a>.</div>
+    <div class="notice bad">The last read failed: the venue answered 503.</div>
+    <div class="notice warn">Two accounts have not synced for a day.</div>
+    <div class="notice good">Every account is current.</div>
+    <div class="tiles">
+      <div class="panel tile"><div class="tile-label">Net asset value</div><div class="tile-value">12,480,112.50</div><div class="tile-delta buy-ink">+84,210.00 today</div></div>
+      <div class="panel tile"><div class="tile-label">Day P&amp;L</div><div class="tile-value sell-ink">-3,120.75</div><div class="tile-delta">-0.02%</div></div>
+      <div class="panel tile"><div class="tile-label">Open orders</div><div class="tile-value">14</div><div class="tile-delta">3 working</div></div>
+      <div class="panel tile"><div class="tile-label">Accounts</div><div class="tile-value">6</div><div class="tile-delta"><span class="badge good">All current</span></div></div>
+    </div>
+  </section>
+
+  <section id="holdings" class="panel">
+    <div class="panel-body filters" style="margin: 0">
       <om-asof id="asof" name="as_of"></om-asof>
       <om-instrument-picker id="picker" src="search" asof="asof" style="flex: 1 1 18rem"></om-instrument-picker>
-      <span class="faint" id="picked">No instrument chosen.</span>
+      <span class="faint wide-only" id="picked">No instrument chosen.</span>
     </div>
-    <om-grid id="positions" row-key="position_id" sort="market_value:desc" caption="Positions" empty="No positions."></om-grid>
+    <om-pager>
+      <om-grid id="positions" row-key="position_id" sort="market_value:desc" caption="Positions" empty="No positions." one-line narrow="priority"></om-grid>
+    </om-pager>
   </section>
 
-  <div class="grid-2">
-    <section class="panel padded">
-      <h2>Net asset value</h2>
-      <om-chart id="nav" type="line" height="220" label="Net asset value, two books"></om-chart>
-    </section>
-    <section class="panel padded">
-      <h2>Daily flows</h2>
-      <om-chart id="flows" type="bar" height="220" label="Daily buys and sells"></om-chart>
-    </section>
-  </div>
-
-  <section class="section-head">
-    <h2>Panels, and a high-rate grid</h2>
-    <p>Drag a gutter or a panel's grip, or use their arrow keys. The arrangement is remembered in this browser.</p>
-  </section>
-  <om-panels id="desk" layout-id="gallery-desk" style="--om-panels-height: 32rem">
-    <section data-panel="quotes" data-title="Quotes: 2,000 rows, streaming" data-min="360">
-      <div class="panel-body row" style="padding-block: var(--space-2)">
-        <label class="row" style="gap: .4rem"><input type="checkbox" id="freeze"> Freeze the order while streaming</label>
-        <span class="spacer"></span>
-        <span class="faint" id="rate"></span>
-      </div>
-      <om-grid id="quotes" row-key="symbol" high-rate dense sort="change:desc" caption="Quotes"></om-grid>
-    </section>
-    <section data-panel="depth" data-title="Net asset value">
-      <div class="panel-body"><om-chart id="nav-small" type="line" height="160" label="Net asset value"></om-chart></div>
-    </section>
-    <section data-panel="notes" data-title="Notes" data-min="160">
-      <div class="panel-body">
-        <p>Each panel holds whatever the page puts in it, and keeps its state when moved: nothing moves in the document.</p>
-        <p class="faint">Changed cells flash in the direction colours (up and down follow the person's convention), and not at all under reduced motion.</p>
-        <button type="button" class="small" id="desk-reset">Reset the arrangement</button>
-      </div>
-    </section>
-  </om-panels>
-
-  <section class="panel padded">
-    <div class="row"><h2>Orders</h2><span class="badge">dense</span><span class="spacer"></span><button type="button" class="small">Refresh</button></div>
-    <om-grid id="orders" row-key="order_id" dense></om-grid>
+  <section id="book" class="panel">
+    <div class="panel-body row" style="padding-block: var(--space-2)"><h2>Orders</h2><span class="badge">dense, one line, paged</span><span class="spacer"></span><button type="button" class="small">Refresh</button></div>
+    <om-pager>
+      <om-grid id="orders" row-key="order_id" dense one-line narrow="priority"></om-grid>
+    </om-pager>
   </section>
 
-  <div class="grid-2">
-    <section class="panel padded">
+  <section id="accounts">
+    <section class="panel">
+      <div class="list-row one-line"><div class="grow"><span class="title">Interactive Brokers</span><span class="meta">3 accounts · read-only · margin and cash, the last read at 13:12</span></div><span class="badge good">Current</span></div>
+      <div class="list-row one-line"><div class="grow"><span class="title">Fidelity</span><span class="meta">1 account · trading · holdings a day old</span></div><span class="badge warn">Stale</span></div>
+      <div class="list-row one-line"><div class="grow"><span class="title">Schwab</span><span class="meta">Needs the person to sign in again through the brokerage's own page</span></div><span class="badge bad">Needs sign-in</span></div>
+    </section>
+    <section class="panel">
+      <!-- A one-line table, a page of it at a time, each row's whole a click away. -->
+      <om-pager>
+        <table class="one-line">
+          <caption class="visually-hidden">Accounts</caption>
+          <thead><tr><th>Account</th><th class="wide-only">ID</th><th class="num">Cash</th><th class="wide-only">As of</th><th class="wide-only">Note</th><th class="more"><span class="visually-hidden">Details</span></th></tr></thead>
+          <tbody id="account-rows"></tbody>
+        </table>
+      </om-pager>
+    </section>
+  </section>
+
+  <section id="charts" class="panel padded">
+    <h2>Net asset value</h2>
+    <om-chart id="nav" type="line" height="260" label="Net asset value, two books"></om-chart>
+  </section>
+
+  <section id="flows-tab" class="panel padded">
+    <h2>Daily flows</h2>
+    <om-chart id="flows" type="bar" height="260" label="Daily buys and sells"></om-chart>
+  </section>
+
+  <section id="desk-tab">
+    <p class="muted" style="margin: 0 0 var(--space-2)">Drag a gutter or a panel's grip, or use their arrow keys. The arrangement is remembered in this browser.</p>
+    <om-panels id="desk" layout-id="gallery-desk" style="--om-panels-height: clamp(16rem, calc(var(--om-page-height) - 13rem), 32rem)">
+      <section data-panel="quotes" data-title="Quotes: 2,000 rows, streaming" data-min="360">
+        <div class="panel-body row" style="padding-block: var(--space-2)">
+          <label class="row" style="gap: .4rem"><input type="checkbox" id="freeze"> Freeze the order while streaming</label>
+          <span class="spacer"></span>
+          <span class="faint" id="rate"></span>
+        </div>
+        <om-grid id="quotes" row-key="symbol" high-rate dense sort="change:desc" caption="Quotes"></om-grid>
+      </section>
+      <section data-panel="depth" data-title="Net asset value">
+        <div class="panel-body"><om-chart id="nav-small" type="line" height="160" label="Net asset value"></om-chart></div>
+      </section>
+      <section data-panel="notes" data-title="Notes" data-min="160">
+        <div class="panel-body">
+          <p>Each panel holds whatever the page puts in it, and keeps its state when moved: nothing moves in the document.</p>
+          <p class="faint">Changed cells flash in the direction colours (up and down follow the person's convention), and not at all under reduced motion.</p>
+          <button type="button" class="small" id="desk-reset">Reset the arrangement</button>
+        </div>
+      </section>
+    </om-panels>
+  </section>
+
+  <section id="controls" class="panel padded">
+    <div>
       <h2>Badges</h2>
       <div class="chips">
         <span class="badge">Neutral</span>
@@ -119,7 +149,6 @@
         <span class="badge sell">Sell</span>
       </div>
       <h2 style="margin-top: 1rem">Status</h2>
-      <p class="faint">Hover, focus or tap a dot. Each state has its own mark; the busy ring stands still under reduced motion.</p>
       <div class="row">
         <span class="row" style="gap: .35rem"><om-status state="ok" label="Up to date" at="2026-09-30T13:12:00Z" at-label="Last read">Up to date. Last read 2026-09-30 13:12 UTC</om-status> <span class="muted">ok</span></span>
         <span class="row" style="gap: .35rem"><om-status state="busy" label="Reading the venue" at="2026-09-30T13:12:00Z" at-label="Last read">Reading the venue. Last read 2026-09-30 13:12 UTC</om-status> <span class="muted">busy</span></span>
@@ -142,38 +171,21 @@
           <div class="menu-pop"><button type="button">Rename</button><button type="button">Reconnect</button><hr><button type="button" class="danger">Remove</button></div>
         </details>
       </div>
-    </section>
-
-    <section class="panel padded">
-      <h2>Fields</h2>
-      <label class="field"><span>Account name</span><input type="text" placeholder="Main brokerage"><span class="hint">Shown to people granted the account.</span></label>
-      <div class="grid-2">
-        <label class="field"><span>Currency</span><select><option>USD</option><option>EUR</option></select></label>
-        <label class="field"><span>Quantity</span><input type="text" value="-12" aria-invalid="true"><span class="hint bad-ink">A quantity is at least 1.</span></label>
-      </div>
-      <label class="field"><span>Note</span><textarea rows="2">Rebalanced at the close.</textarea></label>
-    </section>
-  </div>
-
-  <section class="panel">
-    <div class="list-row"><div class="grow"><div class="title">Interactive Brokers</div><div class="meta">3 accounts · read-only</div></div><span class="badge good">Current</span></div>
-    <div class="list-row"><div class="grow"><div class="title">Fidelity</div><div class="meta">1 account · trading</div></div><span class="badge warn">Stale</span></div>
-    <div class="list-row"><div class="grow"><div class="title">Schwab</div><div class="meta">Needs the person to sign in again</div></div><span class="badge bad">Needs sign-in</span></div>
+    </div>
   </section>
 
-  <section class="panel padded">
-    <h2>A plain table</h2>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Account</th><th>ID</th><th class="num">Cash</th><th>As of</th></tr></thead>
-      <tbody>
-        <tr><td><strong>Main</strong><div class="hint">Margin</div></td><td><code>ACC-7b20c1e5</code></td><td class="num">1,204,500.00</td><td><time datetime="2026-09-28">2026-09-28</time></td></tr>
-        <tr class="picked"><td><strong>Retirement</strong><div class="hint">Cash</div></td><td><code>ACC-19fe03aa</code></td><td class="num">88,020.13</td><td><time datetime="2026-09-27">2026-09-27</time></td></tr>
-      </tbody>
-    </table></div>
-  </section>
-
-  <section class="panel">
+  <section id="nothing" class="panel">
     <div class="empty-state"><strong>No brokerage connections yet</strong><p>Connect one to begin.</p><button type="button" class="primary">Connect a brokerage</button></div>
+  </section>
+
+  <section id="form" class="panel padded">
+    <h2>Fields</h2>
+    <label class="field"><span>Account name</span><input type="text" placeholder="Main brokerage"><span class="hint">Shown to people granted the account.</span></label>
+    <div class="grid-2">
+      <label class="field"><span>Currency</span><select><option>USD</option><option>EUR</option></select></label>
+      <label class="field"><span>Quantity</span><input type="text" value="-12" aria-invalid="true"><span class="hint bad-ink">A quantity is at least 1.</span></label>
+    </div>
+    <label class="field"><span>Note</span><textarea rows="2">Rebalanced at the close.</textarea></label>
   </section>
 
 </main>

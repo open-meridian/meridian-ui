@@ -12,17 +12,18 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.9.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.10.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
-- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
-- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [nothing here](#nothing-here), [empty](#empty)
+- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-pager](#om-pager), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
+- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [pager](#pager), [nothing here](#nothing-here), [empty](#empty)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
+- [One screen](#one-screen)
 - [The scheme contract](#the-scheme-contract)
 - [Building and checking](#building-and-checking)
 - [Releasing](#releasing)
@@ -41,8 +42,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.9.0/meridian.css">
-  <script src="/.meridian/ui/0.9.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.10.0/meridian.css">
+  <script src="/.meridian/ui/0.10.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -126,7 +127,15 @@ and a header action so marked is drawn by the host as that icon (see
 table of typed inputs a person enters rows in, posted with the page's own
 form, the server's messages placed on their cells by path, a spreadsheet's
 paste and a CSV in a dialog (see [om-entry-grid](#om-entry-grid)); and
-`addDecimals` to `lib/decimal.js`.
+`addDecimals` to `lib/decimal.js`. 0.10.0 makes every page fit one screen
+(see [One screen](#one-screen)): a height budget, `--om-page-height`, which
+a framed page's host holds to the screen under its chrome; compact chrome
+(the head one row of a fixed height, tabs one row); one-line rows
+(`table.one-line`, `.list-row.one-line`, `om-grid`'s `one-line`) with the
+whole row a click away (`details.row-detail`) and `.wide-only` columns a
+phone leaves out; `om-pager`, as many rows a page as fit, in place or from
+the server; `om-account-map`'s `page-size="auto"`; and the overflow check,
+`lib/fit.js` and `make fit`.
 
 ## Never raw colours
 
@@ -150,13 +159,16 @@ keeps them.
 
 | Class | What |
 |---|---|
-| `.page` (`.wide`) | The content column. `.page-head` (or `.pagehead`) with `.actions`; `.section-head` |
-| `.panel`, `.card` | A card on page. `.panel.padded` pads it; `.panel.narrow`; `.panel-section` is a divided section inside; `.list-row` rows with `.grow`, `.title`, `.meta` (the `.grow` text is never narrower than 16rem: where it and the row's actions do not fit side by side, as on a phone, the actions drop below it); `.empty-state` |
+| `.page` (`.wide`) | The content column, compact (since 0.10.0) so content starts high. `.page-head` (or `.pagehead`) with `.actions`: one row of a fixed, small height at every width, the heading and the line under it cut with an ellipsis (whole on hover), the actions beside them never wrapping (on a phone they scroll within the row, the heading keeping two fifths); `.section-head`, its line cut the same way |
+| `.panel`, `.card` | A card on page. `.panel.padded` pads it; `.panel.narrow`; `.panel-section` is a divided section inside; `.list-row` rows with `.grow`, `.title`, `.meta` (the `.grow` text is never narrower than 16rem: where it and the row's actions do not fit side by side, as on a phone, the actions drop below it); `.list-row.one-line` (0.10.0) keeps its text on one line, cut, and its actions beside it at every width; `.empty-state` |
 | `table`, `.table-wrap` | Tables as the platform draws them; `table.dense` for a dense one; `th.num`, `td.num` right-align figures; `tr.picked` or `tr[aria-selected=true]` for a selected row |
+| `table.one-line`, `.wide-only` | Since 0.10.0, after the platform's: every row one line of one height, a long value cut with an ellipsis and whole on hover, a cell's `.hint` following its value on the line; the `.more` cell holds the row's `row-detail`. Under 40rem anything marked `.wide-only` (a column's `th` and `td`s, an aside) goes: fewer columns, each row still one line. See [One-line rows](#one-line-rows) |
+| `details.row-detail`, `.row-detail-pop` | A row's whole, one click or tap away: the `<summary>` is the row's "…", the pop holds what the line cuts or a phone leaves out (a `dl` for its facts). Open, it stands over the page as a dialog, centred in the viewport (a frame's, framed), and never lengthens the page. It works with no script; with the kit's, a click anywhere on its row opens it, Escape and a click outside close it, and one open closes another (and give them one `name`) |
+| `.pager` | Pages instead of a long page: the way back, "Rows 1–12 of 240", the way on, one line (the platform's markup, or [`om-pager`](#om-pager)'s) |
 | `button`, `.button` | `.primary`, `.danger`, `.link`, `.small`, `.icon`; `form.inline` for a one-button form |
 | `.badge` (or `.pill`) | Neutral, `.good`, `.warn`, `.bad`, `.accent`, `.info`, `.buy`, `.sell`; `.dot` inside for a status dot |
 | `.notice` | `.info`, `.bad`, `.warn`, `.good`, `.quiet` (a `<details class="notice quiet">` folds) |
-| `.tabs` with `.tab` | The current tab is `.on`, `[aria-current=page]` or `[aria-selected=true]`; `.count` inside |
+| `.tabs` with `.tab` | The current tab is `.on`, `[aria-current=page]` or `[aria-selected=true]`; `.count` inside. One row of a fixed height at every width: tabs that do not fit scroll sideways within it, never wrap |
 | `.field` | A label: `<label class="field"><span>Name</span><input><span class="hint">…</span></label>`; `aria-invalid="true"` marks a bad value; `.filters` is a row of controls; `.grid-2`, `.grid-3`. A field's and a secondary button's edge is `--line-strong` (3:1). A `select` is as tall as a text input |
 | `.field-row` | A field and its button on one row, level and the same height: `<div class="field-row"><label class="field"><span>Account</span><select>…</select></label><button>Link</button></div>`; more than one field may share it, and on a narrow row the button drops below. A hint goes under the row |
 | `fieldset.choice`, `.options`, `label.option` | A choice drawn as the dashboard's settings draw one: `<fieldset class="choice"><legend>Key</legend><div class="options"><label class="option"><input type="radio" name="k" value="p"><span><span class="option-label">Personal</span><span class="hint">…</span></span></label>…</div></fieldset>`; the chosen option is marked. `label.check` is a checkbox and its words on a line |
@@ -214,6 +226,7 @@ conflated to one paint per frame.
 | `row-height` | High-rate mode's fixed row height in pixels (default 36, dense 28) |
 | `no-flash` | High-rate mode without the change flash |
 | `narrow` | Its [layout where it is narrow](#narrow-layouts): `cards` or `priority`. Without it a narrow grid scrolls sideways, as before |
+| `one-line` | Since 0.10.0, the table as a [`table.one-line`](#one-line-rows): each row one line of one height, a long value cut and whole on hover. With `narrow="priority"`, the phone's way: fewer columns, each still one line. In an [`om-pager`](#om-pager), a page of rows at a time |
 
 | Property or method | |
 |---|---|
@@ -597,6 +610,55 @@ at the end, so a page can add a panel without breaking anyone's arrangement.
 To keep it per person on the plugin's server instead, cancel `om-layout`,
 store `detail.layout`, and set `layout` from it when the page loads.
 
+### om-pager
+
+Pages of rows instead of a long page (0.10.0), as many a page as fit the
+page's [height budget](#one-screen), so the page fits one screen. It pages
+the rows inside it: the first table's body rows (an `om-grid`'s too), or else
+its `.list-row`s; and draws the pager under them: Previous, "Rows 1–12 of
+240", Next, on one line.
+
+```html
+<om-pager total="240" offset="0" size="25">
+  <table class="one-line">…the 25 rows the server drew…</table>
+  <nav class="pager" aria-label="Pages">…the server's own links, for a browser without the kit…</nav>
+</om-pager>
+```
+
+How many rows a page is, it works out from the space it is given: the
+budget, less everything else on the page, over the tallest row's height, and
+one fewer while the page is still too tall (a row is never cut). Two ways, by
+what the page holds:
+
+- **Every row here** (no `total`, or `total` no more than the rows inside): it
+  shows a page at a time, and Previous and Next turn the pages in place, with
+  no request. Good for a grid's rows, or a server's short list.
+- **A page from the server**: `total` rows in all, the first shown row
+  `offset` (from 0), drawn `size` a page (the size the server used). It shows
+  as many as fit, and Previous and Next are links to the same address with
+  `offset` and `size` set in its query (or the names `offset-param` and
+  `size-param` give): the next page starts after the last row shown, and is
+  as long as fit, so the server draws a page that fits.
+
+| Attribute | |
+|---|---|
+| `total`, `offset`, `size` | A server's paging: the rows in all, the first row's index, and the page size it used |
+| `rows` | A fixed number of rows a page, in place of working it out |
+| `offset-param`, `size-param` | The query's names for the offset and the size (default `offset` and `size`) |
+
+| Property, method or event | |
+|---|---|
+| `shown` | `{ first, last, total, size }`: the rows on the page, counted from 1 |
+| `turn(1 \| -1)` | The next or the previous page, in place (rows all here) |
+| `refit()` | Work out the page again now |
+| `om-page` | Fired with `shown` when a page is turned in place |
+
+A server's own `nav.pager` inside it is what a browser without the kit shows;
+the kit hides it and draws its own. A row the page hides itself stays hidden
+and is not counted. One `om-pager` to a screen: two would each take all the
+space left. A page laid out to exactly the viewport's height (a box with a
+fixed height holding the rows) pages down when it overflows, not up.
+
 ### om-account-map
 
 A plugin links each external account it reads (a brokerage account behind a
@@ -640,7 +702,7 @@ stacks under 40rem (by the map's own width).
 | `token-name`, `token` | The page's token, sent in a hidden field of that name in every form (none when `token-name` is absent) |
 | `empty` | What it says with no external accounts |
 | `group-by` | `connection` or `custodian`: the grouping to start with (the person may change it) |
-| `page-size` | Rows on a page, 50 by default |
+| `page-size` | Rows on a page, 50 by default; `auto` (0.10.0) is as many as fit the page's [height budget](#one-screen), worked out again as the window changes (not while a row's choices are open), with one pager, over the rows |
 | `link-several` | The handler at `action` takes several links in one form (below): "Link N suggested…" is offered |
 | `no-new-account` | Since 0.7.1: the person viewing the page may not create an account, so no new account is offered anywhere (below) |
 | `status-heading` | The Status column's heading (default "Status"), such as "Sync state" |
@@ -987,8 +1049,8 @@ enter thousands of rows at once is better split into parts.
 
 The markup every plugin's page writes for the same few things: the head with
 its status and a header action, a status, a one-button form, a notice, a
-badge, tiles, a moment, a grid, an entry grid, the page for somebody who may
-read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
+badge, tiles, a moment, a grid, an entry grid, one-line rows, a pager, the
+page for somebody who may read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
 An SDK's helpers that write them write exactly this, and a page written by
 hand is as good. The Python SDK's `meridian/kit.html`, coming in
 open-meridian 0.14.0 (meridian-design's
@@ -1201,6 +1263,53 @@ where the kit is not served. The entry grid (0.9.0) has no SDK macro yet.
   table, as a [notice](#notice) `bad`.
 - The page's own submit button follows the grid; its token is the form's.
 
+### One-line rows
+
+A list of records as one-line rows (since 0.10.0; meridian-design
+`tasks/design/every-page-fits-one-screen.md`): each row one line, a long
+value cut with an ellipsis, and the whole row a click away in its
+`row-detail`, the last cell (`.more`), whose pop holds every fact of the row,
+those the line cuts and those a phone leaves out. A column marked
+`wide-only` goes under 40rem. The `name` on each `details` keeps one open.
+
+```html
+<table class="one-line">
+  <thead><tr><th>Account</th><th class="wide-only">Custodian</th><th class="num">Holdings</th><th class="wide-only">Last statement</th><th class="more"><span class="visually-hidden">Details</span></th></tr></thead>
+  <tbody>
+    <tr><td><strong>Individual brokerage</strong> <span class="hint">Margin</span></td><td class="wide-only">Interactive Brokers</td><td class="num">42</td><td class="wide-only">42 rows, 2 awaiting an instrument</td><td class="more"><details class="row-detail" name="statements"><summary aria-label="Details of Individual brokerage">…</summary><div class="row-detail-pop"><h3>Individual brokerage</h3><dl><dt>Custodian</dt><dd>Interactive Brokers</dd><dt>Type</dt><dd>Margin</dd><dt>Holdings</dt><dd>42</dd><dt>Last statement</dt><dd>42 rows, 2 awaiting an instrument</dd></dl></div></details></td></tr>
+    <tr><td><strong>Roth IRA</strong> <span class="hint">IRA</span></td><td class="wide-only">Fidelity</td><td class="num">7</td><td class="wide-only">Holdings are a day old: refresh the connection, or wait for the next read.</td><td class="more"><details class="row-detail" name="statements"><summary aria-label="Details of Roth IRA">…</summary><div class="row-detail-pop"><h3>Roth IRA</h3><dl><dt>Custodian</dt><dd>Fidelity</dd><dt>Type</dt><dd>IRA</dd><dt>Holdings</dt><dd>7</dd><dt>Last statement</dt><dd>Holdings are a day old: refresh the connection, or wait for the next read.</dd></dl></div></details></td></tr>
+  </tbody>
+</table>
+```
+
+- Each row's detail repeats the row's facts in full; the row is the summary.
+- A row that leads to a page of its own may link its first cell instead.
+
+### Pager
+
+A page of the server's rows (since 0.10.0), in an [`om-pager`](#om-pager):
+`total`, `offset` and the `size` the server used, the rows it drew, and its
+own links for a browser without the kit (the platform's `.pager`: the way
+back, where it is, the way on, each left out, as a `span`, where there is
+none). The kit shows as many rows as fit and asks for the next page at the
+size that fits.
+
+```html
+<om-pager total="42" offset="0" size="3">
+  <table class="one-line">
+    <thead><tr><th>Instrument</th><th class="num">Quantity</th></tr></thead>
+    <tbody>
+      <tr><td><code>AAPL</code></td><td class="num">1250.5</td></tr>
+      <tr><td><code>MSFT</code></td><td class="num">310</td></tr>
+      <tr><td><code>USD</code></td><td class="num">18004.12</td></tr>
+    </tbody>
+  </table>
+  <nav class="pager" aria-label="Pages"><span></span><span>Rows 1–3 of 42</span><a class="button" href="?offset=3&amp;size=3" rel="next">Next →</a></nav>
+</om-pager>
+```
+
+- The server reads `offset` and `size` from the query, and draws that page.
+
 ### Nothing here
 
 The page for somebody who may read none of the accounts the plugin reaches
@@ -1284,9 +1393,13 @@ The dashboard's admin view of a plugin frames each of the plugin's admin pages
 in a tab. The frame stays, because it keeps the plugin's script away from the
 administrator's session (the page is on the plugin's own origin, with its own
 sign-in), but it is seamless, as Shopify's admin apps and Salesforce Canvas
-are: the page has no inner scrollbar, the frame grows to the page, and the
-dashboard's heading and tab row are the only ones. The kit does the page's
-half with no plugin code; the host (the dashboard) does the rest.
+are: the dashboard's heading and tab row are the only ones. Since 0.10.0
+(every page fits one screen) the frame takes the viewport's height under the
+dashboard's chrome, whatever the page says it needs: that is the page's
+[height budget](#one-screen), its own viewport, and a page that fits it has
+no scrollbar; one that does not scrolls inside the frame, never the
+dashboard. Before, the frame grew to the page. The kit does the page's half
+with no plugin code; the host (the dashboard) does the rest.
 
 **Framed, when the host says so.** The host says a page is framed on first
 load with `om-framed=1` on the frame's address (so the first paint is already
@@ -1334,8 +1447,11 @@ that shape:
 </main>
 ```
 
-A framed page must not size itself by the viewport's height (`vh`, `100%` on
-`html` or `body`): the viewport is the frame, whose height follows the page.
+A framed page's viewport is the frame, held to the screen under the host's
+chrome: the page's height budget, `--om-page-height` (see [One
+screen](#one-screen)). A page sizes from it, as `om-pager` does; a host that
+still grows its frame to the page (before 0.10.0's rule) gives a budget as
+tall as the page, and the page behaves as it did.
 
 **The size message.** A page in a frame watches its document (a
 `ResizeObserver` on `<html>`) and posts its height to its parent:
@@ -1357,7 +1473,9 @@ pixel, so a fraction never leaves a scrollbar. It is posted
   frame.
 
 This holds framed or not: a host that sends the theme message gets the size.
-A page on its own posts nothing.
+A page on its own posts nothing. A host holding its frame to the screen
+(0.10.0's rule) may take the size to know whether the page fits its budget,
+and grows nothing.
 
 **Header actions.** A page's head may hand its buttons to the host, which
 draws them in its own header, where the dashboard's own buttons are. The page
@@ -1514,20 +1632,20 @@ head is marked.
 **The host's half.** For each framed page, the host:
 
 1. Frames it with `om-framed=1` beside the theme on its address, and no
-   border, no background of its own and no scrolling of its own.
+   border and no background of its own, at the viewport's height under its
+   own chrome (0.10.0): the page's height budget. A page that fits it has no
+   scrollbar; one that does not scrolls inside the frame.
 2. Sends `{ "type": "meridian:theme", "version": 3, …, "framed": true }` to
    the frame's window on every `load` of the frame and on every theme change,
    with `postMessage(message, pluginOrigin)`.
 3. Takes a message as a size only when `event.source` is that frame's
    `contentWindow`, `event.origin` is exactly the plugin's origin (the one it
    sends the theme to), `data.type` is `"meridian:size"` and `data.version` is
-   `1`, and `data.height` is a whole number of at least 0; it sets the frame's
-   height to it, capped at a height of its own choosing (the page is the
-   plugin's, and a height is only a request).
-4. Keeps a height of its own until the first size arrives, so a page on a kit
-   without the size message (before 0.2.0) still shows, and the frame is never
-   0 tall (a browser may stop rendering a frame it cannot see, and then it
-   never measures).
+   `1`, and `data.height` is a whole number of at least 0. Before 0.10.0 it
+   set the frame's height to it, capped; under the one-screen rule the frame
+   keeps its budget, and the size says only whether the page fits it.
+4. Never lets the frame be 0 tall (a browser may stop rendering a frame it
+   cannot see): its budget has a floor of its own choosing.
 5. Gives the frame the page's `color-scheme` (the person's mode: `light`,
    `dark`, or `light dark` for the system's): where a frame's colour scheme
    differs from its document's, a browser paints the frame opaque, and the
@@ -1571,10 +1689,59 @@ head is marked.
    own.
 
 `gallery/host.html` is that host, and `gallery/host.js` all of its script;
-it draws the status right after the plugin's name in its heading, with the
-kit's `om-status`, and on the right the page's actions (an icon by the kit's
-CSS) immediately left of a level switch, which on a phone is a menu naming
-the level, so the head stays one row.
+it holds its frame to the viewport under its own chrome, draws the status
+right after the plugin's name in its heading, with the kit's `om-status`, and
+on the right the page's actions (an icon by the kit's CSS) immediately left
+of a level switch, which on a phone is a menu naming the level, so the head
+stays one row.
+
+## One screen
+
+Every page fits one screen, at 1440×900 and at 390×844, without scrolling:
+what does not fit goes behind a pager or tabs; a row is one line where it can
+be, its whole a click away; at a phone's width, fewer columns on one line,
+the details a tap away (the product owner, 2026-10-04: meridian-design
+`tasks/design/every-page-fits-one-screen.md`, which supersedes "list rows
+wrap" at a phone's width). Since 0.10.0 the kit carries what that takes:
+
+- **The height budget**, `--om-page-height` on `:root`: the page's own
+  viewport (`100dvh`, else `100vh`), which is the frame's when framed, held by
+  the host to the screen under its chrome. `om-pager` and `om-account-map`'s
+  `page-size="auto"` size from it; a page placed in a box of another height
+  may set it.
+- **Compact chrome**: `.page`'s padding, a one-row head of a fixed height, a
+  section head on one line, one row of tabs scrolling sideways on a phone.
+- **One-line rows**: [`table.one-line`](#one-line-rows), `.list-row.one-line`,
+  `om-grid`'s `one-line`, with `details.row-detail` for the whole row and
+  `.wide-only` for the columns a phone leaves out.
+- **A pager sized to the screen**: [`om-pager`](#om-pager), and the
+  [Pager](#pager) pattern for a server's pages.
+- **The overflow check**: `lib/fit.js` (served at `lib/fit.js` with the kit),
+  usable in any test that drives a browser:
+
+  ```js
+  import { SIZES, measureFit, fitProblems } from "…/lib/fit.js";
+  for (const size of SIZES) {                      // 1440×900, 390×844
+    await page.setViewportSize(size);
+    await page.goto(url);
+    const problems = fitProblems(await page.evaluate(measureFit), size);
+    // [] when the page fits; else a line each, naming the element
+  }
+  ```
+
+  `measureFit` fails a document taller or wider than the viewport, naming
+  the element that reaches furthest past the edge and the first wholly past
+  it, and a row of a `table.one-line` or a `.list-row.one-line` whose text
+  takes more than one line. An element inside something that scrolls or
+  clips, or fixed to the viewport (an open `row-detail`), is not counted.
+  `tools/fit.mjs` exports `checkFit(page, url)`, which does the same for a
+  page and each of its tabs that open by hash (`<a class="tab"
+  href="#id">`), and, for a page in a host's frame, the framed page against
+  its frame. `make fit` holds every page of the gallery to it, each tab, on
+  its own and framed by the stand-in host; `make shots SHOTS=<dir>` writes a
+  screenshot of each. What it measures but does not yet fail on is listed in
+  `tools/fit.mjs`'s `HELD_BACK`, each with why: the entry grid's cards at a
+  phone's width, until a ruling.
 
 ## The scheme contract
 
@@ -1672,13 +1839,15 @@ Playwright's (Chromium, pinned).
 
 | | |
 |---|---|
-| `make ci-local` | Every gate: `check-tokens`, then `build`, `lint`, `test`, `bench`. The pre-push hook runs it |
-| `make ci-remote` | What CI runs: `build`, `lint`, `test`, `bench` (meridian-design is private, so no `check-tokens`) |
+| `make ci-local` | Every gate: `check-tokens`, then `build`, `lint`, `test`, `bench`, `fit`. The pre-push hook runs it |
+| `make ci-remote` | What CI runs: `build`, `lint`, `test`, `bench`, `fit` (meridian-design is private, so no `check-tokens`) |
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
 | `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
+| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; and a pager turning its pages. To `.fit.log` too |
+| `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
 

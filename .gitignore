@@ -5,6 +5,8 @@ node_modules/
 .serve/
 .test.log
 .bench.log
+.fit.log
+.shots/
 .DS_Store
 
 # One person's own.

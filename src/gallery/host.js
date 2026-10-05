@@ -6,9 +6,12 @@
 // - On every load of the frame, and whenever the theme changes, it sends the
 //   theme message with framed: true, to the plugin's origin alone. That
 //   message is what teaches the page where to send its size.
-// - It takes meridian:size only from that frame's window and the plugin's
-//   origin, and sets the frame's height from it: no inner scrollbar, and the
-//   frame grows and shrinks with the page.
+// - The frame takes the viewport's height under this page's chrome, as the
+//   dashboard's does (meridian-core, from kit 0.10.0's one-screen rule): the
+//   page's height budget, which the kit gives the page as --om-page-height.
+//   It takes meridian:size only from that frame's window and the plugin's
+//   origin, and says what it heard, but no longer grows the frame to it: a
+//   page taller than its budget scrolls in the frame, never this page.
 // - It takes meridian:actions under the same guards, and a valid shape: at
 //   most four actions, each an id, a short label drawn as text (never HTML),
 //   a tone it knows, a disabled flag and an icon's name. It draws them as
@@ -36,8 +39,6 @@ const chosen = Object.hasOwn(PAGES, asked) ? asked : "sample.html";
 const PAGE = new URL(chosen, import.meta.url);
 document.querySelector(".tabs .tab.on").textContent = PAGES[chosen];
 const ORIGIN = PAGE.origin;
-// However tall a page says it is, the frame stops here.
-const TALLEST = 20000;
 
 const theme = () => window.Meridian.theme.current();
 const said = document.getElementById("said");
@@ -170,7 +171,6 @@ window.addEventListener("message", (event) => {
   }
   if (d.type !== "meridian:size") return;
   if (!Number.isInteger(d.height) || d.height < 0) return;
-  const height = Math.min(d.height, TALLEST);
-  frame.style.height = `${height}px`;
-  said.textContent = `Received { type: "meridian:size", version: 1, height: ${d.height} } from ${event.origin}; the frame is ${height}px tall.`;
+  const budget = Math.round(frame.getBoundingClientRect().height);
+  said.textContent = `Received { type: "meridian:size", version: 1, height: ${d.height} } from ${event.origin}; the frame stays ${budget}px, the page's budget${d.height > budget ? ": the page does not fit it" : ""}.`;
 });

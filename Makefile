@@ -6,7 +6,7 @@ SHELL := /bin/bash
 unexport GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR \
          GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 
-.PHONY: help ci-local ci-local-deep ci-remote image bench-image build tokens check-tokens lint test bench serve install-hooks
+.PHONY: help ci-local ci-local-deep ci-remote image bench-image build tokens check-tokens lint test bench fit shots serve install-hooks
 
 DOCKER   := DOCKER_BUILDKIT=1 docker
 CHECK    := meridian-ui-check
@@ -23,13 +23,15 @@ MOUNT    := $(if $(HAVE_TOKENS),-v $(TOKENS):/tokens.json:ro,)
 TOKARG   := $(if $(HAVE_TOKENS),--tokens /tokens.json,)
 
 help:
-	@echo "  make ci-local       every gate: tokens fresh, build, lint, tests, bench (the pre-push gate)"
-	@echo "  make ci-remote      what CI runs: build, lint, tests, bench"
+	@echo "  make ci-local       every gate: tokens fresh, build, lint, tests, bench, fit (the pre-push gate)"
+	@echo "  make ci-remote      what CI runs: build, lint, tests, bench, fit"
 	@echo "  make build          generated/ from the tokens (when beside), then dist/$(VERSION)/"
 	@echo "  make check-tokens   fail when generated/ differs from meridian-design's tokens"
 	@echo "  make lint           scripts parse; no raw colour; nothing served reaches elsewhere"
 	@echo "  make test           the tests, in a container (happy-dom)"
 	@echo "  make bench          the high-rate grid's frame budget, in headless Chromium (Playwright)"
+	@echo "  make fit            every gallery page fits one screen at 1440x900 and 390x844 (Playwright)"
+	@echo "  make shots          make fit, writing a screenshot of each page to SHOTS=<dir>"
 	@echo "  make serve          serve dist/ at http://127.0.0.1:$(PORT)/.meridian/ui/$(VERSION)/gallery.html"
 	@echo "  make install-hooks  point git at hooks/ so push fires ci-local"
 
@@ -41,7 +43,7 @@ ci-local: check-tokens ci-remote
 
 ci-local-deep: ci-local
 
-ci-remote: build lint test bench
+ci-remote: build lint test bench fit
 	@echo
 	@echo "ci-remote: GREEN"
 
@@ -90,6 +92,24 @@ bench: bench-image
 		sh -c 'node tools/build.mjs >/dev/null && node tools/bench.mjs' >.bench.log 2>&1 \
 		|| { echo "bench FAILED. What it measured, and the whole of it in .bench.log:" >&2; cat .bench.log >&2; exit 1; }
 	@grep -E '^bench OK' .bench.log
+
+# Every page fits one screen (meridian-design tasks/design/every-page-fits-one-screen):
+# each gallery page, and each of its tabs, at 1440x900 and 390x844, its
+# document no taller and no wider than the viewport and every one-line row on
+# one line (tools/fit.mjs, lib/fit.js), in the bench's browser.
+fit: bench-image
+	@docker run --rm --init --shm-size=1g $(BENCH) \
+		sh -c 'node tools/build.mjs >/dev/null && node tools/fit.mjs' >.fit.log 2>&1 \
+		|| { echo "fit FAILED. What it measured, and the whole of it in .fit.log:" >&2; cat .fit.log >&2; exit 1; }
+	@grep -E '^fit OK' .fit.log
+
+# make fit, with a screenshot of each page, size and tab, streamed out as a tar.
+SHOTS ?= .shots
+shots: bench-image
+	@mkdir -p $(SHOTS)
+	@docker run --rm --init --shm-size=1g $(BENCH) \
+		sh -c 'node tools/build.mjs >/dev/null && node tools/fit.mjs --shots /tmp/shots >&2; tar -C /tmp/shots -cf - .' | tar -C $(SHOTS) -xf -
+	@echo "shots: $(SHOTS)"
 
 # The kit under the base path the dashboard serves it at, so the gallery
 # proves every reference is relative. Python's server, as the host has it.

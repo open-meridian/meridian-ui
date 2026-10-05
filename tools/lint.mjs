@@ -24,6 +24,7 @@ const LOCAL_PROPERTIES = {
   "om-grid-row-height": "a high-rate om-grid's fixed row height, set by the grid from row-height",
   "om-panels-height": "the height of an om-panels; a page may set it",
   "om-panels-gap": "the space between om-panels' panels; a page may set it",
+  "om-page-height": "the page's height budget (base.css): its own viewport, framed the frame's; a page may set it",
 };
 const SVG_NS = "http://www.w3.org/2000/svg";
 // Files that handle colours as data, never as style: they are what checks them.
