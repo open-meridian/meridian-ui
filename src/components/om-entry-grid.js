@@ -57,9 +57,17 @@
 //   moved into a dialog, every field under its column's name, and back in
 //   its place on Done or Escape), so every input stays in the form. A row
 //   whose hidden fields have a problem marks its "…".
+//
+// `search` (0.11.0) draws a search box above the table, beside the pager:
+// the rows whose values hold every word typed stay, the pages are of them,
+// and every row still posts. Which rows match is worked out as the search is
+// typed, so a row being typed in never leaves under the person; a row added
+// (Add a row, a paste, a CSV), or one the keyboard is sent to that the
+// search left out, ends the search. The attribute's words name the box.
 
 import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
+import { askSearch, fold, matchedSaid, matches, searchBox, wordsOf } from "../lib/search.js";
 import { addDecimals, compareDecimal, parseDecimal } from "../lib/decimal.js";
 import {
   checkEntryValue,
@@ -139,7 +147,7 @@ export class OmEntryGrid extends HTMLElement {
   static formAssociated = true;
 
   static get observedAttributes() {
-    return ["name", "caption", "min-rows", "max-rows", "csv", "add-label", "csv-label", "empty"];
+    return ["name", "caption", "min-rows", "max-rows", "csv", "add-label", "csv-label", "empty", "search"];
   }
 
   #uid = `om-entry-${++instances}`;
@@ -191,6 +199,9 @@ export class OmEntryGrid extends HTMLElement {
   #rowBody = null;
   #rowTitle = null;
   #rowSaid = null;
+  // The search: its box, and the rows it found when typed (null: no search).
+  #search = null;
+  #found = null;
 
   constructor() {
     super();
@@ -225,6 +236,7 @@ export class OmEntryGrid extends HTMLElement {
     if (name === "csv-label" && this.#csv) this.#csv.textContent = this.getAttribute("csv-label") || "Import a CSV";
     if (name === "csv") this.#csv.hidden = !this.hasAttribute("csv");
     if (name === "empty") this.#empty.firstChild.textContent = this.#emptyText();
+    if (name === "search") this.#renderSearch();
     if (name === "min-rows") this.#pad();
     if (name === "name" || name === "min-rows" || name === "max-rows") {
       this.#renumber();
@@ -444,6 +456,7 @@ export class OmEntryGrid extends HTMLElement {
     this.#live = el("div", "visually-hidden om-entry-live");
     this.#live.setAttribute("aria-live", "polite");
     this.append(this.#messages, wrap, this.#pager, foot, this.#live);
+    this.#renderSearch();
     this.#empty = el("tr", "om-entry-empty");
     this.#empty.append(el("td", "", this.#emptyText()));
 
@@ -701,6 +714,8 @@ export class OmEntryGrid extends HTMLElement {
   }
 
   #insert(row) {
+    // A row added is being entered, not found: the search ends.
+    if (this.#found) this.#endSearch();
     this.#tbody.append(row.tr, row.msgTr);
     this.#rows.push(row);
   }
@@ -1319,25 +1334,26 @@ export class OmEntryGrid extends HTMLElement {
   // (a row with a message is taller). Every row when the grid is not drawn,
   // or none is laid out yet.
   #layout() {
-    if (!this.isConnected || !this.#rows.length) {
+    const listed = this.#listed();
+    if (!this.isConnected || !listed.length) {
       this.#per = null;
       this.#applyPage();
       return;
     }
     // The row with the keyboard stays in view; else the first shown.
     const active = this.ownerDocument.activeElement;
-    const focused = active ? this.#rows.findIndex((r) => r.tr.contains(active)) : -1;
+    const focused = active ? listed.findIndex((r) => r.tr.contains(active)) : -1;
     const anchor = focused >= 0 ? focused : this.#per ? this.#page * this.#per : 0;
-    const shown = this.#rows.filter((r) => !r.tr.classList.contains(PAGED)).map((r) => r.tr);
+    const shown = listed.filter((r) => !r.tr.classList.contains(PAGED)).map((r) => r.tr);
     const fit = rowsThatFit(shown);
-    if (fit === null || fit >= this.#rows.length) {
+    if (fit === null || fit >= listed.length) {
       this.#per = null;
       this.#applyPage();
       if (fit === null) return;
       // Every row and no pager: still too tall, it pages after all.
       if (contentHeight() <= pageBudget() + 0.5) return;
     }
-    let per = Math.min(fit ?? this.#rows.length, this.#rows.length - 1);
+    let per = Math.min(fit ?? listed.length, listed.length - 1);
     const budget = pageBudget();
     this.#per = Math.max(1, per);
     this.#page = Math.floor(anchor / this.#per);
@@ -1352,19 +1368,23 @@ export class OmEntryGrid extends HTMLElement {
   // Show the page's rows, hide the rest, and say which.
   #applyPage() {
     if (!this.#built) return;
-    const total = this.#rows.length;
+    const listed = this.#listed();
+    const total = listed.length;
     const per = this.#per && this.#per < total ? this.#per : total || 1;
     const pages = Math.max(1, Math.ceil(total / per));
     this.#page = Math.min(Math.max(0, this.#page), pages - 1);
     const start = this.#page * per;
-    this.#rows.forEach((row, i) => {
-      const off = i < start || i >= start + per;
+    const on = new Set(listed.slice(start, start + per));
+    for (const row of this.#rows) {
+      // Off the page shown, or left out by the search: hidden, still posted.
+      const off = !on.has(row);
       if (row.tr.classList.contains(PAGED) !== off) {
         row.tr.classList.toggle(PAGED, off);
         row.msgTr.classList.toggle(PAGED, off);
       }
-    });
+    }
     this.#pager.hidden = pages <= 1;
+    if (this.#found) this.#search?.setSaid(matchedSaid(total, this.#rows.length));
     const last = Math.min(total, start + per);
     this.#pagerSaid.textContent = `Rows ${start + 1}–${last} of ${total}`;
     this.#prev.disabled = this.#page <= 0;
@@ -1373,8 +1393,14 @@ export class OmEntryGrid extends HTMLElement {
 
   // The page holding `row`.
   #showRow(row) {
-    const i = this.#rows.indexOf(row);
-    if (i < 0 || !this.#per || this.#per >= this.#rows.length) return;
+    // A row the search left out is asked for: the search gives way.
+    if (this.#found && !this.#found.has(row) && this.#rows.includes(row)) {
+      this.#endSearch();
+      this.#applyPage();
+    }
+    const listed = this.#listed();
+    const i = listed.indexOf(row);
+    if (i < 0 || !this.#per || this.#per >= listed.length) return;
     const page = Math.floor(i / this.#per);
     if (page === this.#page) return;
     this.#page = page;
@@ -1386,6 +1412,67 @@ export class OmEntryGrid extends HTMLElement {
     this.#page += by;
     this.#applyPage();
     this.#say(this.#pagerSaid.textContent + ".");
+  }
+
+  // ── The search ───────────────────────────────────────────────────────────
+
+  /** The rows the pages are of: every row, or those the search found. */
+  #listed() {
+    return this.#found ? this.#rows.filter((r) => this.#found.has(r)) : this.#rows;
+  }
+
+  #renderSearch() {
+    if (!this.hasAttribute("search")) {
+      this.#search?.bar.remove();
+      this.#search = null;
+      if (this.#found) {
+        this.#found = null;
+        this.#paged();
+      }
+      return;
+    }
+    if (this.#search) {
+      this.#search.setLabel(this.getAttribute("search"));
+      return;
+    }
+    this.#search = searchBox({ label: this.getAttribute("search"), onQuery: (q) => this.#query(q) });
+    this.prepend(this.#search.bar);
+  }
+
+  #query(query) {
+    if (this.#open) this.#closeRow(false);
+    const words = askSearch(this, { query }) ? wordsOf(query) : [];
+    if (!words.length) {
+      if (!this.#found) return;
+      this.#found = null;
+      this.#search?.setSaid("");
+    } else {
+      // Found once, as typed: a row being typed in stays where it is.
+      this.#found = new Set(this.#rows.filter((row) => matches(this.#hayOf(row), words)));
+      this.#search?.setSaid(matchedSaid(this.#found.size, this.#rows.length));
+    }
+    this.#page = 0;
+    this.#paged();
+  }
+
+  #endSearch() {
+    this.#found = null;
+    this.#search?.clear();
+  }
+
+  // A row's values as searched, a choice's label too; folded.
+  #hayOf(row) {
+    const parts = [];
+    for (const col of this.#columns) {
+      const v = row.values[col.key];
+      if (isBlankText(v)) continue;
+      parts.push(v);
+      if (col.type === "choice") {
+        const known = matchOption(col, v);
+        if (known) parts.push(known.label);
+      }
+    }
+    return parts.map(fold).join("\n");
   }
 
   // ── A row opened over the page ───────────────────────────────────────────

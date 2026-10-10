@@ -1,7 +1,7 @@
 // The gallery's own: under each pattern, its markup as this page's source
 // writes it (between its two comments), which is the README's; and a form
-// shown rather than posted, and a pager's page shown rather than asked for,
-// since here there is no plugin's server.
+// shown rather than posted, and a pager's page or a search shown rather than
+// asked for, since here there is no plugin's server.
 
 const said = document.getElementById("said");
 document.addEventListener("submit", (event) => {
@@ -18,6 +18,14 @@ document.addEventListener("click", (event) => {
   event.preventDefault();
   said.hidden = false;
   said.textContent = `The pager would ask the server for ${link.getAttribute("href")}.`;
+});
+
+// A server's search, shown rather than asked for.
+document.addEventListener("om-search", (event) => {
+  if (!event.detail.href) return;
+  event.preventDefault();
+  said.hidden = false;
+  said.textContent = `The search would ask the server for ${event.detail.href}.`;
 });
 
 const source = await (await fetch(location.pathname)).text();

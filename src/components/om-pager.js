@@ -30,9 +30,21 @@
 // a browser without the kit shows; the kit hides it and draws its own. Rows
 // the page itself hides stay hidden and are not counted. One om-pager on a
 // screen: two would each take the whole space left.
+//
+// `search` (0.11.0) draws a search box above the rows, beside the pager
+// rather than instead of it; the attribute's words name the box. With every
+// row here, a row stays while its text holds every word typed, as typed, and
+// the pages are of what is left. With a server's pages (`total` given), Enter
+// asks the server: the same address with the query's `q` (or the name
+// `search-param` gives) set and its offset dropped, so the server answers the
+// first page of what it finds, `total` counting it; the box shows the query
+// from the address. A row a search inside (an om-grid's) leaves out is not
+// paged either. The `om-search` event is raised first; cancelled, the page
+// searches itself.
 
 import { whenParsed } from "../lib/declared.js";
 import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
+import { UNMATCHED, askSearch, fold, matchedSaid, matches, searchBox, wordsOf } from "../lib/search.js";
 
 const COUNT = new Intl.NumberFormat("en-US");
 const count = (n) => COUNT.format(n);
@@ -41,7 +53,7 @@ const PAGED = "data-om-paged";
 
 export class OmPager extends HTMLElement {
   static get observedAttributes() {
-    return ["total", "offset", "size", "rows", "offset-param", "size-param"];
+    return ["total", "offset", "size", "rows", "offset-param", "size-param", "search", "search-param"];
   }
 
   #built = false;
@@ -53,6 +65,8 @@ export class OmPager extends HTMLElement {
   #fit = null;
   #frame = null;
   #watch = null;
+  #search = null;
+  #words = [];
   #onResize = () => this.#schedule();
 
   connectedCallback() {
@@ -68,8 +82,10 @@ export class OmPager extends HTMLElement {
     globalThis.removeEventListener?.("resize", this.#onResize);
   }
 
-  attributeChangedCallback() {
-    if (this.#built) this.#schedule();
+  attributeChangedCallback(name) {
+    if (!this.#built) return;
+    if (name === "search" || name === "total") this.#renderSearch();
+    this.#schedule();
   }
 
   /** The rows on the page shown now: { first, last, total, size }, rows
@@ -110,13 +126,89 @@ export class OmPager extends HTMLElement {
     this.#next = this.#control("next");
     nav.append(this.#prev, this.#said, this.#next);
     this.append(nav);
-    // Rows drawn, sorted or replaced (an om-grid's) are paged again.
+    this.#renderSearch();
+    // Rows drawn, sorted or replaced (an om-grid's), or left out by a search
+    // inside, are paged again.
     if (globalThis.MutationObserver) {
       this.#watch = new MutationObserver((records) => {
-        if (records.some((r) => !nav.contains(r.target))) this.#schedule();
+        if (records.some((r) => !nav.contains(r.target) && !this.#search?.bar.contains(r.target))) this.#schedule();
       });
-      this.#watch.observe(this, { childList: true, subtree: true });
+      this.#watch.observe(this, { childList: true, subtree: true, attributes: true, attributeFilter: [UNMATCHED] });
     }
+    // A search inside (an om-grid's) starts its pages again from the first.
+    this.addEventListener("om-search", (e) => {
+      if (e.target === this) return;
+      this.#page = 0;
+      this.#schedule();
+    });
+  }
+
+  // ── The search ───────────────────────────────────────────────────────────
+
+  // Whether a search goes to the server: it pages, so it finds.
+  #searchesServer() {
+    return this.hasAttribute("total");
+  }
+
+  #searchParam() {
+    return this.getAttribute("search-param") || "q";
+  }
+
+  #renderSearch() {
+    if (!this.hasAttribute("search")) {
+      this.#search?.bar.remove();
+      this.#search = null;
+      if (this.#words.length) {
+        this.#words = [];
+        this.#filter();
+      }
+      return;
+    }
+    const live = !this.#searchesServer();
+    if (this.#search && this.#search.live === live) {
+      this.#search.setLabel(this.getAttribute("search"));
+      return;
+    }
+    this.#search?.bar.remove();
+    const asked = live ? "" : new URL(globalThis.location.href).searchParams.get(this.#searchParam()) || "";
+    this.#search = searchBox({ label: this.getAttribute("search"), value: asked, live, onQuery: (q) => this.#query(q) });
+    this.#search.live = live;
+    this.prepend(this.#search.bar);
+  }
+
+  #query(query) {
+    if (this.#searchesServer()) {
+      // The first page of what the server finds, as long as fit now.
+      const url = new URL(globalThis.location.href);
+      const q = query.trim();
+      if (q) url.searchParams.set(this.#searchParam(), q);
+      else url.searchParams.delete(this.#searchParam());
+      url.searchParams.delete(this.getAttribute("offset-param") || "offset");
+      if (this.#fit) url.searchParams.set(this.getAttribute("size-param") || "size", String(this.#fit));
+      const href = url.pathname + url.search + url.hash;
+      if (askSearch(this, { query: q, href })) globalThis.location.assign(href);
+      return;
+    }
+    const go = askSearch(this, { query });
+    const words = go ? wordsOf(query) : [];
+    if (words.join(" ") === this.#words.join(" ")) return;
+    this.#words = words;
+    this.#page = 0;
+    this.#filter();
+    this.#schedule();
+  }
+
+  // Rows all here: those whose text does not hold every word leave.
+  #filter() {
+    if (this.#searchesServer()) return;
+    const all = this.#candidates();
+    let found = 0;
+    for (const row of all) {
+      const out = this.#words.length > 0 && !matches(fold(row.textContent), this.#words);
+      if (row.hasAttribute(UNMATCHED) !== out) row.toggleAttribute(UNMATCHED, out);
+      if (!out) found++;
+    }
+    this.#search?.setSaid(this.#words.length ? matchedSaid(found, all.length) : "");
   }
 
   #control(which) {
@@ -132,7 +224,13 @@ export class OmPager extends HTMLElement {
     return el;
   }
 
+  /** The rows to page: those no search leaves out. */
   #rows() {
+    return this.#candidates().filter((r) => !r.hasAttribute(UNMATCHED));
+  }
+
+  /** Every row here the page has not hidden itself. */
+  #candidates() {
     const table = this.querySelector("table");
     const body = table && table.querySelector(":scope > tbody");
     const rows = table
@@ -163,6 +261,8 @@ export class OmPager extends HTMLElement {
 
   /** Work out how many rows fit, show them, and draw the pager. */
   #layout() {
+    // Rows drawn again (an om-grid's) are searched again.
+    if (this.#words.length) this.#filter();
     const rows = this.#rows();
     // The pager's controls follow the way it pages (rows can arrive late).
     const server = this.#serverSide();

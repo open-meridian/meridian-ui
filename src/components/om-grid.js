@@ -38,9 +38,17 @@
 // one line of one height, a long value cut with an ellipsis and whole on
 // hover. With narrow="priority" it is the phone's way: fewer columns, each
 // row still one line. Inside an om-pager, a page of rows at a time.
+//
+// `search` (0.11.0) draws a search box above the rows: a row stays while its
+// text holds every word typed (its columns' values as shown, and their hints),
+// the rest leave, at most once a frame, in high-rate mode too. The attribute's
+// words name the box. Inside an om-pager, the pager pages what is left. The
+// `om-search` event is raised first; cancelled, the page searches itself (on
+// its server, say) and sets the rows.
 
 import { compareDecimal, compareParsed, groupDigits, parseDecimal, signOf } from "../lib/decimal.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
+import { UNMATCHED, askSearch, fold, matchedSaid, matches, searchBox, wordsOf } from "../lib/search.js";
 
 const NUMERIC = new Set(["number", "decimal"]);
 const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -106,7 +114,7 @@ function reducedMotion() {
 
 export class OmGrid extends HTMLElement {
   static get observedAttributes() {
-    return ["dense", "sort", "empty", "caption", "high-rate", "freeze-sort", "row-height", "no-flash", "one-line"];
+    return ["dense", "sort", "empty", "caption", "high-rate", "freeze-sort", "row-height", "no-flash", "one-line", "search"];
   }
 
   #columns = [];
@@ -145,6 +153,13 @@ export class OmGrid extends HTMLElement {
   #columnsSet = false;
   #rowsSet = false;
   #waiting = false;
+  // The search: its box, the words typed, each row's text as it is searched
+  // (folded once a row changes), and in high-rate mode the keys it leaves.
+  #search = null;
+  #words = [];
+  #hay = new Map(); // key -> folded text
+  #matchVersion = 0;
+  #found = { order: -1, match: -1, keys: null };
 
   connectedCallback() {
     if (this.#table || this.#waiting) return;
@@ -177,6 +192,7 @@ export class OmGrid extends HTMLElement {
     }
     if (name === "empty") this.#renderEmpty();
     if (name === "caption") this.#renderCaption();
+    if (name === "search") this.#renderSearch();
     if (name === "high-rate" && (before === null) !== (after === null)) this.#build();
     if (name === "row-height" && this.#fast) {
       this.#setRowHeight();
@@ -215,7 +231,12 @@ export class OmGrid extends HTMLElement {
     this.#tbody = document.createElement("tbody");
     this.#table.append(this.#caption, this.#thead, this.#tbody);
     wrap.append(this.#table);
+    // Drawn again (high-rate turned on or off): a new box, and no words yet.
+    this.#search = null;
+    this.#words = [];
+    this.#matchVersion++;
     this.append(wrap);
+    this.#renderSearch();
     if (!this.#sort.key) this.#sort = this.#parseSort();
     this.#tbody.addEventListener("click", (e) => {
       const tr = e.target.closest && e.target.closest("tr[data-key]");
@@ -275,6 +296,8 @@ export class OmGrid extends HTMLElement {
   set columns(value) {
     this.#columnsSet = true;
     this.#columns = (value || []).map(normaliseColumn);
+    this.#hay.clear();
+    this.#matchVersion++;
     this.#resort();
     if (!this.#table) return;
     this.#renderHead();
@@ -348,6 +371,8 @@ export class OmGrid extends HTMLElement {
     this.#pendingRemove.clear();
     this.#rows.clear();
     this.#seq.clear();
+    this.#hay.clear();
+    this.#matchVersion++;
     for (const row of rows || []) {
       const key = this.#keyOf(row);
       if (!this.#seq.has(key)) this.#seq.set(key, this.#arrivals++);
@@ -391,6 +416,8 @@ export class OmGrid extends HTMLElement {
     this.#pendingRemove.clear();
     const { changed, added, moved } = this.#apply(updates, removals);
     if (!this.#table) return;
+    const searching = this.#words.length > 0;
+    if (searching) this.#matchVersion++;
 
     if (this.#fast) {
       const shown = new Set(this.#trs.keys());
@@ -401,6 +428,7 @@ export class OmGrid extends HTMLElement {
         if (tr) this.#patchRow(tr, before, this.#rows.get(key), flash);
       }
       this.#renderEmpty();
+      if (searching) this.#sayFound();
       return;
     }
 
@@ -410,7 +438,9 @@ export class OmGrid extends HTMLElement {
     }
     for (const key of changed.keys()) {
       const tr = this.#trs.get(key);
-      if (tr) this.#fillRow(tr, this.#rows.get(key));
+      if (!tr) continue;
+      this.#fillRow(tr, this.#rows.get(key));
+      if (searching) this.#mark(tr, key);
     }
     for (const key of added) {
       const tr = this.#makeRow(key, this.#rows.get(key));
@@ -419,6 +449,7 @@ export class OmGrid extends HTMLElement {
     }
     if (moved || added.size) this.#syncOrder();
     this.#renderEmpty();
+    if (searching) this.#sayFound();
   }
 
   /** Sort by a column: "ascending", "descending", or null for arrival order. */
@@ -437,7 +468,10 @@ export class OmGrid extends HTMLElement {
   /** In high-rate mode, bring a row into view (and the keyboard to it, with focus: true). */
   scrollToRow(key, { focus = false } = {}) {
     key = String(key);
-    const index = this.#locate(key);
+    if (!this.#rows.has(key)) return false;
+    // A row the search leaves out is asked for: the search gives way.
+    if (!this.#hit(key)) this.#clearSearch();
+    const index = this.#shownIndex(key);
     if (index < 0) return false;
     if (!this.#fast || !this.#table) {
       this.#trs.get(key)?.scrollIntoView?.({ block: "nearest" });
@@ -537,10 +571,12 @@ export class OmGrid extends HTMLElement {
       this.#order.splice(i, 1);
       this.#rows.delete(key);
       this.#sortVals.delete(key);
+      if (this.#hay.size) this.#hay.delete(key);
       this.#orderVersion++;
     }
     for (const [key, row] of updates) {
       const before = this.#rows.get(key);
+      if (this.#hay.size) this.#hay.delete(key);
       if (before === undefined) {
         this.#seq.set(key, this.#arrivals++);
         this.#rows.set(key, row);
@@ -674,15 +710,18 @@ export class OmGrid extends HTMLElement {
 
   #renderEmpty() {
     const existing = this.#tbody.querySelector(":scope > tr.om-grid-empty");
-    if (this.#rows.size) {
+    const unmatched = this.#rows.size > 0 && this.#words.length > 0 && !this.#anyHit();
+    if (this.#rows.size && !unmatched) {
       existing?.remove();
       return;
     }
+    const words = unmatched ? "No rows match the search." : this.getAttribute("empty") || "Nothing to show.";
+    if (existing && existing.textContent === words) return;
     const tr = existing || document.createElement("tr");
     tr.className = "om-grid-empty";
     const td = document.createElement("td");
     td.colSpan = Math.max(1, this.#columns.length);
-    td.textContent = this.getAttribute("empty") || "Nothing to show.";
+    td.textContent = words;
     tr.replaceChildren(td);
     if (!existing) this.#tbody.append(tr);
   }
@@ -703,6 +742,7 @@ export class OmGrid extends HTMLElement {
     tr.dataset.key = key;
     if (this.#fast) tr.tabIndex = -1;
     this.#fillRow(tr, row);
+    if (!this.#fast && this.#words.length) this.#mark(tr, key);
     return tr;
   }
 
@@ -855,7 +895,8 @@ export class OmGrid extends HTMLElement {
 
   #renderWindow(mustInclude = -1) {
     this.#windowDirty = false;
-    const n = this.#order.length;
+    const order = this.#shownOrder();
+    const n = order.length;
     const rowH = this.#rowH;
     // Read before writing: one layout a frame.
     const scrollTop = this.#wrap.scrollTop || 0;
@@ -869,10 +910,10 @@ export class OmGrid extends HTMLElement {
     }
     this.#table.setAttribute("aria-rowcount", String(n + 1));
     const d = this.#drawn;
-    if (d.first === first && d.last === last && d.version === this.#orderVersion) return;
-    this.#drawn = { first, last, version: this.#orderVersion };
+    if (d.first === first && d.last === last && d.version === this.#orderVersion && d.match === this.#matchVersion) return;
+    this.#drawn = { first, last, version: this.#orderVersion, match: this.#matchVersion };
 
-    const keys = this.#order.slice(first, last);
+    const keys = order.slice(first, last);
     const want = new Set(keys);
     const focused = document.activeElement;
     for (const [k, tr] of this.#trs) {
@@ -914,16 +955,136 @@ export class OmGrid extends HTMLElement {
     }
   }
 
+  // ── The search ───────────────────────────────────────────────────────────
+
+  // The box, drawn above the rows while `search` is set; its words name it.
+  #renderSearch() {
+    if (!this.#table) return;
+    if (!this.hasAttribute("search")) {
+      this.#search?.bar.remove();
+      this.#search = null;
+      if (this.#words.length) this.#clearSearch();
+      return;
+    }
+    if (this.#search) {
+      this.#search.setLabel(this.getAttribute("search"));
+      return;
+    }
+    this.#search = searchBox({ label: this.getAttribute("search"), onQuery: (q) => this.#query(q) });
+    this.prepend(this.#search.bar);
+  }
+
+  #query(query) {
+    const words = wordsOf(query);
+    // Cancelled: the page searches itself, and sets the rows it finds.
+    const go = askSearch(this, { query });
+    const next = go ? words : [];
+    if (next.join(" ") === this.#words.join(" ")) return;
+    this.#words = next;
+    this.#applySearch();
+  }
+
+  #clearSearch() {
+    this.#search?.clear();
+    this.#words = [];
+    this.#applySearch();
+  }
+
+  // The words changed: the rows they leave, drawn again.
+  #applySearch() {
+    this.#matchVersion++;
+    if (!this.#table) return;
+    if (this.#fast) {
+      this.#drawn.version = -1;
+      this.#wrap.scrollTop = 0;
+      this.#renderWindow();
+    } else {
+      for (const [key, tr] of this.#trs) this.#mark(tr, key);
+    }
+    this.#renderEmpty();
+    this.#sayFound();
+  }
+
+  /** Whether the row keyed `key` holds every word typed (every row, with none). */
+  #hit(key) {
+    if (!this.#words.length) return true;
+    let hay = this.#hay.get(key);
+    if (hay === undefined) {
+      hay = this.#hayOf(this.#rows.get(key));
+      this.#hay.set(key, hay);
+    }
+    return matches(hay, this.#words);
+  }
+
+  // A row's text as searched: each column's value as given and as shown
+  // (its digits grouped, its format's text), and its hint; folded.
+  #hayOf(row) {
+    const parts = [];
+    for (const col of this.#columns) {
+      const v = row?.[col.key];
+      if (!isBlank(v)) {
+        parts.push(v);
+        if (NUMERIC.has(col.type) && col.group) parts.push(groupDigits(v));
+      }
+      if (col.format) {
+        try {
+          const shown = col.format(v, row);
+          if (shown && typeof shown === "object" && "textContent" in shown) parts.push(shown.textContent);
+          else if (!isBlank(shown)) parts.push(shown);
+        } catch {
+          // A format that throws on a value draws nothing searchable for it.
+        }
+      }
+      const hint = typeof col.hint === "string" && col.hint ? row?.[col.hint] : "";
+      if (!isBlank(hint)) parts.push(hint);
+    }
+    return parts.map(fold).join("\n");
+  }
+
+  #mark(tr, key) {
+    const out = !this.#hit(key);
+    if (tr.hasAttribute(UNMATCHED) !== out) tr.toggleAttribute(UNMATCHED, out);
+  }
+
+  #anyHit() {
+    return this.#fast ? this.#shownOrder().length > 0 : this.#order.some((k) => this.#hit(k));
+  }
+
+  /** The keys shown, in order: every row's, or those the search leaves. */
+  #shownOrder() {
+    if (!this.#words.length) return this.#order;
+    const f = this.#found;
+    if (!f.keys || f.order !== this.#orderVersion || f.match !== this.#matchVersion) {
+      this.#found = { order: this.#orderVersion, match: this.#matchVersion, keys: this.#order.filter((k) => this.#hit(k)) };
+    }
+    return this.#found.keys;
+  }
+
+  #shownIndex(key) {
+    return this.#words.length ? this.#shownOrder().indexOf(key) : this.#locate(key);
+  }
+
+  #sayFound() {
+    if (!this.#search) return;
+    if (!this.#words.length) {
+      this.#search.setSaid("");
+      return;
+    }
+    const n = this.#fast ? this.#shownOrder().length : this.#order.reduce((sum, k) => sum + (this.#hit(k) ? 1 : 0), 0);
+    this.#search.setSaid(matchedSaid(n, this.#rows.size));
+  }
+
   #emitRow(key) {
     this.dispatchEvent(new CustomEvent("om-row", { bubbles: true, detail: { key, row: this.#rows.get(key) } }));
   }
 
   #key(e) {
     if (e.target.closest && e.target.closest("thead")) return;
-    const n = this.#order.length;
+    const order = this.#shownOrder();
+    const n = order.length;
     if (!n) return;
     const pageRows = Math.max(1, Math.floor((this.#viewHeight() - this.#headHeight()) / this.#rowH) - 1);
-    let at = this.#active !== null ? this.#locate(this.#active) : -1;
+    let at = this.#active !== null ? this.#shownIndex(this.#active) : -1;
     // No row yet (or it was removed): the arrows start at the first row in view.
     const fresh = at < 0;
     if (fresh) at = Math.min(n - 1, Math.floor((this.#wrap.scrollTop || 0) / this.#rowH));
@@ -947,7 +1108,7 @@ export class OmGrid extends HTMLElement {
     }
     e.preventDefault();
     to = Math.max(0, Math.min(n - 1, to));
-    this.scrollToRow(this.#order[to], { focus: true });
+    this.scrollToRow(order[to], { focus: true });
   }
 }
 

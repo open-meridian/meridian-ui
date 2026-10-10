@@ -14,3 +14,5 @@ import "./om-pager.js";
 // Not an element: one-line rows' detail by a click on the row, Escape, and a
 // cut cell's whole text on hover (lib/rows.js).
 import "../lib/rows.js";
+// Not an element either: fields gated on a choice (lib/gate.js).
+import "../lib/gate.js";

@@ -302,6 +302,117 @@ async function entryChecks(browser, base, shots) {
   return failed;
 }
 
+/**
+ * Search beside the pager and fields gated on a choice (0.11.0), in a real
+ * browser at both sizes: the components upgraded with their boxes; a search
+ * narrowing the orders' grid in its pager, the accounts' pager over a plain
+ * table and the quotes' high-rate grid, each saying how many match; a
+ * server's search asked by Enter; a gated field appearing for its choice and
+ * leaving for another; each page still fitting. Returns what failed.
+ */
+async function searchChecks(browser, base, shots) {
+  const failed = [];
+  for (const size of SIZES) {
+    const at = `${size.width}×${size.height}`;
+    const check = (ok, what) => ok || failed.push(`search and gated fields at ${at}: ${what}`);
+    const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
+    page.on("pageerror", (e) => failed.push(`search and gated fields at ${at}: the page threw: ${e.message}`));
+    const fits = async (what) => {
+      const problems = fitProblems(await page.evaluate(measureFit), size);
+      check(!problems.length, `${what}, the page does not fit: ${problems.join("; ")}`);
+    };
+    const shot = async (name) => {
+      if (shots) await page.screenshot({ path: join(shots, `kit-v19-${name}-${size.name}.png`) });
+    };
+
+    // The orders: an om-grid's own search, inside an om-pager.
+    await page.goto(`${base}gallery/sample.html#book`);
+    await settled(page);
+    const upgraded = await page.evaluate(() => ({
+      defined: ["om-grid", "om-pager", "om-entry-grid"].every((n) => !!customElements.get(n)),
+      box: !!document.querySelector("#book om-grid#orders > .om-search input[type=search][aria-label='Search orders']"),
+      pager: !!document.querySelector("#book om-pager > nav.om-pager-nav"),
+    }));
+    check(upgraded.defined && upgraded.box && upgraded.pager, `the components did not upgrade with their boxes: ${JSON.stringify(upgraded)}`);
+    await page.locator("#orders .om-search input").fill("nvda");
+    await still(page);
+    const orders = await page.evaluate(() => {
+      const g = document.getElementById("orders");
+      const rows = [...g.querySelectorAll("tbody tr[data-key]")].filter((tr) => getComputedStyle(tr).display !== "none");
+      return { shown: document.querySelector("#book om-pager").shown, said: g.querySelector(".om-search-said").textContent, symbols: rows.map((tr) => tr.cells[2].textContent) };
+    });
+    check(orders.shown.total === 5 && orders.symbols.length > 0 && orders.symbols.every((x) => x === "NVDA") && orders.said === "5 of 40 rows",
+      `the orders' search does not leave NVDA's five, paged: ${JSON.stringify(orders)}`);
+    await fits("the orders searched");
+    await shot("orders-search");
+
+    // The accounts: om-pager's own search over a server's plain table.
+    await page.goto(`${base}gallery/sample.html#accounts`);
+    await settled(page);
+    await page.locator("#accounts om-pager > .om-search input").fill("retirement");
+    await still(page);
+    const accounts = await page.evaluate(() => {
+      const p = document.querySelector("#accounts om-pager");
+      const rows = [...p.querySelectorAll("tbody tr")].filter((tr) => getComputedStyle(tr).display !== "none");
+      return { shown: p.shown, said: p.querySelector(".om-search-said").textContent, names: rows.map((tr) => tr.cells[0].querySelector("strong").textContent) };
+    });
+    check(accounts.shown.total === 3 && accounts.said === "3 of 30 rows" && accounts.names.every((n) => n.startsWith("Retirement")),
+      `the accounts' search does not leave the three Retirement accounts: ${JSON.stringify(accounts)}`);
+    await fits("the accounts searched");
+    await shot("accounts-search");
+
+    // The quotes: a high-rate grid, streaming, searched.
+    await page.goto(`${base}gallery/sample.html#desk-tab`);
+    await settled(page);
+    await page.locator("#quotes .om-search input").fill("ab");
+    await still(page);
+    const quotes = await page.evaluate(() => {
+      const g = document.getElementById("quotes");
+      const symbols = [...g.querySelectorAll("tbody tr[data-key]")].map((tr) => tr.cells[0].textContent.toLowerCase());
+      return { symbols, said: g.querySelector(".om-search-said").textContent, count: Number(g.querySelector("table").getAttribute("aria-rowcount")) - 1 };
+    });
+    check(quotes.symbols.length > 0 && quotes.symbols.every((x) => x.includes("ab")) && quotes.said === `${quotes.count} of 2,000 rows` && quotes.count < 2000,
+      `the quotes' search does not draw only what it leaves: ${JSON.stringify({ ...quotes, symbols: quotes.symbols.slice(0, 6) })}`);
+    await fits("the quotes searched");
+    await shot("quotes-search");
+
+    // A server's search: Enter asks for the first page of what it finds.
+    await page.goto(`${base}gallery/patterns.html#p-search`);
+    await settled(page);
+    const box = page.locator("#p-search om-pager > .om-search input");
+    await box.fill("msft");
+    await box.press("Enter");
+    const asked = await page.locator("#said").textContent();
+    check(/[?&]q=msft(&|#|\.|$)/.test(asked) && !asked.includes("offset="), `Enter does not ask the server for the first page of q=msft: "${asked}"`);
+    await fits("a server's search asked");
+    await shot("server-search");
+
+    // Gated fields: the client ID only for a commercial key.
+    await page.goto(`${base}gallery/patterns.html#p-gated`);
+    await settled(page);
+    const gate = '#p-gated [data-om-applies-when="key_type"]';
+    const before = await page.evaluate((g) => ({ hidden: document.querySelector(g).hidden, disabled: document.querySelector(`${g} input`).disabled }), gate);
+    check(before.hidden && before.disabled, `a personal key shows the client ID: ${JSON.stringify(before)}`);
+    await shot("gated-personal");
+    await page.locator('#p-gated label.option:has(input[value="commercial"])').click();
+    const after = await page.evaluate((g) => ({ hidden: document.querySelector(g).hidden, disabled: document.querySelector(`${g} input`).disabled, shown: document.querySelector(g).getBoundingClientRect().height > 0 }), gate);
+    check(!after.hidden && !after.disabled && after.shown, `a commercial key does not show the client ID: ${JSON.stringify(after)}`);
+    await fits("the client ID shown");
+    await shot("gated-commercial");
+
+    // The sample's Fields: each kind's own field.
+    await page.goto(`${base}gallery/sample.html#form`);
+    await settled(page);
+    await page.selectOption("#kind", "bank");
+    const kinds = await page.evaluate(() => ["brokerage", "bank", "wallet"].map((k) => !document.getElementById(`kind-${k}`).hidden));
+    check(kinds.join() === "false,true,false", `choosing Bank does not show the routing number alone: ${kinds}`);
+    await fits("a bank's field shown");
+    await shot("gated-kind-bank");
+    await page.close();
+  }
+  return failed;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   let shots = null;
@@ -336,6 +447,9 @@ async function main() {
     const rows = await rowChecks(browser, base, shots);
     console.log(rows.length ? `one-line rows and the pager: FAILED\n  ${rows.join("\n  ")}` : "one-line rows and the pager: a row's detail opens on a click on its row and over the page, which still fits; Escape closes it; with script off its … opens it; a pager turns its pages");
     failed.push(...rows);
+    const searched = await searchChecks(browser, base, shots);
+    console.log(searched.length ? `search and gated fields: FAILED\n  ${searched.join("\n  ")}` : "search and gated fields: the components upgrade with their boxes; a search narrows the orders' grid in its pager, the accounts' pager and the quotes' high-rate grid, each saying how many match; Enter asks a server; a gated field appears for its choice; every page still fits, at both sizes");
+    failed.push(...searched);
     const entry = await entryChecks(browser, base, shots);
     console.log(entry.length ? `the entry grid on a phone: FAILED\n  ${entry.join("\n  ")}` : `the entry grid on a phone: a row one line, its number, two fields and "…"; "…" opens the row over the page with every field and the hidden field's message, the page still fitting; Escape puts it back; 42 rows paged, the page fitting; Add a row turns to the new one`);
     failed.push(...entry);

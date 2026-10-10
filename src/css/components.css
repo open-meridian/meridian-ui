@@ -238,6 +238,19 @@ om-pager { display: block; }
 .panel om-pager > .pager, .panel > .pager { margin: 0; padding: .3rem var(--space-4); border-top: 1px solid var(--line-soft); }
 @media (max-width: 40rem) { .pager :is(a, button) { min-height: 2.75rem; } }
 
+/* ── Search ──────────────────────────────────────────────────────────────── */
+
+/* A search over a list, above its rows and beside its pager rather than
+ * instead of it (0.11.0): the box, and how many of how many rows match, on
+ * one line. Drawn by om-grid, om-pager and om-entry-grid given `search`; a
+ * row it leaves out is marked and not laid out. */
+.om-search { display: flex; align-items: center; gap: var(--space-3); flex-wrap: nowrap; margin: 0 0 var(--space-2); }
+.om-search input[type="search"] { flex: 1 1 16rem; width: auto; min-width: 0; }
+.om-search-said { flex: none; color: var(--ink-soft); font-size: .85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.panel:not(.padded) :is(om-pager, om-grid, om-entry-grid) > .om-search { margin: 0; padding: .4rem var(--space-4); border-bottom: 1px solid var(--line-soft); }
+@media (max-width: 40rem) { .panel:not(.padded) :is(om-pager, om-grid, om-entry-grid) > .om-search { padding-inline: var(--space-3); } }
+[data-om-unmatched] { display: none !important; }
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
 button, .button {
@@ -897,6 +910,7 @@ om-panels > .om-panel { display: flex; flex-direction: column; }
 om-panels > .om-panel > * { flex: none; }
 om-panels > .om-panel > om-grid[high-rate] { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 om-panels > .om-panel > om-grid[high-rate] > .om-grid-viewport { flex: 1 1 0; min-height: 0; max-height: none; }
+om-panels > .om-panel > om-grid > .om-search { flex: none; margin: 0; padding: .3rem var(--space-3); border-bottom: 1px solid var(--line-soft); }
 om-panels > .om-panel.om-panel-lifted { opacity: .55; }
 om-panels > .om-panel > .panel-body { padding: var(--space-4); }
 om-panels .om-panel-head {

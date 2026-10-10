@@ -47,6 +47,8 @@
     <a class="tab" href="#p-entry">Entry grid</a>
     <a class="tab" href="#p-rows">One-line rows</a>
     <a class="tab" href="#p-pager">Pager</a>
+    <a class="tab" href="#p-search">Search</a>
+    <a class="tab" href="#p-gated">Gated fields</a>
     <a class="tab" href="#p-empty">Nothing here</a>
   </nav>
 
@@ -197,6 +199,44 @@
 </om-pager>
 <!-- /pattern -->
       <div class="panel-body"><details class="notice quiet markup" data-markup="pager"><summary>Markup</summary></details></div>
+    </section>
+  </section>
+
+  <section id="p-search">
+    <section class="section-head"><h2>Search</h2><p>A search over the server's rows, above them and beside the pager: Enter asks the server for the first page of what it finds.</p></section>
+    <section class="panel">
+<!-- pattern: search -->
+<om-pager search="Search instruments" total="42" offset="0" size="3">
+  <table class="one-line">
+    <thead><tr><th>Instrument</th><th class="num">Quantity</th></tr></thead>
+    <tbody>
+      <tr><td><code>AAPL</code></td><td class="num">1250.5</td></tr>
+      <tr><td><code>MSFT</code></td><td class="num">310</td></tr>
+      <tr><td><code>USD</code></td><td class="num">18004.12</td></tr>
+    </tbody>
+  </table>
+  <nav class="pager" aria-label="Pages"><span></span><span>Rows 1–3 of 42</span><a class="button" href="?offset=3&amp;size=3" rel="next">Next →</a></nav>
+</om-pager>
+<!-- /pattern -->
+      <div class="panel-body"><details class="notice quiet markup" data-markup="search"><summary>Markup</summary></details></div>
+    </section>
+  </section>
+
+  <section id="p-gated">
+    <section class="section-head"><h2>Gated fields</h2><p>A field shown only while the choice it hangs on holds one of its values; hidden, it is neither required nor sent.</p></section>
+    <section class="panel padded">
+<!-- pattern: gated-fields -->
+<form method="post" action="/settings">
+  <input type="hidden" name="csrf" value="…">
+  <fieldset class="choice"><legend>Key</legend><div class="options">
+    <label class="option"><input type="radio" name="key_type" value="personal" checked><span><span class="option-label">Personal</span><span class="hint">Your own key.</span></span></label>
+    <label class="option"><input type="radio" name="key_type" value="commercial"><span><span class="option-label">Commercial</span><span class="hint">A partner's key, with its client ID.</span></span></label>
+  </div></fieldset>
+  <label class="field" data-om-applies-when="key_type" data-om-one-of='["commercial"]'><span>Client ID</span><input name="client_id" required></label>
+  <button class="primary">Save</button>
+</form>
+<!-- /pattern -->
+      <details class="notice quiet markup" data-markup="gated-fields"><summary>Markup</summary></details>
     </section>
   </section>
 

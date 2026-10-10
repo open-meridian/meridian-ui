@@ -77,9 +77,9 @@
   </section>
 
   <section id="book" class="panel">
-    <div class="panel-body row" style="padding-block: var(--space-2)"><h2>Orders</h2><span class="badge">dense, one line, paged</span><span class="spacer"></span><button type="button" class="small">Refresh</button></div>
+    <div class="panel-body row" style="padding-block: var(--space-2)"><h2>Orders</h2><span class="badge">dense, one line, paged, searched</span><span class="spacer"></span><button type="button" class="small">Refresh</button></div>
     <om-pager>
-      <om-grid id="orders" row-key="order_id" dense one-line narrow="priority"></om-grid>
+      <om-grid id="orders" row-key="order_id" dense one-line narrow="priority" search="Search orders"></om-grid>
     </om-pager>
   </section>
 
@@ -90,8 +90,8 @@
       <div class="list-row one-line"><div class="grow"><span class="title">Schwab</span><span class="meta">Needs the person to sign in again through the brokerage's own page</span></div><span class="badge bad">Needs sign-in</span></div>
     </section>
     <section class="panel">
-      <!-- A one-line table, a page of it at a time, each row's whole a click away. -->
-      <om-pager>
+      <!-- A one-line table, a page of it at a time, searched, each row's whole a click away. -->
+      <om-pager search="Search accounts">
         <table class="one-line">
           <caption class="visually-hidden">Accounts</caption>
           <thead><tr><th>Account</th><th class="wide-only">ID</th><th class="num">Cash</th><th class="wide-only">As of</th><th class="wide-only">Note</th><th class="more"><span class="visually-hidden">Details</span></th></tr></thead>
@@ -120,7 +120,7 @@
           <span class="spacer"></span>
           <span class="faint" id="rate"></span>
         </div>
-        <om-grid id="quotes" row-key="symbol" high-rate dense sort="change:desc" caption="Quotes"></om-grid>
+        <om-grid id="quotes" row-key="symbol" high-rate dense sort="change:desc" caption="Quotes" search="Search quotes"></om-grid>
       </section>
       <section data-panel="depth" data-title="Net asset value">
         <div class="panel-body"><om-chart id="nav-small" type="line" height="160" label="Net asset value"></om-chart></div>
@@ -185,7 +185,13 @@
       <label class="field"><span>Currency</span><select><option>USD</option><option>EUR</option></select></label>
       <label class="field"><span>Quantity</span><input type="text" value="-12" aria-invalid="true"><span class="hint bad-ink">A quantity is at least 1.</span></label>
     </div>
-    <label class="field"><span>Note</span><textarea rows="2">Rebalanced at the close.</textarea></label>
+    <!-- Fields gated on a choice: each kind's own field, shown while it is chosen, on the kind's row. -->
+    <div class="field-row">
+      <label class="field" style="flex-basis: 7rem"><span>Kind</span><select name="kind" id="kind"><option value="brokerage">Brokerage</option><option value="bank">Bank</option><option value="wallet">Wallet</option></select></label>
+      <label class="field" style="flex-basis: 7rem" id="kind-brokerage" data-om-applies-when="kind" data-om-one-of="brokerage"><span>Brokerage</span><input type="text" name="brokerage" placeholder="Interactive Brokers"></label>
+      <label class="field" style="flex-basis: 7rem" id="kind-bank" data-om-applies-when="kind" data-om-one-of="bank"><span>Routing number</span><input type="text" name="routing" inputmode="numeric" placeholder="021000021"></label>
+      <label class="field" style="flex-basis: 7rem" id="kind-wallet" data-om-applies-when="kind" data-om-one-of="wallet"><span>Network</span><select name="network"><option>Ethereum</option><option>Solana</option></select></label>
+    </div>
   </section>
 
 </main>

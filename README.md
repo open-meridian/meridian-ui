@@ -12,7 +12,7 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.10.0; the guide to
+`spec/plugin-pages-share-one-kit.md`. This is release 0.11.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -20,7 +20,8 @@ building a plugin's page with it is at
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
 - [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-pager](#om-pager), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
-- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [pager](#pager), [nothing here](#nothing-here), [empty](#empty)
+- [Search](#search) and [fields gated on a choice](#fields-gated-on-a-choice)
+- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [pager](#pager), [search over a server's rows](#search-over-a-servers-rows), [gated fields](#gated-fields), [nothing here](#nothing-here), [empty](#empty)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
 - [One screen](#one-screen)
@@ -42,8 +43,8 @@ first paint, and it loads the components beside it.
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Positions</title>
-  <link rel="stylesheet" href="/.meridian/ui/0.10.0/meridian.css">
-  <script src="/.meridian/ui/0.10.0/meridian.js"></script>
+  <link rel="stylesheet" href="/.meridian/ui/0.11.0/meridian.css">
+  <script src="/.meridian/ui/0.11.0/meridian.js"></script>
 </head>
 <body>
   <main class="page">
@@ -136,7 +137,11 @@ whole row a click away (`details.row-detail`) and `.wide-only` columns a
 phone leaves out; `om-pager`, as many rows a page as fit, in place or from
 the server; `om-account-map`'s `page-size="auto"`; `om-entry-grid` paged to the screen and, on a phone,
 one line a row with the rest a tap away; and the overflow check,
-`lib/fit.js` and `make fit`.
+`lib/fit.js` and `make fit`. 0.11.0 adds a [search](#search) beside the
+pager, `search` on `om-grid`, `om-pager` and `om-entry-grid` (and
+`search-param` on `om-pager`), with the `om-search` event; and
+[fields gated on a choice](#fields-gated-on-a-choice),
+`data-om-applies-when` and `data-om-one-of` on any element of a form.
 
 ## Never raw colours
 
@@ -228,6 +233,7 @@ conflated to one paint per frame.
 | `no-flash` | High-rate mode without the change flash |
 | `narrow` | Its [layout where it is narrow](#narrow-layouts): `cards` or `priority`. Without it a narrow grid scrolls sideways, as before |
 | `one-line` | Since 0.10.0, the table as a [`table.one-line`](#one-line-rows): each row one line of one height, a long value cut and whole on hover. With `narrow="priority"`, the phone's way: fewer columns, each still one line. In an [`om-pager`](#om-pager), a page of rows at a time |
+| `search` | Since 0.11.0, a [search](#search) above the rows, its words the box's name (`search="Search orders"`; "Search" when empty): a row stays while its columns' values (as given and as shown) and hints hold every word typed. In high-rate mode too; in an `om-pager`, the pager pages what is left |
 
 | Property or method | |
 |---|---|
@@ -246,6 +252,7 @@ conflated to one paint per frame.
 |---|---|
 | `om-sort` | `{ key, direction }`, when a header is clicked. Cancel it (`preventDefault`) to sort on the server and `setRows` the result |
 | `om-row` | `{ key, row }`, when a row is clicked |
+| `om-search` | `{ query }`, since 0.11.0, before a search typed (at most once a frame) is applied. Cancel it to search on the server and `setRows` the result |
 
 #### Rich cells
 
@@ -646,6 +653,8 @@ what the page holds:
 | `total`, `offset`, `size` | A server's paging: the rows in all, the first row's index, and the page size it used |
 | `rows` | A fixed number of rows a page, in place of working it out |
 | `offset-param`, `size-param` | The query's names for the offset and the size (default `offset` and `size`) |
+| `search` | Since 0.11.0, a [search](#search) above the rows, beside the pager, its words the box's name. Rows all here: narrowed as typed, by each row's text. A server's pages (`total` given): Enter asks the server |
+| `search-param` | Since 0.11.0, the query's name for a server's search (default `q`) |
 
 | Property, method or event | |
 |---|---|
@@ -653,6 +662,7 @@ what the page holds:
 | `turn(1 \| -1)` | The next or the previous page, in place (rows all here) |
 | `refit()` | Work out the page again now |
 | `om-page` | Fired with `shown` when a page is turned in place |
+| `om-search` | Since 0.11.0, `{ query }` before a search of rows all here is applied, or `{ query, href }` before a server is asked for `href`. Cancel it to search yourself |
 
 A server's own `nav.pager` inside it is what a browser without the kit shows;
 the kit hides it and draws its own. A row the page hides itself stays hidden
@@ -880,6 +890,7 @@ mode); a row being typed must neither move nor be redrawn under the person.
 | `csv` | Offer "Import a CSV" (below), a link under the table |
 | `add-label`, `csv-label`, `empty` | The words of Add a row, of the CSV link, and of a grid with no rows ("No rows yet.") |
 | `narrow` | `none` keeps the table where it is narrow, every column, scrolling sideways; otherwise under 40rem each row is one line, its first two columns and "…" for the rest (below) |
+| `search` | Since 0.11.0, a [search](#search) above the table, its words the box's name: the rows whose values (a choice's label too) hold every word stay, paged; every row still posts |
 
 **The columns** are declared as `om-grid`'s are, `key`, `label` and `type`,
 each with only the options it sets, all plain JSON:
@@ -1062,13 +1073,81 @@ enter thousands of rows at once is better split into parts.
 |---|---|
 | `om-change` | `{ rows }`, the rows as they would post, after a person's change: a cell typed in, a row added or removed, a paste, a CSV applied |
 | `om-error` | `{ error }`: a column, a rule or the JSON the grid cannot use, or a page's rule that threw |
+| `om-search` | `{ query }`, since 0.11.0, before a search typed is applied. Cancel it and nothing is narrowed |
+
+## Search
+
+Since 0.11.0, a list whose rows will grow can be searched, the box above
+its rows and the pager under them: beside the pager, not instead of it (the
+product owner's preferences of 2026-10-10, meridian-design
+`tasks/design/every-page-fits-one-screen.md`). Give `om-grid`, `om-pager` or
+`om-entry-grid` the `search` attribute; its words name the box, its
+placeholder and its accessible name.
+
+- **The words.** A row stays while every word typed is somewhere in its
+  text, in any order, case, spacing and character width aside, as the
+  account map's search matches. Escape empties the box. Beside it, how many
+  of how many rows match, or "No rows match".
+- **Rows all here** (`om-grid`; `om-pager` with no `total`; `om-entry-grid`):
+  narrowed as typed, at most once a frame, and the pages are of what is
+  left, from the first. A row the search leaves out is marked and not laid
+  out; it is still the grid's (`rows`), and an entry grid's still posts.
+- **A server's pages** (`om-pager` with `total`): typing narrows nothing;
+  Enter asks the server for the same address with `q` (or `search-param`)
+  set, the offset dropped and the size that fits, and the box shows the
+  query the address asked. The server answers the first page of what it
+  finds, `total` counting it: see the [pattern](#search-over-a-servers-rows).
+- **`om-search`** is raised before a search is applied, `{ query }` (and
+  `href`, for a server's): cancel it to search yourself, as `om-sort` sorts
+  on the server.
+- **An entry grid** works out which rows match as the search is typed, so a
+  row being typed in never leaves under the person. A row added (Add a row,
+  a paste, a CSV), or one the keyboard is sent to that the search left out
+  (a held submit's first problem, say), ends the search.
+- **One search to a list.** An `om-grid` inside an `om-pager` is searched by
+  either one, not both: the pager pages what the grid's search leaves.
+
+Without the kit there is no box, and every row is there, paged as it was.
+
+## Fields gated on a choice
+
+Since 0.11.0, a form can show only the fields its current choice needs:
+choose the kind, and its fields appear (the product owner's preferences of
+2026-10-10). Mark the field, or a group of fields, with the choice it hangs
+on and the values it applies at:
+
+```html
+<label class="field" data-om-applies-when="key_type" data-om-one-of='["commercial"]'>
+  <span>Client ID</span><input name="client_id" required>
+</label>
+```
+
+| Attribute | |
+|---|---|
+| `data-om-applies-when` | The choice: a control's `name` in the same form (in the document, outside a form): a select, a set of radios, a checkbox, any input |
+| `data-om-one-of` | The values it applies at: a JSON list of strings, or one value written as it is. A checkbox holds its `value` (`on` when it has none) while checked and nothing while not; `[""]` applies while nothing is chosen |
+
+Shown while the choice holds one of the values; otherwise hidden, with every
+control inside it disabled, so a field gated off is neither required nor
+sent. A choice that is itself gated off holds nothing, so what hangs on it
+goes too, and comes back as it was left. A control the page disabled itself
+stays disabled. It is core's Settings form's `applies_when` (a declared
+setting shown only while another holds one of its values), taken into the
+kit, with no element and no script of the page's: it runs as the kit loads,
+on each input to a choice a gate names, on every change, and after a form's
+reset. A page that sets a choice from script, or draws a form later,
+dispatches a `change` event on it.
+
+Without the kit's script every field shows and posts, so the server ignores
+a field its choice does not need, as it would a field gated off.
 
 ## Patterns
 
 The markup every plugin's page writes for the same few things: the head with
 its status and a header action, a status, a one-button form, a notice, a
-badge, tiles, a moment, a grid, an entry grid, one-line rows, a pager, the
-page for somebody who may read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
+badge, tiles, a moment, a grid, an entry grid, one-line rows, a pager, a
+search over a server's rows, gated fields, the page for somebody who may
+read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
 An SDK's helpers that write them write exactly this, and a page written by
 hand is as good. The Python SDK's `meridian/kit.html`, coming in
 open-meridian 0.14.0 (meridian-design's
@@ -1327,6 +1406,49 @@ size that fits.
 ```
 
 - The server reads `offset` and `size` from the query, and draws that page.
+
+### Search over a server's rows
+
+The [pager](#pager), with `search` (since 0.11.0): a box above the rows.
+Enter asks the server for the same address with `q` set and the offset
+dropped.
+
+```html
+<om-pager search="Search instruments" total="42" offset="0" size="3">
+  <table class="one-line">
+    <thead><tr><th>Instrument</th><th class="num">Quantity</th></tr></thead>
+    <tbody>
+      <tr><td><code>AAPL</code></td><td class="num">1250.5</td></tr>
+      <tr><td><code>MSFT</code></td><td class="num">310</td></tr>
+      <tr><td><code>USD</code></td><td class="num">18004.12</td></tr>
+    </tbody>
+  </table>
+  <nav class="pager" aria-label="Pages"><span></span><span>Rows 1–3 of 42</span><a class="button" href="?offset=3&amp;size=3" rel="next">Next →</a></nav>
+</om-pager>
+```
+
+- The server reads `q` with `offset` and `size`, and draws that page of what
+  `q` finds, `total` counting only those; the pager's links keep `q`.
+
+### Gated fields
+
+A field shown only while the choice it hangs on holds one of its values
+(since 0.11.0; [fields gated on a choice](#fields-gated-on-a-choice)).
+
+```html
+<form method="post" action="/settings">
+  <input type="hidden" name="csrf" value="…">
+  <fieldset class="choice"><legend>Key</legend><div class="options">
+    <label class="option"><input type="radio" name="key_type" value="personal" checked><span><span class="option-label">Personal</span><span class="hint">Your own key.</span></span></label>
+    <label class="option"><input type="radio" name="key_type" value="commercial"><span><span class="option-label">Commercial</span><span class="hint">A partner's key, with its client ID.</span></span></label>
+  </div></fieldset>
+  <label class="field" data-om-applies-when="key_type" data-om-one-of='["commercial"]'><span>Client ID</span><input name="client_id" required></label>
+  <button class="primary">Save</button>
+</form>
+```
+
+- The server ignores `client_id` unless `key_type` is `commercial`: without
+  the kit's script every field posts.
 
 ### Nothing here
 
@@ -1863,9 +1985,9 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; and [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. A frame time is wall-clock time, so a busy machine adds to it: a held scenario over its budget is run again, up to five runs, and judged by the least each frame took in any run (each run takes the same steps, so a frame the kit makes slow is slow in every one); every run's p95 is printed, and a run under budget the first time is not run again. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
-| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; and a pager turning its pages. To `.fit.log` too |
+| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes. To `.fit.log` too |
 | `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |
