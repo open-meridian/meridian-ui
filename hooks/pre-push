@@ -33,10 +33,23 @@ if echo "$changed" | grep -qE "$RISKY"; then
   echo "pre-push: diff touches a risky path, promoting to $target"
 fi
 
+# A failing run's output is kept, with the step logs it wrote (.test.log,
+# .bench.log, .fit.log), in the git directory, so a block can be read after
+# the fact even when whoever pushed kept only a line of what was printed.
+# The ten newest failures are kept; a passing run keeps nothing.
+logs="$(git rev-parse --path-format=absolute --git-path pre-push-logs)"
+mkdir -p "$logs"
+run="$logs/$(date -u +%Y%m%dT%H%M%SZ)-$target"
+mkdir -p "$run"
+
 echo "pre-push: running make $target"
-if ! make "$target"; then
+if ! make "$target" 2>&1 | tee "$run/make.log"; then
+  # Only the step logs this run wrote, not an earlier run's.
+  find . -maxdepth 1 -name '.*.log' -newer "$run" -exec cp {} "$run/" \;
+  ls -1d "$logs"/*/ 2>/dev/null | sort -r | tail -n +11 | xargs rm -rf
   echo
-  echo "pre-push: BLOCKED -- make $target failed."
+  echo "pre-push: BLOCKED -- make $target failed; its output is in $run/"
   echo "Fix it locally. Pushing red turns CI into a remote debugger."
   exit 1
 fi
+rm -rf "$run"

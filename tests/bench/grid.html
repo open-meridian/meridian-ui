@@ -167,6 +167,7 @@
       updatesSent: sent,
       setRowsMs: round(setRowsMs),
       frames: intervals.length,
+      work: work.map(round),
       fps: round(intervals.length / elapsed),
       intervalMs: { p50: round(pct(intervals, 50)), p95: round(pct(intervals, 95)), p99: round(pct(intervals, 99)), max: round(Math.max(...intervals)) },
       frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },

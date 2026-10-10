@@ -192,6 +192,7 @@
       accounts,
       action,
       frames: work.length,
+      work: work.map(round),
       frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },
       framesOver16_7Ms: work.filter((w) => w > 16.7).length,
       intervalMs: { p50: round(pct(intervals, 50)), p95: round(pct(intervals, 95)) },

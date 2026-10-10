@@ -184,6 +184,7 @@
       rows: n,
       values: kind,
       frames: work.length,
+      work: work.map(round),
       frameTimeMs: { p50: round(pct(work, 50)), p95: round(pct(work, 95)), p99: round(pct(work, 99)), max: round(Math.max(...work)) },
       framesOver16_7Ms: work.filter((w) => w > 16.7).length,
       scriptMs: { p50: round(pct(script, 50)), p95: round(pct(script, 95)) },
