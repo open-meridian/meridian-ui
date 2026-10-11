@@ -60,7 +60,8 @@
       the level switch are the page's header actions, drawn here from its <code>meridian:actions</code> (an icon
       where the kit knows one, its words the button's name and tooltip); pressing one sends
       <code>meridian:action</code> back, and the page presses its own. The level switch is always the
-      rightmost; on a phone it is a menu naming the level.</p>
+      rightmost; on a phone it is a menu naming the level. A next step in the page
+      (<code>meridian:open</code>) opens this host's own tab in place of the frame.</p>
     <div class="host-side" id="side">
       <div class="actions" id="actions" role="group" aria-label="The page's actions"></div>
       <nav class="host-levels" id="levels" aria-label="Open it as"><a href="#manage">Manage</a><a href="#open" aria-current="page">Open</a><a href="#view">View</a></nav>
@@ -68,13 +69,18 @@
         <nav class="menu-pop" aria-label="Open it as"><a href="#manage">Manage</a><a href="#open" aria-current="page">Open</a><a href="#view">View</a></nav></details>
     </div>
   </header>
-  <nav class="tabs" aria-label="The plugin's admin">
-    <a class="tab" href="#overview">Overview</a>
+  <nav class="tabs" aria-label="The plugin's tabs" id="host-tabs">
+    <a class="tab" href="#summary">Summary</a>
     <a class="tab" href="#settings">Settings</a>
-    <a class="tab" href="#access">Access</a>
     <a class="tab on" aria-current="page" href="#positions">Positions</a>
   </nav>
   <div id="slot"></div>
+  <!-- One of the host's own tabs, opened by a tab or by the page's next step. -->
+  <section class="panel padded" id="core" hidden>
+    <h2 id="core-title">Settings</h2>
+    <p id="core-said">The host's own tab.</p>
+    <p><a href="#positions" id="core-back">Back to the page</a></p>
+  </section>
   <details class="notice quiet" id="log"><summary>What the page told this host</summary>
     <p class="faint" id="said">Waiting for the page's first size.</p>
     <p class="faint" id="offered">No header actions from the page yet.</p>

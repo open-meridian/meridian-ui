@@ -19,15 +19,10 @@
 // page, or is a date; resolution is dated, so a search as of a date asks
 // what an identifier meant then.
 
+import { findInstruments, instrumentLabel, instrumentOption, instrumentStatus } from "../lib/instruments.js";
 import { sameOrigin } from "../lib/url.js";
 
 let counter = 0;
-
-function describe(inst) {
-  const ids = (inst.identifiers || []).map((i) => `${i.scheme}:${i.value}`).join("  ");
-  const meta = [inst.asset_class, inst.currency, inst.exchange_mic].filter(Boolean).join(" · ");
-  return { ids, meta };
-}
 
 export class OmInstrumentPicker extends HTMLElement {
   static formAssociated = true;
@@ -133,48 +128,35 @@ export class OmInstrumentPicker extends HTMLElement {
       this.#close();
       return;
     }
-    let url;
+    const src = this.getAttribute("src") || "";
     try {
-      url = sameOrigin(this.getAttribute("src") || "");
+      sameOrigin(src);
     } catch (e) {
       this.#status(e.message, true);
       this.dispatchEvent(new CustomEvent("om-error", { bubbles: true, detail: { error: e.message } }));
       return;
     }
-    url.searchParams.set("q", q);
-    url.searchParams.set("limit", String(Number(this.getAttribute("limit") || 10)));
-    const asOf = this.#asOf();
-    if (asOf) url.searchParams.set("as_of", asOf);
     this.#abort?.abort();
     const abort = (this.#abort = new AbortController());
     this.#status("Searching…");
+    let found;
     try {
-      const res = await globalThis.fetch(url.href, {
-        headers: { Accept: "application/json" },
-        credentials: "same-origin",
-        signal: abort.signal,
-      });
-      if (!res.ok) throw new Error(`the search answered ${res.status}`);
-      const body = await res.json();
-      if (!body || !Array.isArray(body.results)) throw new Error("the search's answer has no results list");
-      if (abort.signal.aborted) return;
-      this.#results = body.results.filter((r) => r && typeof r.instrument_id === "string" && r.instrument_id);
-      this.#active = this.#results.length ? 0 : -1;
-      this.#draw();
+      found = await findInstruments(src, q, { limit: Number(this.getAttribute("limit") || 10), asOf: this.#asOf(), signal: abort.signal });
     } catch (e) {
       if (e && e.name === "AbortError") return;
       this.#results = [];
       this.#status(`Search failed: ${e.message}`, true);
       this.dispatchEvent(new CustomEvent("om-error", { bubbles: true, detail: { error: e.message } }));
+      return;
     }
+    if (abort.signal.aborted) return;
+    this.#results = found;
+    this.#active = this.#results.length ? 0 : -1;
+    this.#draw();
   }
 
   #status(text, bad = false) {
-    const li = document.createElement("li");
-    li.className = `om-picker-status${bad ? " bad" : ""}`;
-    li.setAttribute("role", "presentation");
-    li.textContent = text;
-    this.#list.replaceChildren(li);
+    this.#list.replaceChildren(instrumentStatus(text, bad));
     this.#open();
   }
 
@@ -184,23 +166,8 @@ export class OmInstrumentPicker extends HTMLElement {
       return;
     }
     const items = this.#results.map((inst, i) => {
-      const li = document.createElement("li");
-      li.id = `${this.#id}-opt-${i}`;
-      li.className = "om-picker-option";
-      li.setAttribute("role", "option");
+      const li = instrumentOption(inst, `${this.#id}-opt-${i}`, i === this.#active);
       li.dataset.index = String(i);
-      li.setAttribute("aria-selected", String(i === this.#active));
-      const { ids, meta } = describe(inst);
-      const name = document.createElement("span");
-      name.className = "om-picker-name";
-      name.textContent = inst.description || inst.instrument_id;
-      const m = document.createElement("span");
-      m.className = "om-picker-meta";
-      m.textContent = meta;
-      const idl = document.createElement("span");
-      idl.className = "om-picker-ids";
-      idl.textContent = `${inst.instrument_id}${ids ? `  ${ids}` : ""}`;
-      li.append(name, m, idl);
       return li;
     });
     this.#list.replaceChildren(...items);
@@ -259,8 +226,7 @@ export class OmInstrumentPicker extends HTMLElement {
     const chip = document.createElement("span");
     chip.className = "chip";
     const text = document.createElement("span");
-    const first = (this.#value.identifiers || [])[0];
-    text.textContent = `${this.#value.description || this.#value.instrument_id}${first ? ` (${first.value})` : ""}`;
+    text.textContent = instrumentLabel(this.#value);
     const x = document.createElement("button");
     x.type = "button";
     x.setAttribute("aria-label", "Clear the instrument");

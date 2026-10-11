@@ -64,11 +64,21 @@
 // typed, so a row being typed in never leaves under the person; a row added
 // (Add a row, a paste, a CSV), or one the keyboard is sent to that the
 // search left out, ends the search. The attribute's words name the box.
+//
+// An `instrument` column (0.12.0) finds its value on the page's own server:
+// typing in a cell asks the grid's `src` for the few instruments that match
+// (lib/instruments.js, the request om-instrument-picker makes), shown under
+// the cell with each one's name, identifiers and ID; choosing one sets the
+// cell to its ID, which is what posts, and shows its name. Nothing lists
+// every record. A cell left holding words that were not chosen holds the
+// submit, saying so. An ID the grid is given (its rows, a paste, a CSV) posts
+// as it is, and is shown by its name once the same search finds it by ID.
 
 import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
 import { askSearch, fold, matchedSaid, matches, searchBox, wordsOf } from "../lib/search.js";
 import { addDecimals, compareDecimal, parseDecimal } from "../lib/decimal.js";
+import { findInstruments, instrumentLabel, instrumentOption, instrumentStatus } from "../lib/instruments.js";
 import {
   checkEntryValue,
   columnForField,
@@ -94,6 +104,12 @@ const PREVIEWED = 200;
 const ON_THE_LINE = 2;
 /** A row's cells and its message, off the page shown. */
 const PAGED = "om-entry-paged";
+/** The most instruments an instrument cell's search asks for. */
+const MATCHES = 8;
+/** How long typing pauses before an instrument cell searches, in ms. */
+const PAUSE = 200;
+/** IDs looked up for their names at once. */
+const LOOKUPS = 3;
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const isBlankText = (v) => v === undefined || v === null || String(v).trim() === "";
@@ -135,6 +151,9 @@ export function describeColumn(col) {
       break;
     case "readonly":
       parts.push("not entered here");
+      break;
+    case "instrument":
+      parts.push("an instrument's ID, as the search in the table finds it");
       break;
     default:
       parts.push(col.max_length ? `text, at most ${plural(col.max_length, "character")}` : "text");
@@ -192,7 +211,10 @@ export class OmEntryGrid extends HTMLElement {
   #frame = null;
   #seenWidth = -1;
   #watch = null;
-  #onResize = () => this.#schedule();
+  #onResize = () => {
+    this.#schedule();
+    this.#placeMatches();
+  };
   // A row opened over the page, and the dialog it is moved into.
   #open = null;
   #rowDialog = null;
@@ -202,6 +224,16 @@ export class OmEntryGrid extends HTMLElement {
   // The search: its box, and the rows it found when typed (null: no search).
   #search = null;
   #found = null;
+  // An instrument column's search: the list of matches (one for the grid),
+  // the cell searching and what it found, the instruments known by ID (to
+  // show a name for an ID), and the IDs looked up for theirs.
+  #matchList = null;
+  #match = null;
+  #known = new Map();
+  #looked = new Set();
+  #lookUps = [];
+  #lookingUp = 0;
+  #onScroll = () => this.#placeMatches();
 
   constructor() {
     super();
@@ -227,6 +259,8 @@ export class OmEntryGrid extends HTMLElement {
 
   disconnectedCallback() {
     globalThis.removeEventListener?.("resize", this.#onResize);
+    this.#closeMatches();
+    this.#matchList?.remove();
   }
 
   attributeChangedCallback(name) {
@@ -321,6 +355,7 @@ export class OmEntryGrid extends HTMLElement {
     const row = this.#rows[index];
     if (!row || this.#rows.length <= this.minRows) return false;
     if (this.#open === row) this.#closeRow(false);
+    if (this.#match && this.#match.cell.row === row) this.#closeMatches();
     row.tr.remove();
     row.msgTr.remove();
     this.#rows.splice(index, 1);
@@ -494,6 +529,11 @@ export class OmEntryGrid extends HTMLElement {
     tbody.addEventListener("keydown", (e) => this.#onKey(e));
     tbody.addEventListener("paste", (e) => this.#onPaste(e));
     tbody.addEventListener("focusout", (e) => this.#onLeave(e));
+    // An instrument cell entered: what it shows is selected, so typing searches anew.
+    tbody.addEventListener("focusin", (e) => {
+      const at = this.#cellOf(e.target);
+      if (at && at.cell.col.type === "instrument" && e.target === at.cell.control && at.cell.pending === null && at.cell.control.value) at.cell.control.select();
+    });
     tbody.addEventListener("click", (e) => {
       const remove = e.target.closest && e.target.closest("button.om-entry-remove");
       if (remove) this.#onRemove(remove);
@@ -526,6 +566,7 @@ export class OmEntryGrid extends HTMLElement {
   // Draw the head, and every row from `rows`, with `errors` placed.
   #load(rows, errors, typed = null) {
     if (this.#open) this.#closeRow(false);
+    this.#closeMatches();
     for (const row of this.#rows) row.tr.remove(), row.msgTr.remove();
     this.#rows = [];
     this.#ruleCells.clear();
@@ -632,6 +673,18 @@ export class OmEntryGrid extends HTMLElement {
         cell.control.type = "hidden";
         cell.control.dataset.key = col.key;
         td.append(cell.text, cell.control);
+      } else if (col.type === "instrument") {
+        // What a person types in (the search) and what posts (the ID) apart:
+        // the control is the search, and holds the cell's validity; `post`
+        // is named by the path.
+        cell.control = this.#control(row, col);
+        cell.post = el("input");
+        cell.post.type = "hidden";
+        cell.pending = null;
+        cell.err = el("span", "om-entry-error");
+        cell.err.id = `${this.#uid}-${row.id}-${col.key}-error`;
+        cell.err.hidden = true;
+        td.append(cell.control, cell.post, cell.err);
       } else {
         cell.control = this.#control(row, col);
         cell.err = el("span", "om-entry-error");
@@ -679,8 +732,14 @@ export class OmEntryGrid extends HTMLElement {
       c.spellcheck = false;
       if (col.type === "decimal") c.inputMode = "decimal";
       if (col.type === "code") c.setAttribute("autocapitalize", "characters");
-      const placeholder = col.placeholder || (col.type === "date" ? "YYYY-MM-DD" : "");
+      const placeholder = col.placeholder || (col.type === "date" ? "YYYY-MM-DD" : col.type === "instrument" ? "Ticker, ISIN, FIGI or name" : "");
       if (placeholder) c.placeholder = placeholder;
+      if (col.type === "instrument") {
+        c.setAttribute("role", "combobox");
+        c.setAttribute("aria-autocomplete", "list");
+        c.setAttribute("aria-expanded", "false");
+        c.setAttribute("aria-controls", `${this.#uid}-matches`);
+      }
     }
     c.id = id;
     c.dataset.key = col.key;
@@ -695,6 +754,13 @@ export class OmEntryGrid extends HTMLElement {
     if (col.type === "readonly") {
       cell.text.textContent = value;
       control.value = value;
+      return;
+    }
+    if (col.type === "instrument") {
+      // The ID posts; its name shows, once known.
+      cell.pending = null;
+      cell.post.value = value;
+      this.#showInstrument(cell);
       return;
     }
     if (col.type !== "choice") {
@@ -755,9 +821,10 @@ export class OmEntryGrid extends HTMLElement {
       row.posted = row.blank ? -1 : posted++;
       for (const cell of row.cells.values()) {
         const name = row.blank ? null : `${prefix}[${row.posted}].${cell.col.path}`;
+        const named = cell.post || cell.control;
         if (name === null) {
-          if (cell.control.hasAttribute("name")) cell.control.removeAttribute("name");
-        } else if (cell.control.getAttribute("name") !== name) cell.control.setAttribute("name", name);
+          if (named.hasAttribute("name")) named.removeAttribute("name");
+        } else if (named.getAttribute("name") !== name) named.setAttribute("name", name);
       }
       row.remove.disabled = this.#rows.length <= this.minRows;
     });
@@ -781,6 +848,8 @@ export class OmEntryGrid extends HTMLElement {
   // A cell's own problem: its type and bounds, and required in a row that is
   // not blank. A blank row has none.
   #own(row, cell) {
+    // Words typed in an instrument cell and not chosen, in any row.
+    if (cell.pending) return { type: "Choose one of the instruments found, or clear the cell", required: null };
     if (row.blank || cell.col.type === "readonly") return { type: null, required: null };
     const check = checkEntryValue(cell.col, row.values[cell.col.key]);
     return { type: check.message, required: cell.col.required && check.empty ? "Required" : null };
@@ -1065,6 +1134,10 @@ export class OmEntryGrid extends HTMLElement {
   #onInput(e, how) {
     const at = this.#cellOf(e.target);
     if (!at || at.cell.col.type === "readonly") return;
+    if (at.cell.col.type === "instrument") {
+      if (how === "input") this.#typedInstrument(at.row, at.cell);
+      return;
+    }
     const { row, cell } = at;
     let value = cell.control.value;
     if (how === "change") {
@@ -1100,6 +1173,15 @@ export class OmEntryGrid extends HTMLElement {
 
   // The row is left: its required cells say so.
   #onLeave(e) {
+    // An instrument cell left: its matches close, and words not chosen say so.
+    const left = this.#cellOf(e.target);
+    if (left && left.cell.col.type === "instrument" && e.target === left.cell.control) {
+      if (this.#match && this.#match.cell === left.cell) this.#closeMatches();
+      if (left.cell.pending !== null) {
+        left.cell.touched = true;
+        this.#paintCell(left.row, left.cell, true);
+      }
+    }
     const tr = e.target.closest && e.target.closest("tr[data-row]");
     if (!tr) return;
     if (e.relatedTarget && tr.contains(e.relatedTarget)) return;
@@ -1180,6 +1262,7 @@ export class OmEntryGrid extends HTMLElement {
     const at = this.#cellOf(e.target);
     if (!at) return;
     const { row, cell } = at;
+    if (cell.col.type === "instrument" && this.#matchKey(e, cell)) return;
     const editable = this.#editable();
     const c = editable.indexOf(cell.col);
     const text = cell.control.localName === "input";
@@ -1385,6 +1468,7 @@ export class OmEntryGrid extends HTMLElement {
     }
     this.#pager.hidden = pages <= 1;
     if (this.#found) this.#search?.setSaid(matchedSaid(total, this.#rows.length));
+    this.#lookUp(on);
     const last = Math.min(total, start + per);
     this.#pagerSaid.textContent = `Rows ${start + 1}–${last} of ${total}`;
     this.#prev.disabled = this.#page <= 0;
@@ -1471,6 +1555,7 @@ export class OmEntryGrid extends HTMLElement {
         const known = matchOption(col, v);
         if (known) parts.push(known.label);
       }
+      if (col.type === "instrument" && this.#known.has(v)) parts.push(instrumentLabel(this.#known.get(v)));
     }
     return parts.map(fold).join("\n");
   }
@@ -1507,6 +1592,7 @@ export class OmEntryGrid extends HTMLElement {
   #closeRow(back) {
     const row = this.#open;
     if (!row) return;
+    this.#closeMatches();
     this.#open = null;
     if (this.#rows.includes(row)) row.msgTr.before(row.tr);
     row.more.setAttribute("aria-expanded", "false");
@@ -1566,6 +1652,257 @@ export class OmEntryGrid extends HTMLElement {
     d.addEventListener("click", (e) => {
       if (e.target === d) this.#closeRow(true);
     });
+  }
+
+  // ── An instrument column's search ────────────────────────────────────────
+
+  /** The search URL, the grid's `src`: on the page's own origin. */
+  #src() {
+    return (this.getAttribute("src") || "").trim();
+  }
+
+  // An instrument cell shows its ID's name once it is known, else the ID; its
+  // title says both.
+  #showInstrument(cell) {
+    const id = cell.post.value;
+    const known = id ? this.#known.get(id) : null;
+    const shown = known ? instrumentLabel(known) : id;
+    if (cell.control.value !== shown) cell.control.value = shown;
+    const title = known ? `${shown}, ${id}` : id;
+    if (title) cell.control.title = title;
+    else cell.control.removeAttribute("title");
+  }
+
+  // Typed into an instrument cell: emptied, it holds no instrument; otherwise
+  // the words wait to be chosen from what the search finds once typing pauses.
+  #typedInstrument(row, cell) {
+    const text = cell.control.value;
+    if (text.trim() === "") {
+      if (this.#match && this.#match.cell === cell) this.#closeMatches();
+      cell.pending = null;
+      cell.post.value = "";
+      if (row.values[cell.col.key] !== "") this.#edited(row, cell, "", true);
+      else this.#paintCell(row, cell);
+      return;
+    }
+    cell.pending = text;
+    if (!this.#match || this.#match.cell !== cell) {
+      this.#closeMatches();
+      this.#match = { cell, results: [], active: -1, timer: null, abort: null };
+    }
+    const m = this.#match;
+    clearTimeout(m.timer);
+    m.timer = setTimeout(() => this.#searchInstruments(cell, text.trim()), PAUSE);
+  }
+
+  // Search for an instrument cell's words, at most MATCHES of them; drawn
+  // under the cell unless the cell has moved on meanwhile.
+  async #searchInstruments(cell, q) {
+    const m = this.#match;
+    if (!m || m.cell !== cell) return;
+    clearTimeout(m.timer);
+    m.abort?.abort();
+    const src = this.#src();
+    if (!src) {
+      this.#showMatches([instrumentStatus("No search: the grid has no src", true)]);
+      this.#error("om-entry-grid: an instrument column searches the grid's src, and it has none");
+      return;
+    }
+    const abort = (m.abort = new AbortController());
+    this.#showMatches([instrumentStatus("Searching…")]);
+    let found;
+    try {
+      found = await findInstruments(src, q, { limit: MATCHES, signal: abort.signal });
+    } catch (e) {
+      if ((e && e.name === "AbortError") || this.#match !== m) return;
+      m.results = [];
+      this.#showMatches([instrumentStatus(`Search failed: ${e.message}`, true)]);
+      this.#error(`om-entry-grid: the instrument search failed: ${e.message}`);
+      return;
+    }
+    if (abort.signal.aborted || this.#match !== m || cell.pending === null) return;
+    m.results = found;
+    m.active = found.length ? 0 : -1;
+    this.#drawMatches();
+  }
+
+  #matches() {
+    if (this.#matchList) return this.#matchList;
+    const ul = el("ul", "om-picker-list");
+    ul.id = `${this.#uid}-matches`;
+    ul.setAttribute("role", "listbox");
+    ul.setAttribute("aria-label", "Instruments found");
+    ul.hidden = true;
+    // A press on a match keeps the keyboard in the cell, so the cell is not left.
+    ul.addEventListener("mousedown", (e) => e.preventDefault());
+    ul.addEventListener("click", (e) => {
+      const li = e.target.closest && e.target.closest("[data-index]");
+      if (li) this.#chooseMatch(Number(li.dataset.index));
+    });
+    this.#matchList = ul;
+    return ul;
+  }
+
+  // The matches under the cell searching: over the page (position: fixed), so
+  // no table, frame or dialog cuts them off; in the row opened over the page
+  // when the cell is in it, the only place a modal dialog lets a click reach.
+  #showMatches(items) {
+    const m = this.#match;
+    if (!m) return;
+    const list = this.#matches();
+    list.replaceChildren(...items);
+    const home = m.cell.control.closest("dialog") || this.ownerDocument.body;
+    if (list.parentNode !== home) home.append(list);
+    if (list.hidden) {
+      list.hidden = false;
+      globalThis.addEventListener?.("scroll", this.#onScroll, true);
+    }
+    m.cell.control.setAttribute("aria-expanded", "true");
+    this.#placeMatches();
+  }
+
+  #drawMatches() {
+    const m = this.#match;
+    if (!m) return;
+    if (!m.results.length) {
+      m.cell.control.removeAttribute("aria-activedescendant");
+      this.#showMatches([instrumentStatus("No instrument matches.")]);
+      return;
+    }
+    const items = m.results.map((inst, i) => {
+      const li = instrumentOption(inst, `${this.#uid}-match-${i}`, i === m.active);
+      li.dataset.index = String(i);
+      return li;
+    });
+    this.#showMatches(items);
+    if (m.active >= 0) {
+      m.cell.control.setAttribute("aria-activedescendant", `${this.#uid}-match-${m.active}`);
+      items[m.active].scrollIntoView?.({ block: "nearest" });
+    }
+  }
+
+  // Under the cell, or over it where there is more room above; as wide as the
+  // cell, at least 22rem where the screen has it, and within the screen.
+  #placeMatches() {
+    const m = this.#match;
+    const list = this.#matchList;
+    if (!m || !list || list.hidden) return;
+    const view = this.ownerDocument.defaultView;
+    const r = m.cell.control.getBoundingClientRect();
+    const vw = view.innerWidth;
+    const vh = view.innerHeight;
+    const width = Math.max(0, Math.min(Math.max(r.width, 352), vw - 16));
+    const left = Math.max(8, Math.min(r.left, vw - width - 8));
+    const below = vh - r.bottom - 8;
+    const above = r.top - 8;
+    const down = below >= Math.min(240, list.scrollHeight) || below >= above;
+    const room = Math.max(96, Math.min(320, (down ? below : above) - 4));
+    Object.assign(list.style, {
+      left: `${Math.round(left)}px`,
+      width: `${Math.round(width)}px`,
+      maxHeight: `${Math.round(room)}px`,
+      top: down ? `${Math.round(r.bottom + 4)}px` : "auto",
+      bottom: down ? "auto" : `${Math.round(vh - r.top + 4)}px`,
+    });
+  }
+
+  #closeMatches() {
+    const m = this.#match;
+    if (!m) return;
+    this.#match = null;
+    clearTimeout(m.timer);
+    m.abort?.abort();
+    if (this.#matchList) {
+      this.#matchList.hidden = true;
+      this.#matchList.replaceChildren();
+    }
+    m.cell.control.setAttribute("aria-expanded", "false");
+    m.cell.control.removeAttribute("aria-activedescendant");
+    globalThis.removeEventListener?.("scroll", this.#onScroll, true);
+  }
+
+  // The keyboard in an instrument cell: with its matches open, up and down
+  // go between them and Enter chooses one; Escape closes them and puts back
+  // what the cell held. Whether the key was the matches'.
+  #matchKey(e, cell) {
+    const m = this.#match;
+    const open = !!(m && m.cell === cell && this.#matchList && !this.#matchList.hidden);
+    if (e.key === "Escape") {
+      if (!open && cell.pending === null) return false;
+      e.preventDefault();
+      this.#closeMatches();
+      if (cell.pending !== null) {
+        cell.pending = null;
+        this.#showInstrument(cell);
+        this.#paintCell(cell.row, cell);
+      }
+      return true;
+    }
+    if (!open) return false;
+    const n = m.results.length;
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
+      e.preventDefault();
+      m.active = (m.active + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+      this.#drawMatches();
+      return true;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (m.active >= 0) this.#chooseMatch(m.active);
+      return true;
+    }
+    return false;
+  }
+
+  // A match chosen: the cell holds its ID, and shows its name.
+  #chooseMatch(i) {
+    const m = this.#match;
+    const inst = m && m.results[i];
+    if (!inst) return;
+    const { cell } = m;
+    this.#known.set(inst.instrument_id, inst);
+    this.#closeMatches();
+    cell.pending = null;
+    cell.post.value = inst.instrument_id;
+    this.#showInstrument(cell);
+    this.#edited(cell.row, cell, inst.instrument_id, true);
+    this.#say(`${cell.col.label}, row ${cell.row.n + 1}: ${instrumentLabel(inst)}.`);
+  }
+
+  // The IDs on the page shown whose names are not known yet, each looked up
+  // once, by the same search, a few at a time. One the search does not find
+  // by its ID stays shown as the ID.
+  #lookUp(rows) {
+    if (!this.#src() || !this.#columns.some((c) => c.type === "instrument")) return;
+    for (const row of rows) {
+      for (const cell of row.cells.values()) {
+        if (cell.col.type !== "instrument") continue;
+        const id = cell.post.value;
+        if (!id || this.#known.has(id) || this.#looked.has(id)) continue;
+        this.#looked.add(id);
+        this.#lookUps.push(id);
+      }
+    }
+    while (this.#lookingUp < LOOKUPS && this.#lookUps.length) {
+      const id = this.#lookUps.shift();
+      this.#lookingUp++;
+      findInstruments(this.#src(), id, { limit: 5 })
+        .then((found) => {
+          const inst = found.find((r) => r.instrument_id === id);
+          if (!inst) return;
+          this.#known.set(id, inst);
+          for (const row of this.#rows) {
+            for (const cell of row.cells.values()) {
+              if (cell.col.type === "instrument" && cell.post.value === id && cell.pending === null) this.#showInstrument(cell);
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          this.#lookingUp--;
+          this.#lookUp([]);
+        });
+    }
   }
 
   // ── CSV, in a dialog ─────────────────────────────────────────────────────

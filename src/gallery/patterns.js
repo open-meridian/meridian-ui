@@ -7,7 +7,8 @@ const said = document.getElementById("said");
 document.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target;
-  const fields = [...new FormData(form)].map(([name, value]) => `${name}=${value}`).join("&");
+  // The button pressed posts its own name too, as a browser sends it (Prepare's `prepare`).
+  const fields = [...new FormData(form, event.submitter || undefined)].map(([name, value]) => `${name}=${value}`).join("&");
   said.hidden = false;
   said.textContent = `The form would post ${fields} to ${form.getAttribute("action")}.`;
 });

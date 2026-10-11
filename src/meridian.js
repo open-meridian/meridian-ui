@@ -79,6 +79,17 @@
  * actions and its status are the host's is marked data-om-empty, and the
  * kit's CSS drops it whole, framed only.
  *
+ * A next step (0.12.0). A link marked data-om-opens="<place>" names one of
+ * the host's own tabs for the plugin: "summary", "settings", a table
+ * setting's key, or, for a deployment admin, "data-sources". Framed, a click
+ * on it (or Enter) asks the host to open that tab, posted to the learned
+ * host origin alone:
+ *     { "type": "meridian:open", "version": 1, "id": "<place>" }
+ * The host opens it only for a person who may, and ignores anything else; the
+ * page never navigates the host itself. A link with no href is made one the
+ * keyboard reaches while framed; on its own it is the words naming the place,
+ * and a link with an href goes there as any link does.
+ *
  * No plugin code is needed: the page follows the theme by linking this file.
  */
 (function (win) {
@@ -396,6 +407,7 @@
     tellActions();
     tellStatus();
     settleHeads();
+    settleOpens();
   }
 
   function scheduleOffer() {
@@ -413,6 +425,65 @@
     var el = declared().buttons[d.id];
     if (!el || inert(el)) return;
     el.click();
+  }
+
+  // Next steps: a link marked data-om-opens asks the host to open one of its
+  // own tabs, framed only, to the learned origin alone. A place is lower-case
+  // letters, digits, "-" and "_" (a table setting's key), at most 64.
+  var OPENS = "data-om-opens";
+  var PLACE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+  var reached = typeof WeakSet === "function" ? new WeakSet() : null;
+
+  function opensOf(target) {
+    var link = target && target.closest ? target.closest("a[" + OPENS + "]") : null;
+    return link && PLACE.test(link.getAttribute(OPENS) || "") ? link : null;
+  }
+
+  /** Ask the host to open the place `link` names; whether it was asked. */
+  function askOpen(link) {
+    if (!framed || !host) return false;
+    try {
+      win.parent.postMessage({ type: "meridian:open", version: 1, id: link.getAttribute(OPENS) }, host);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function onOpensClick(event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    var link = opensOf(event.target);
+    if (link && framed && host) {
+      event.preventDefault();
+      askOpen(link);
+    }
+  }
+
+  function onOpensKey(event) {
+    if (event.key !== "Enter" || event.defaultPrevented) return;
+    var link = opensOf(event.target);
+    // A link with an href gets its click from the browser on Enter.
+    if (link && !link.hasAttribute("href") && framed && host) {
+      event.preventDefault();
+      askOpen(link);
+    }
+  }
+
+  /** Framed, a next step with no href is a link the keyboard reaches; on its
+   * own, it is words again. */
+  function settleOpens() {
+    if (!reached) return;
+    var links = doc.querySelectorAll("a[" + OPENS + "]:not([href])");
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      if (framed && !link.hasAttribute("tabindex")) {
+        link.setAttribute("tabindex", "0");
+        if (!link.hasAttribute("role")) link.setAttribute("role", "link");
+        reached.add(link);
+      } else if (!framed && reached.has(link)) {
+        link.removeAttribute("tabindex");
+        if (link.getAttribute("role") === "link") link.removeAttribute("role");
+        reached.delete(link);
+      }
+    }
   }
 
   function onMessage(event) {
@@ -449,6 +520,8 @@
     query.get("om-direction") || saved.direction || "green-up"
   );
   win.addEventListener("message", onMessage);
+  doc.addEventListener("click", onOpensClick);
+  doc.addEventListener("keydown", onOpensKey);
   if (inFrame && win.ResizeObserver) new win.ResizeObserver(schedule).observe(root);
   // The header actions follow the page: a button added, removed, relabelled,
   // given an icon or disabled is told again (only what differs is sent).

@@ -827,3 +827,100 @@ test("the stand-in host's header: the name and its dot on the left; the page's a
   send({ type: "meridian:actions", version: 1, actions: [{ id: "refresh", label: "Refresh", icon: "<svg>" }] });
   assert.equal(doc.querySelectorAll("#actions button").length, 3, "an icon not in the kit's shape refuses the whole message");
 });
+
+// ── Next steps: meridian:open (0.12.0) ──────────────────────────────────────
+
+const NEXT = `<main class="page">
+  <div class="empty-state" id="state"><strong>No key yet</strong><p>Enter it in <a data-om-opens="settings" id="settings">Settings</a>.</p></div>
+  <p><a data-om-opens="data-sources" id="sources">Data sources</a> <a data-om-opens="plan_code_links" href="/plugin/help" id="table">Plan-code links</a>
+     <a data-om-opens="Bad Place" id="bad">Bad</a> <a href="/elsewhere" id="plain">Plain</a></p>
+</main>`;
+const opened = (p) => p.parent.posted.filter((m) => m.data.type === "meridian:open");
+const asked = (id) => ({ data: { type: "meridian:open", version: 1, id }, targetOrigin: HOST });
+
+/** Click a link: whether the kit took the click (prevented its default),
+ * seen after the kit's own listener; then no navigation happens either way. */
+function click(p, id, extra = {}) {
+  let prevented = null;
+  const after = (e) => {
+    prevented = e.defaultPrevented;
+    e.preventDefault();
+  };
+  p.win.addEventListener("click", after);
+  p.win.document.getElementById(id).dispatchEvent(new p.win.MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...extra }));
+  p.win.removeEventListener("click", after);
+  return { defaultPrevented: prevented };
+}
+
+test("framed, a next step's link asks the host to open its tab, at the host's origin alone, and does not navigate", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: NEXT });
+  assert.equal(click(p, "settings").defaultPrevented, false, "before the host's origin is known, nothing is asked");
+  assert.deepEqual(opened(p), []);
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  assert.equal(click(p, "settings").defaultPrevented, true);
+  click(p, "sources");
+  assert.equal(click(p, "table").defaultPrevented, true, "a link with an href asks the host too, framed");
+  assert.deepEqual(opened(p), [asked("settings"), asked("data-sources"), asked("plan_code_links")], "never '*'");
+  assert.equal(click(p, "bad").defaultPrevented, false, "a name not of the shape is not asked for");
+  assert.equal(click(p, "plain").defaultPrevented, false, "an ordinary link is the browser's");
+  assert.equal(click(p, "settings", { ctrlKey: true }).defaultPrevented, false, "a click with a modifier is the browser's");
+  assert.equal(opened(p).length, 3);
+});
+
+test("framed, a next step with no href is a link the keyboard reaches and Enter asks for; unframed, words again", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { body: NEXT });
+  message(p.win, theme({ framed: true }), p.parent, HOST);
+  const doc = p.win.document;
+  const link = doc.getElementById("settings");
+  assert.equal(link.getAttribute("tabindex"), "0");
+  assert.equal(link.getAttribute("role"), "link");
+  assert.equal(doc.getElementById("table").hasAttribute("tabindex"), false, "a link with an href is reached already");
+  const enter = new p.win.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  link.dispatchEvent(enter);
+  assert.equal(enter.defaultPrevented, true);
+  assert.deepEqual(opened(p), [asked("settings")]);
+  message(p.win, theme({ framed: false }), p.parent, HOST);
+  assert.equal(link.hasAttribute("tabindex"), false, "taken back when no longer framed");
+  assert.equal(link.hasAttribute("role"), false);
+  assert.equal(click(p, "settings").defaultPrevented, false);
+  assert.equal(opened(p).length, 1, "unframed, nothing is asked");
+});
+
+test("on its own, a next step asks nothing: its words name the place, and a link with an href goes there", () => {
+  const p = page("https://plugin.example/admin?om-framed=1", { parent: null, body: NEXT });
+  const posted = [];
+  p.win.postMessage = (...args) => posted.push(args);
+  message(p.win, theme({ framed: true }), p.win, HOST);
+  assert.equal(click(p, "settings").defaultPrevented, false);
+  assert.equal(click(p, "table").defaultPrevented, false);
+  assert.equal(p.win.document.getElementById("settings").hasAttribute("tabindex"), false);
+  assert.deepEqual(posted, []);
+  const css = COMPONENTS;
+  assert.match(css, /a\[data-om-opens\]:not\(\[href\]\) \{ color: inherit; \}/, "drawn as the words around it");
+  assert.match(css, /:root\[data-om-framed\] a\[data-om-opens\] \{ color: var\(--accent\); cursor: pointer;/, "framed, drawn as a link");
+});
+
+test("the stand-in host opens its own tab for a next step, only of the kit's shape and one it has, and the way back is the page's", () => {
+  const { doc, send } = standIn();
+  const frame = doc.getElementById("plugin");
+  const core = doc.getElementById("core");
+  const on = () => doc.querySelector("#host-tabs .tab[aria-current=page]")?.textContent;
+  assert.equal(core.hidden, true);
+  assert.equal(on(), "Positions");
+  send({ type: "meridian:open", version: 1, id: "nowhere" });
+  send({ type: "meridian:open", version: 1, id: "Settings" });
+  send({ type: "meridian:open", version: 2, id: "settings" });
+  assert.equal(core.hidden, true, "a tab it does not have, a name not of the shape, another version: ignored");
+  send({ type: "meridian:open", version: 1, id: "settings" });
+  assert.equal(core.hidden, false);
+  assert.equal(frame.hidden, true, "in place of the frame");
+  assert.equal(on(), "Settings");
+  assert.equal(doc.getElementById("core-title").textContent, "Settings");
+  send({ type: "meridian:open", version: 1, id: "data-sources" });
+  assert.equal(doc.getElementById("core-title").textContent, "Data sources");
+  assert.equal(on(), undefined, "Data sources is the deployment's, not one of the plugin's tabs");
+  doc.getElementById("core-back").dispatchEvent(new doc.defaultView.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.equal(core.hidden, true);
+  assert.equal(frame.hidden, false);
+  assert.equal(on(), "Positions");
+});

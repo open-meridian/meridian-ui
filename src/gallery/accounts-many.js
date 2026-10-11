@@ -18,6 +18,7 @@ map.addEventListener("om-link", (event) => {
   event.preventDefault();
   const { form, pairs, ...fields } = event.detail;
   said.className = "notice info";
+  said.hidden = false;
   said.textContent = pairs
     ? `om-link: ${fields.intent}, ${pairs.length} pairs (the first: ${JSON.stringify(pairs[0])}); the form would post to ${form.getAttribute("action")}.`
     : `om-link: ${JSON.stringify(fields)}; the form would post to ${form.getAttribute("action")}.`;

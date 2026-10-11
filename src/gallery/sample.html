@@ -49,6 +49,7 @@
     <a class="tab" href="#desk-tab">Panels</a>
     <a class="tab" href="#controls">Controls</a>
     <a class="tab" href="#form">Fields</a>
+    <a class="tab" href="#watchlist">Watchlist</a>
     <a class="tab" href="#nothing">Empty</a>
   </nav>
 
@@ -192,6 +193,22 @@
       <label class="field" style="flex-basis: 7rem" id="kind-bank" data-om-applies-when="kind" data-om-one-of="bank"><span>Routing number</span><input type="text" name="routing" inputmode="numeric" placeholder="021000021"></label>
       <label class="field" style="flex-basis: 7rem" id="kind-wallet" data-om-applies-when="kind" data-om-one-of="wallet"><span>Network</span><select name="network"><option>Ethereum</option><option>Solana</option></select></label>
     </div>
+  </section>
+
+  <!-- An entry grid with an instrument column (0.12.0): typing searches the
+       page's own server (src, here the stand-in's), choosing posts the ID. -->
+  <section id="watchlist" class="panel">
+    <form method="post" action="watchlist" id="watch-form">
+      <om-entry-grid name="watchlist" caption="Watchlist" src="search" min-rows="1" max-rows="50">
+        <script type="application/json">{"columns": [{"key": "instrument", "label": "Instrument", "type": "instrument", "required": true}, {"key": "note", "label": "Note", "max_length": 80}], "rows": [{"instrument": "INS-8d20b7e4", "note": "Core holding"}, {"instrument": "INS-0f3b82aa", "note": ""}]}</script>
+        <div class="table-wrap"><table><caption>Watchlist</caption><thead><tr><th>Instrument</th><th>Note</th></tr></thead><tbody>
+          <tr><td><input name="watchlist[0].instrument" value="INS-8d20b7e4" aria-label="Instrument, row 1"></td><td><input name="watchlist[0].note" value="Core holding" aria-label="Note, row 1"></td></tr>
+          <tr><td><input name="watchlist[1].instrument" value="INS-0f3b82aa" aria-label="Instrument, row 2"></td><td><input name="watchlist[1].note" aria-label="Note, row 2"></td></tr>
+          <tr><td><input name="watchlist[2].instrument" aria-label="Instrument, row 3"></td><td><input name="watchlist[2].note" aria-label="Note, row 3"></td></tr>
+        </tbody></table></div>
+      </om-entry-grid>
+      <div class="row" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--line-soft)"><button class="primary">Save</button><span class="faint" id="watched" style="overflow-wrap: anywhere; min-width: 0">Type a name or an identifier in a row's Instrument, and choose one.</span></div>
+    </form>
   </section>
 
 </main>

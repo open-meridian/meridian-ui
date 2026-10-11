@@ -747,3 +747,141 @@ test("no-new-account set or removed later redraws: the default offers a new acco
   assert.deepEqual(intents(editor(m)), ["link", "create"]);
   assert.ok(offersNew(m));
 });
+
+// ── page-size="auto", grouped, on a phone ───────────────────────────────────
+
+/** Lay the page out as a phone would: a map's row `rowHeight` tall (a row
+ * stacks on a phone), a group's head 40px, 300px of the rest of the page; the
+ * budget is the window's height. */
+function phone(rowHeight, height = 844) {
+  window.happyDOM.setViewport({ width: 390, height });
+  const proto = window.HTMLElement.prototype;
+  const original = proto.getBoundingClientRect;
+  const heightOf = (el) => (el.classList.contains("om-account-map-row") ? rowHeight : el.classList.contains("om-account-map-group") ? 40 : 0);
+  proto.getBoundingClientRect = function () {
+    let h = 0;
+    if (this.localName === "tr") h = heightOf(this);
+    else if (this.localName === "main") h = 300 + [...this.querySelectorAll("tbody tr")].reduce((n, tr) => n + heightOf(tr), 0);
+    return { x: 0, y: 0, left: 0, top: 0, right: 390, width: 390, height: h, bottom: h };
+  };
+  return () => (proto.getBoundingClientRect = original);
+}
+
+/** Three unlinked accounts, each on a connection of its own, as SnapTrade's Account links had them. */
+const THREE = {
+  external_accounts: ["Connection 1", "Connection 2", "Connection 3"].map((c, i) => ({
+    external_account_id: `st-${i + 1}`, name: `Account ${i + 1}`, custodian: "Interactive Brokers", account_type: "Cash", connection: `Interactive Brokers · ${c}`, connection_id: `c-${i + 1}`,
+  })),
+  accounts: [{ account_id: "ACC-1", name: "Main", open: true }],
+  links: [],
+};
+
+async function phoneMap(rowHeight) {
+  put(`<main><om-account-map ${ATTRS} page-size="auto" group-by="connection">${json(THREE)}</om-account-map></main>`);
+  await settle();
+  await new Promise((r) => setTimeout(r, 40));
+  await settle();
+  return document.querySelector("om-account-map");
+}
+
+/** Each page in turn: what its body holds, a head as "H" and a row as its ID. */
+function everyPage(m) {
+  const pages = [];
+  const next = () => m.querySelectorAll(".om-account-map-pager")[0].querySelectorAll("button")[1];
+  for (let i = 0; i < 10; i++) {
+    pages.push([...m.querySelectorAll("tbody tr")].map((tr) => (tr.classList.contains("om-account-map-group") ? "H" : tr.dataset.external)));
+    if (next().disabled || m.querySelectorAll(".om-account-map-pager")[0].hidden) break;
+    next().click();
+  }
+  return pages;
+}
+
+test("page-size auto, grouped, on a phone: a page counts accounts, not heads; a head goes with its rows, at least one a page", async () => {
+  // Rows so tall that one fits: each page one account under its head, three pages, not six heads alone.
+  let undo = phone(250);
+  try {
+    const m = await phoneMap(250);
+    assert.equal(m.querySelector(".om-account-map-page").textContent, "Page 1 of 3");
+    assert.deepEqual(everyPage(m), [["H", "st-1"], ["H", "st-2"], ["H", "st-3"]]);
+  } finally {
+    undo();
+  }
+  // Two fit: two accounts each under its head, then the third.
+  undo = phone(150);
+  try {
+    const m = await phoneMap(150);
+    assert.equal(m.querySelector(".om-account-map-page").textContent, "Page 1 of 2");
+    const pages = everyPage(m);
+    assert.deepEqual(pages, [["H", "st-1", "H", "st-2"], ["H", "st-3"]]);
+    for (const page of pages) {
+      assert.notEqual(page.at(-1), "H", "never a head alone at a page's foot");
+      assert.ok(page.some((e) => e !== "H"), "at least one account a page");
+    }
+  } finally {
+    undo();
+  }
+  // All three fit: one page, no pager.
+  undo = phone(60);
+  try {
+    const m = await phoneMap(60);
+    assert.ok([...m.querySelectorAll(".om-account-map-pager")].every((p) => p.hidden));
+    assert.deepEqual(everyPage(m), [["H", "st-1", "H", "st-2", "H", "st-3"]]);
+  } finally {
+    undo();
+  }
+});
+
+test("a folded group's head counts as a row of its page, so folded groups page too", async () => {
+  const m = await map(many(40), `${ATTRS} page-size="2" group-by="connection"`);
+  show(m, "all");
+  // Fold each group as it comes onto the first page.
+  for (let i = 0; i < 8; i++) {
+    const open = m.querySelector('.om-account-map-fold[aria-expanded="true"]');
+    if (!open) break;
+    open.click();
+    m.flush();
+  }
+  const heads = [...m.querySelectorAll("tbody tr.om-account-map-group")];
+  assert.equal(heads.length, 2, "two folded heads a page");
+  assert.equal(m.querySelector(".om-account-map-page").textContent, "Page 1 of 11", "the two folded heads, then the other two connections' 20 accounts, two a page");
+});
+
+// ── prepare (0.12.0) ─────────────────────────────────────────────────────────
+
+test("with prepare, each of the map's acts is Prepare …, every form posting prepare=1; without it, as it was", async () => {
+  const data = { ...DATA, accounts: [...DATA.accounts, { account_id: "ACC-3", name: "Roth IRA", open: true }] };
+  const m = await map(data, `${ATTRS} link-several prepare`);
+  show(m, "all");
+  const take = row(m, "st-2").querySelector("button[type=submit]");
+  assert.equal(take.textContent, "Prepare link");
+  assert.match(take.getAttribute("aria-label"), /^Prepare link Roth IRA to /);
+  assert.deepEqual(fields(take.form), { csrf: "t0ken", intent: "link", external_account_id: "st-2", prepare: "1", account_id: "ACC-3" });
+  const seen = [];
+  m.addEventListener("om-link", (e) => seen.push(e.detail));
+  submit(take.form);
+  assert.equal(seen[0].prepare, true, "a page sending it itself knows it is a preparation");
+  edit(m, "st-2");
+  const [pick, create] = editor(m).querySelectorAll("form");
+  assert.equal(pick.querySelector("button[type=submit]").textContent, "Prepare link");
+  assert.equal(create.querySelector("button[type=submit]").textContent, "Prepare: create and link");
+  assert.equal(fields(create).prepare, "1");
+  edit(m, "st-1");
+  const unlink = editor(m).querySelector("button.danger");
+  assert.equal(unlink.textContent, "Prepare unlink");
+  assert.equal(fields(unlink.form).prepare, "1");
+  const several = m.querySelector(".om-account-map-several");
+  assert.match(several.textContent, /^Prepare 1 suggested…$/);
+  several.click();
+  const review = m.querySelector(".om-account-map-several-form");
+  assert.equal(review.querySelector("button[type=submit]").textContent, "Prepare 1 link");
+  assert.equal(new FormData(review).get("prepare"), "1");
+  // Taken away, the acts are made again, and nothing posts prepare.
+  m.removeAttribute("prepare");
+  show(m, "all");
+  const again = row(m, "st-2").querySelector("button[type=submit]");
+  assert.equal(again.textContent, "Link");
+  assert.equal("prepare" in fields(again.form), false);
+  seen.length = 0;
+  submit(again.form);
+  assert.equal("prepare" in seen[0], false);
+});

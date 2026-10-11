@@ -12,7 +12,8 @@ map a plugin links its external accounts with.
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
-`spec/plugin-pages-share-one-kit.md`. This is release 0.11.0; the guide to
+`spec/plugin-pages-share-one-kit.md`, and its role pages' parts
+`spec/plugin-pages-follow-their-role.md`. This is release 0.12.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -21,7 +22,7 @@ building a plugin's page with it is at
 - [CSS components](#css-components)
 - [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-pager](#om-pager), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
 - [Search](#search) and [fields gated on a choice](#fields-gated-on-a-choice)
-- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [pager](#pager), [search over a server's rows](#search-over-a-servers-rows), [gated fields](#gated-fields), [nothing here](#nothing-here), [empty](#empty)
+- [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [facts](#facts), [pager](#pager), [search over a server's rows](#search-over-a-servers-rows), [gated fields](#gated-fields), [prepare](#prepare), [nothing here](#nothing-here), [empty](#empty), [next step](#next-step)
 - [The theme: the frame's message](#the-theme-the-frames-message)
 - [The frame: seamless](#the-frame-seamless)
 - [One screen](#one-screen)
@@ -490,7 +491,8 @@ other status, or an answer without `results`, shows "Search failed" and fires
 `om-error`.
 
 It is a combobox (arrows, Enter, Escape) and a form control whose value is the
-chosen `instrument_id`. Properties: `value`, `instrument` (the chosen record,
+chosen `instrument_id`. An entry grid's [`instrument`](#om-entry-grid) column
+(0.12.0) asks the same, of the grid's `src`, at most eight at a time. Properties: `value`, `instrument` (the chosen record,
 settable), `search(text)` (search now; resolves when drawn), `clear()`.
 Events: `om-select` with `detail: { instrument }` (null when cleared), and
 `om-error` with `detail: { error }`.
@@ -716,6 +718,7 @@ stacks under 40rem (by the map's own width).
 | `page-size` | Rows on a page, 50 by default; `auto` (0.10.0) is as many as fit the page's [height budget](#one-screen), worked out again as the window changes (not while a row's choices are open), with one pager, over the rows |
 | `link-several` | The handler at `action` takes several links in one form (below): "Link N suggested…" is offered |
 | `no-new-account` | Since 0.7.1: the person viewing the page may not create an account, so no new account is offered anywhere (below) |
+| `prepare` | Since 0.12.0: the link act's second pair of eyes is on for the person viewing (the SDK's `caller.second_pair_of_eyes`), so nobody links alone: each act is offered as "Prepare …" and every form posts `prepare=1` (below) |
 | `status-heading` | The Status column's heading (default "Status"), such as "Sync state" |
 
 **Status, since 0.6.0.** An external account may carry `status`, `{ state,
@@ -795,6 +798,17 @@ beside the token and `intent`:
 | `create` | `external_account_id`, `new_account_name` (required, the external account's name to start), `new_account_custodian`, `new_account_type` (prefilled, may be emptied) | Create and link, unless `no-new-account` |
 | `unlink` | `external_account_id` | Unlink, on a linked account |
 | `link-several` | `external_account_id` and `account_id`, repeated: one pair per link, in order | The review's "Link N accounts", with `link-several` only |
+
+**With `prepare`** (0.12.0), the map makes nothing itself: its acts read
+"Prepare link", "Prepare: create and link", "Prepare unlink" and "Prepare N
+links" (and "Prepare N suggested…" opens the review), and every form
+carries the reserved field `prepare` with the value `1`, as the kit's
+[Prepare](#prepare) pattern posts it. The dashboard, which every request to
+a plugin's page passes through, keeps the change for someone else to make
+and never calls the act; `om-link` says `prepare: true` for a page that
+sends the link itself. The page sets the attribute where its server says
+the act's second pair of eyes is on for the person; the dashboard refuses a
+direct link under it in any case.
 
 The server does what `intent` says, as
 `link_external_account(external_account_id=…, account_id=…)`,
@@ -891,6 +905,7 @@ mode); a row being typed must neither move nor be redrawn under the person.
 | `add-label`, `csv-label`, `empty` | The words of Add a row, of the CSV link, and of a grid with no rows ("No rows yet.") |
 | `narrow` | `none` keeps the table where it is narrow, every column, scrolling sideways; otherwise under 40rem each row is one line, its first two columns and "…" for the rest (below) |
 | `search` | Since 0.11.0, a [search](#search) above the table, its words the box's name: the rows whose values (a choice's label too) hold every word stay, paged; every row still posts |
+| `src` | Since 0.12.0, the search URL an `instrument` column asks (below), on the page's origin: core's `/admin/instruments/search` on its own pages, the plugin's own route (proxying the security master) on a plugin's |
 
 **The columns** are declared as `om-grid`'s are, `key`, `label` and `type`,
 each with only the options it sets, all plain JSON:
@@ -903,6 +918,7 @@ each with only the options it sets, all plain JSON:
 | `code` | A currency's or an asset's code: letters, digits, `.`, `_` and `-`, posted in capitals | `length` (exactly), `max_length` (default 32) |
 | `choice` | One of its options, a `<select>`; a value given that it does not offer is kept, marked "(not a choice)", until one is chosen | `options`: strings, or `{ value, label }`; `placeholder` (default "Choose…") |
 | `readonly` | Nothing typed: shown as text and posted as it was given (a lot's ID, say) | |
+| `instrument` | Since 0.12.0, an instrument, found on the server by any identifier or its name, and posted as its ID (below) | `placeholder` (default "Ticker, ISIN, FIGI or name") |
 
 And on any column: `required` (in a row that is not blank), `hint` (the
 column's words for what to type, under its heading and describing each of its
@@ -912,6 +928,43 @@ the `key`), `default` (a new row's value), `placeholder` and `width`. A column
 the grid cannot use (an unknown type, a key that is not a field's name, a bound
 that is not a decimal) is refused with `om-error`, never guessed: the page's
 own table then stays, and posts as it is.
+
+**Instruments, found on the server** (0.12.0). An `instrument` column
+never holds a list of every instrument: typing in its cell asks the grid's
+`src` for the few that match, once typing pauses (200 ms), with the request
+[`om-instrument-picker`](#om-instrument-picker) makes and the answer it
+reads, at most eight (`GET <src>?q=<text>&limit=8`, the page's cookies, same
+origin). The matches open under the cell, each its name, what it is and its
+ID with its identifiers; up and down go between them, Enter or a click
+chooses one, Escape closes them and puts back what the cell held. Chosen,
+the cell holds the instrument's ID, which is what posts (a hidden input
+named by the cell's path, beside the box), and shows its name and first
+identifier ("Apple Inc. common stock (AAPL)"), the ID in its title. Emptied,
+it holds none. Words typed and not chosen hold the submit, on the cell:
+"Choose one of the instruments found, or clear the cell". An ID the grid is
+given (its rows, the page's own table, a paste, a CSV) posts as it is, since
+the server knows which IDs it holds; for each one on the page shown the grid
+asks the same search once, by the ID, and shows its name when the search
+finds it (an ID it does not find stays shown as the ID). The matches are
+drawn over the page, placed under the cell (or over it where there is more
+room above) and within the screen, so neither the table, the frame nor the
+row opened on a phone cuts them off. `src` is on the page's origin, as every
+URL the kit reaches: in core's own pages core's `GET
+/admin/instruments/search`, in a plugin's framed page the plugin's own route,
+which asks the security master through its sidecar. A grid with an
+instrument column and no `src` says "No search" in the cell's list and
+raises `om-error`.
+
+```html
+<om-entry-grid name="watchlist" caption="Watchlist" src="/admin/instruments/search">
+  <script type="application/json">{
+    "columns": [{ "key": "instrument", "label": "Instrument", "type": "instrument", "required": true },
+                { "key": "note", "label": "Note", "max_length": 80 }],
+    "rows": [{ "instrument": "INS-8d20b7e4", "note": "core holding" }]
+  }</script>
+  …
+</om-entry-grid>
+```
 
 **Posting.** Each cell is a real input in the page's form, named by its
 path: `name[n].path`, `lots[0].quantity`, `lots[0].terms.cost`. So the form
@@ -1145,16 +1198,18 @@ a field its choice does not need, as it would a field gated off.
 
 The markup every plugin's page writes for the same few things: the head with
 its status and a header action, a status, a one-button form, a notice, a
-badge, tiles, a moment, a grid, an entry grid, one-line rows, a pager, a
-search over a server's rows, gated fields, the page for somebody who may
-read nothing here, and an empty state. Each is plain kit HTML, the same from any language.
+badge, tiles, a moment, a grid, an entry grid, one-line rows, facts, a pager,
+a search over a server's rows, gated fields, Prepare beside an act's submit,
+the page for somebody who may read nothing here, an empty state, and a next
+step. Each is plain kit HTML, the same from any language.
 An SDK's helpers that write them write exactly this, and a page written by
 hand is as good. The Python SDK's `meridian/kit.html`, coming in
 open-meridian 0.14.0 (meridian-design's
 `spec/plugins-share-one-framework-in-code.md`), has a macro for each pattern
 below, named beside it: `status`, `action`, `notice`, `badge`, `tiles`,
 `when`, `grid`, `nothing_here` and `empty`, each held by its tests to its
-pattern here.
+pattern here; and `facts`, for [facts](#facts) (0.12.0), at the SDK's next
+release (meridian-design's `spec/plugin-pages-follow-their-role.md`).
 
 A pattern is its elements, their attributes and their text. Whitespace
 between tags, the order of attributes and the layout of a JSON value are not
@@ -1382,6 +1437,35 @@ those the line cuts and those a phone leaves out. A column marked
 - Each row's detail repeats the row's facts in full; the row is the summary.
 - A row that leads to a page of its own may link its first cell instead.
 
+### Facts
+
+A section of facts about one thing (since 0.12.0; meridian-design
+`spec/plugin-pages-follow-their-role.md`, "The kit"): a row each, its label,
+its value and its note on one line, and the whole a click away (`facts`).
+It is a one-line table with no head: the label a row header (`th
+scope="row"`), the value and its note (`.hint`) after it, and the row's
+`row-detail` in the last cell (`.more`), which says the value and the note
+in full. `aria-label` names the section for a screen reader, its heading
+being the page's (a caption would undo the fixed layout's column widths in
+Chromium). A data plugin's Connection draws its "Key", "Limits and
+use" and "Stream" this way, and every plugin of a role the same rows in the
+same order.
+
+```html
+<table class="one-line" aria-label="Key">
+  <tbody>
+    <tr><th scope="row">Mode</th><td>Live <span class="hint">Alpaca is called with the key below.</span></td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Mode">…</summary><div class="row-detail-pop"><h3>Mode</h3><p>Live</p><p>Alpaca is called with the key below.</p></div></details></td></tr>
+    <tr><th scope="row">Key</th><td>API key ID set, API secret key not set</td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Key">…</summary><div class="row-detail-pop"><h3>Key</h3><p>API key ID set, API secret key not set</p></div></details></td></tr>
+    <tr><th scope="row">Entitled at the vendor</th><td>IEX, SIP history <span class="hint">What Alpaca serves this key.</span></td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Entitled at the vendor">…</summary><div class="row-detail-pop"><h3>Entitled at the vendor</h3><p>IEX, SIP history</p><p>What Alpaca serves this key.</p></div></details></td></tr>
+  </tbody>
+</table>
+```
+
+- A fact that does not apply says so in its value ("No key needed", "Does
+  not stream"), rather than leaving its row out, so the place stays where a
+  person expects it.
+- A vendor's own rows go after the section's common ones.
+
 ### Pager
 
 A page of the server's rows (since 0.10.0), in an [`om-pager`](#om-pager):
@@ -1450,6 +1534,39 @@ A field shown only while the choice it hangs on holds one of its values
 - The server ignores `client_id` unless `key_type` is `commercial`: without
   the kit's script every field posts.
 
+### Prepare
+
+A person prepares a change for someone who may make it (since 0.12.0;
+meridian-design `plans/an-agents-prepared-change-waits-for-the-person.md`,
+Q20, contract v20): **Prepare** beside the act's submit, a submit button of
+the same form with the reserved field `prepare`, so the form posts as it
+would to make the change, plus `prepare=1`. The dashboard, which every
+request to a plugin's page passes through, reads that field: it parses the
+form into the act's typed record, runs the act's check with the person's
+claims and keeps a prepared change, and never calls the act's route. The
+reason is the form's `note`, where it has one. Core's own Manage tabs draw
+the same: Prepare, then the submit.
+
+```html
+<form method="post" action="/accounts/link">
+  <input type="hidden" name="csrf" value="…">
+  <label class="field"><span>Account</span><input name="account_id" value="ACC-7b20c1e5"></label>
+  <div class="row"><button type="submit" name="prepare" value="1">Prepare</button><button class="primary">Link</button></div>
+</form>
+```
+
+- **Under a second pair of eyes** (the act's gate), nobody makes the change
+  alone: the page leaves its submit out and offers Prepare alone, as core's
+  Settings form does. The kit cannot tell a framed page the gate is on (no
+  message or claim says it in 0.12.0), so the page's server decides what it
+  draws; the dashboard refuses a direct make under the gate in any case.
+- Prepare is offered only for an act that can be prepared (its declaration
+  names a check tool); a plugin's own field named `prepare` is refused by
+  its SDK.
+- In a page's head, Prepare may be a header action (`data-om-action`) as any
+  submit is: the host's click presses the page's own button, so `prepare=1`
+  posts with the page's token.
+
 ### Nothing here
 
 The page for somebody who may read none of the accounts the plugin reaches
@@ -1473,6 +1590,31 @@ in a `.panel` of its own when it is the page's whole content.
 ```html
 <div class="empty-state"><strong>No statements yet</strong><p>None of the accounts you may read has come through SnapTrade here yet. An account appears once it is linked to yours.</p></div>
 ```
+
+### Next step
+
+A state not set up yet that says what to do next, and where (since 0.12.0;
+meridian-design `spec/plugin-pages-follow-their-role.md`, "The next step is
+always said, and linked"): [empty](#empty)'s title, what to do, and a link
+to the place. Where the place is one of the host's own tabs (core's Summary
+or Settings, a table setting's tab, or Data sources), the link is marked
+`data-om-opens` with the tab's name and has no `href`: framed, the kit asks
+the host to open that tab ([the frame](#the-frame-seamless), "Next steps");
+on its own, it is the words naming the place. A place on the plugin's own
+pages is a plain link.
+
+```html
+<div class="empty-state"><strong>No key yet</strong><p>Enter it in <a data-om-opens="settings">Settings</a>.</p></div>
+```
+
+- `data-om-opens` is `summary`, `settings`, a table setting's key, or
+  `data-sources`; the host opens Data sources only for a deployment admin.
+- Where the next step is somebody else's, the words say whose: "a deployment
+  admin licenses it on Data sources"; to somebody who is not that admin,
+  "Ask a deployment admin to …", with no link.
+- The same words and link go in a notice when the state is a section's
+  rather than the page's: `<div class="notice warn" role="status">No key
+  yet: enter it in <a data-om-opens="settings">Settings</a>.</div>`.
 
 ## The theme: the frame's message
 
@@ -1769,6 +1911,34 @@ form holding an offered action count as nothing. The mark follows the page
 has said anything more than `om-framed=1`. Only when framed: on its own, no
 head is marked.
 
+**Next steps, since 0.12.0** (meridian-design
+`spec/plugin-pages-follow-their-role.md`). A page's "not set up yet" state
+names where to go next, and that is often one of the host's own tabs: "No
+key yet: enter it in Settings". The page marks the link with
+`data-om-opens` and the tab's name, and gives it no `href`, since the page
+does not know the host's addresses:
+
+```html
+<div class="empty-state"><strong>No key yet</strong><p>Enter it in <a data-om-opens="settings">Settings</a>.</p></div>
+```
+
+The name is `summary`, `settings`, a table setting's key, or `data-sources`
+(a deployment admin's): lower-case letters, digits, `-` and `_`, at most 64.
+Framed, a click on the link (a plain click: one with a modifier key is the
+browser's) or Enter on it asks the host to open that tab, posted to the
+learned host origin alone, never `"*"`:
+
+```json
+{ "type": "meridian:open", "version": 1, "id": "settings" }
+```
+
+It is a request, never a navigation the page makes: the host decides. While
+framed, a link with no `href` is one the keyboard reaches (`tabindex="0"`,
+`role="link"`, set by the kit and taken back when the page is no longer
+framed), drawn as a link. On its own, or before the host's first theme
+message, nothing is posted: a link with no `href` is its words, drawn as the
+text around it, and a link with an `href` goes there as any link does.
+
 **The host's half.** For each framed page, the host:
 
 1. Frames it with `om-framed=1` beside the theme on its address, and no
@@ -1827,13 +1997,23 @@ head is marked.
    the dot's description). Every word is set as text, never as HTML. It
    removes the dot on each `load` of the frame, until the new page tells its
    own.
+10. Takes a message as a next step (0.12.0) only under the size's guards
+    (`event.source` is that frame's `contentWindow`, `event.origin` is
+    exactly the plugin's origin), with `data.type` `"meridian:open"`,
+    `data.version` `1` and `data.id` a string of the shape above. It opens
+    its own tab of that name for this plugin instance (`summary`,
+    `settings`, a table setting's key) when the person may open it, and
+    `data-sources` only for a deployment admin; anything else, or a tab the
+    person may not open, it ignores, saying nothing to the page. Opening a
+    tab is the host's own navigation, as a click on its tab row is.
 
 `gallery/host.html` is that host, and `gallery/host.js` all of its script;
 it holds its frame to the viewport under its own chrome, draws the status
 right after the plugin's name in its heading, with the kit's `om-status`, and
 on the right the page's actions (an icon by the kit's CSS) immediately left
 of a level switch, which on a phone is a menu naming the level, so the head
-stays one row.
+stays one row; a next step opens its Summary, Settings or Data sources tab
+in place of the frame, the way back its page's tab.
 
 ## One screen
 
@@ -1985,9 +2165,9 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; and [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. A frame time is wall-clock time, so a busy machine adds to it: a held scenario over its budget is run again, up to five runs, and judged by the least each frame took in any run (each run takes the same steps, so a frame the kit makes slow is slow in every one); every run's p95 is printed, and a run under budget the first time is not run again. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
-| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes. To `.fit.log` too |
+| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes; and (0.12.0) an entry grid's instrument column searching the page's own server and posting the ID chosen, on its own and framed by the stand-in host, its matches within the screen, facts one line a row, a next step opening the host's tab from the framed page and staying words on its own, and Prepare posting the act's form with `prepare=1` (its submit without), on its own and framed. To `.fit.log` too |
 | `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |

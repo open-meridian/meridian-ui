@@ -55,6 +55,13 @@
 // page says its handler takes it) carries `intent` `link-several` and one
 // `external_account_id` and one `account_id` per link, in pairs, in order. A page with script hears `om-link` first, and may
 // cancel it to send the link itself.
+//
+// With `prepare` (0.12.0; the act's second pair of eyes is on for the person
+// viewing), nobody links alone: each of the map's acts is offered as
+// "Prepare …" (Prepare link, Prepare unlink, Prepare: create and link,
+// Prepare N links) and every form carries the reserved field `prepare` = 1,
+// the kit's Prepare pattern, so the dashboard keeps a prepared change for
+// someone else to make and never calls the act.
 
 import { declaredJson, whenParsed } from "../lib/declared.js";
 import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
@@ -277,7 +284,7 @@ const tokensOf = (q) => fold(q).split(" ").filter(Boolean);
 
 export class OmAccountMap extends HTMLElement {
   static get observedAttributes() {
-    return ["action", "token", "token-name", "empty", "link-several", "no-new-account", "page-size", "status-heading"];
+    return ["action", "token", "token-name", "empty", "link-several", "no-new-account", "page-size", "status-heading", "prepare"];
   }
 
   #data = normalise(null);
@@ -319,6 +326,16 @@ export class OmAccountMap extends HTMLElement {
       this.addEventListener("submit", (e) => this.#submitted(e));
       this.#start();
     });
+  }
+
+  /** Whether the map's acts are prepared rather than made (`prepare`). */
+  #prepares() {
+    return this.hasAttribute("prepare");
+  }
+
+  /** An act's words: "Link", or under `prepare` "Prepare link". */
+  #act(words) {
+    return this.#prepares() ? `Prepare ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words;
   }
 
   attributeChangedCallback(name) {
@@ -646,26 +663,41 @@ export class OmAccountMap extends HTMLElement {
         if (!this.#collapsed.has(g.key)) for (const r of g.rows) entries.push(r);
       }
     }
-    // How many rows come before each entry, for "showing 51–100".
+    // How many rows come before each entry, for "showing 51–100"; and how
+    // many of what a page counts: its rows, and a folded group's head, which
+    // stands in for its rows. An open group's head counts nothing: it goes
+    // on the page with its first row, never alone.
     const before = new Int32Array(entries.length + 1);
-    for (let i = 0; i < entries.length; i++) before[i + 1] = before[i] + (entries[i].group ? 0 : 1);
-    this.#memo = { model: m, key, tokens, counts, states, rows, suggested, entries, groups, before };
+    const units = new Int32Array(entries.length + 1);
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      before[i + 1] = before[i] + (e.group ? 0 : 1);
+      units[i + 1] = units[i] + (!e.group || this.#collapsed.has(e.group.key) ? 1 : 0);
+    }
+    this.#memo = { model: m, key, tokens, counts, states, rows, suggested, entries, groups, before, units };
     return this.#memo;
   }
 
   #view() {
-    const { tokens, counts, states, rows, suggested, entries, groups, before } = this.#matched();
+    const { tokens, counts, states, rows, suggested, entries, groups, before, units } = this.#matched();
+    // A page is `size` rows (a folded group's head counting as one), each
+    // open group's head with its first row: so at least one row a page, and
+    // a head never alone at a page's foot nor a page by itself.
     const size = this.#pageSize();
-    const pages = Math.max(1, Math.ceil(entries.length / size));
+    const pages = Math.max(1, Math.ceil(units[entries.length] / size));
     this.#page = Math.min(Math.max(0, this.#page), pages - 1);
     const start = this.#page * size;
-    const page = entries.slice(start, start + size);
+    let from = 0;
+    while (from < entries.length && units[from] < start) from++;
+    let to = from;
+    while (to < entries.length && units[to] < start + size) to++;
+    const page = entries.slice(from, to);
     // A page opening inside a group opens with that group's head.
     if (this.#groupBy && page.length && !page[0].group) {
       const g = groups.get(groupOf(page[0], this.#groupBy).key);
       page.unshift({ group: g, continued: true });
     }
-    return { tokens, counts, states, rows, page, pages, before: before[start], suggested };
+    return { tokens, counts, states, rows, page, pages, before: before[from], suggested };
   }
 
   #draw(fitting = false) {
@@ -691,7 +723,7 @@ export class OmAccountMap extends HTMLElement {
     const offerSeveral = this.hasAttribute("link-several") && v.suggested.length > 0;
     if (!offerSeveral) this.#reviewing = false;
     p.several.hidden = !offerSeveral;
-    p.several.textContent = `Link ${count(v.suggested.length)} suggested…`;
+    p.several.textContent = this.#prepares() ? `Prepare ${count(v.suggested.length)} suggested…` : `Link ${count(v.suggested.length)} suggested…`;
     p.several.setAttribute("aria-expanded", String(this.#reviewing));
     p.several.className = `om-account-map-several${this.#reviewing ? "" : " primary"}`;
     if (this.#reviewing) this.#drawReview(v.suggested);
@@ -833,8 +865,8 @@ export class OmAccountMap extends HTMLElement {
     const actions = el("td", "om-account-map-actions");
     const wrap = el("div", "om-account-map-buttons");
     if (suggestion) {
-      const take = button("Link", "small primary", "submit");
-      take.setAttribute("aria-label", `Link ${x.name || x.external_account_id} to ${suggestion.account.name || suggestion.account.account_id}`);
+      const take = button(this.#act("Link"), "small primary", "submit");
+      take.setAttribute("aria-label", `${this.#act("Link")} ${x.name || x.external_account_id} to ${suggestion.account.name || suggestion.account.account_id}`);
       wrap.append(this.#form(x, "link", [hidden("account_id", suggestion.account.account_id)], take, "inline"));
     }
     const edit = button(link ? "Change…" : suggestion ? "Other…" : "Link…", "small");
@@ -926,7 +958,7 @@ export class OmAccountMap extends HTMLElement {
     box.setAttribute("aria-label", `Link ${x.name || x.external_account_id}`);
 
     if (link) {
-      const unlink = button("Unlink", "danger", "submit");
+      const unlink = button(this.#act("Unlink"), "danger", "submit");
       const head = el("div", "om-account-map-edit-head");
       const said = el("p", "", "");
       said.append(el("span", "muted", "Linked to "), el("span", "title", link.account_name || r.account?.name || link.account_id), ".");
@@ -985,7 +1017,7 @@ export class OmAccountMap extends HTMLElement {
         field("new_account_custodian", "Custodian", x.custodian, false),
         field("new_account_type", "Type", x.account_type, false),
       ],
-      button("Create and link", "primary", "submit"),
+      button(this.#prepares() ? "Prepare: create and link" : "Create and link", "primary", "submit"),
     );
   }
 
@@ -1115,7 +1147,7 @@ export class OmAccountMap extends HTMLElement {
     labelled.htmlFor = input.id;
     labelled.append(el("span", "", "An existing account"), input);
     // The list and what is chosen go under the field and its button, so the button stays level with the field.
-    const form = this.#form(r.x, "link", [labelled, chosen], button("Link", "", "submit"));
+    const form = this.#form(r.x, "link", [labelled, chosen], button(this.#act("Link"), "", "submit"));
     form.append(list, say);
     return form;
   }
@@ -1136,6 +1168,7 @@ export class OmAccountMap extends HTMLElement {
     const tokenName = this.getAttribute("token-name");
     if (tokenName) form.append(hidden(tokenName, this.getAttribute("token") || ""));
     form.append(hidden("intent", intent), hidden("external_account_id", external.external_account_id));
+    if (this.#prepares()) form.append(hidden("prepare", "1"));
     const shown = fields.filter((f) => !(f instanceof HTMLInputElement && f.type === "hidden"));
     form.append(...fields.filter((f) => !shown.includes(f)));
     if (shown.length) {
@@ -1164,6 +1197,7 @@ export class OmAccountMap extends HTMLElement {
     const tokenName = this.getAttribute("token-name");
     if (tokenName) form.append(hidden(tokenName, this.getAttribute("token") || ""));
     form.append(hidden("intent", "link-several"));
+    if (this.#prepares()) form.append(hidden("prepare", "1"));
 
     const heading = el("h3", "", `Link ${plural(suggested.length, "account")}, each to the account suggested for it`);
     heading.id = `${this.#id}-review-title`;
@@ -1173,7 +1207,7 @@ export class OmAccountMap extends HTMLElement {
     const submit = button("", "primary", "submit");
     const recount = () => {
       const n = list.querySelectorAll("input[type=checkbox]:checked").length;
-      submit.textContent = `Link ${plural(n, "account")}`;
+      submit.textContent = this.#prepares() ? `Prepare ${plural(n, "link")}` : `Link ${plural(n, "account")}`;
       submit.disabled = n === 0;
     };
     for (const r of suggested) {
@@ -1240,6 +1274,8 @@ export class OmAccountMap extends HTMLElement {
       new_account_type: field("new_account_type"),
       form,
     };
+    // Under `prepare`, a page sending it itself sends it as a preparation.
+    if (sent.get("prepare") === "1") detail.prepare = true;
     if (intent === "link-several") {
       const externals = sent.getAll("external_account_id").map(text);
       const accounts = sent.getAll("account_id").map(text);

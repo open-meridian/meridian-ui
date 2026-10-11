@@ -413,6 +413,258 @@ async function searchChecks(browser, base, shots) {
   return failed;
 }
 
+/**
+ * Kit 0.12.0, in a real browser at both sizes: an entry grid's instrument
+ * column searching the page's own server for a few and posting the ID chosen,
+ * on a page on its own (as core's own pages are) and in the stand-in host's
+ * frame (as a plugin's page is), the matches within the screen and the page
+ * still fitting; facts on one line, a row's whole a click away; and a next
+ * step's link opening the host's own tab from the framed page, while on its
+ * own it is words. Returns what failed.
+ */
+async function v20Checks(browser, base, shots) {
+  const failed = [];
+  for (const size of SIZES) {
+    const at = `${size.width}×${size.height}`;
+    const check = (ok, what) => ok || failed.push(`kit 0.12.0 at ${at}: ${what}`);
+    const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
+    page.on("pageerror", (e) => failed.push(`kit 0.12.0 at ${at}: the page threw: ${e.message}`));
+    const fits = async (what, target = page) => {
+      const problems = target === page ? fitProblems(await page.evaluate(measureFit), size) : fitProblems(await target.evaluate(measureFit));
+      check(!problems.length, `${what}, the page does not fit: ${problems.join("; ")}`);
+    };
+    const shot = async (name) => {
+      if (shots) await page.screenshot({ path: join(shots, `kit-v20-${name}-${size.name}.png`) });
+    };
+    // What the page asks its server, from here on.
+    const listen = (target) => target.evaluate(() => {
+      const real = window.fetch;
+      window.__asked = [];
+      window.fetch = (input, init) => {
+        window.__asked.push(String(typeof input === "string" ? input : input.url));
+        return real(input, init);
+      };
+    });
+    const matches = (target) => target.evaluate(() => {
+      // The grid's, over the page (the sample's picker has one of its own, hidden).
+      const list = [...document.querySelectorAll("body > ul.om-picker-list")].find((l) => !l.hidden);
+      if (!list) return null;
+      const r = list.getBoundingClientRect();
+      return {
+        options: [...list.querySelectorAll("[role=option]")].map((li) => li.textContent),
+        inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+        asked: window.__asked,
+      };
+    });
+    const chosen = (target, n) => target.evaluate((i) => {
+      const tr = document.querySelectorAll("#watchlist tbody tr[data-row]")[i];
+      const post = tr.querySelector('td input[type="hidden"]');
+      return { shown: tr.querySelector('[data-key="instrument"]').value, value: post.value, name: post.getAttribute("name") };
+    }, n);
+
+    // On its own, as core's own pages are.
+    await page.goto(`${base}gallery/sample.html#watchlist`);
+    await settled(page);
+    const up = await page.evaluate(() => {
+      const g = document.querySelector("#watchlist om-entry-grid");
+      const box = g.querySelector('[data-key="instrument"]');
+      return { defined: !!customElements.get("om-entry-grid"), upgraded: !!g.querySelector("table.om-entry"), role: box?.getAttribute("role"), first: box?.value, rows: g.querySelectorAll("tbody tr[data-row]").length };
+    });
+    check(up.defined && up.upgraded && up.role === "combobox" && up.rows === 2, `the watchlist's grid did not upgrade with its instrument column: ${JSON.stringify(up)}`);
+    check(up.first === "Microsoft Corporation common stock (MSFT)", `an ID given is not shown by its name: ${JSON.stringify(up)}`);
+    await listen(page);
+    await page.locator("#watchlist .om-entry-add").click();
+    await page.keyboard.type("appl");
+    await page.waitForSelector("ul.om-picker-list:not([hidden]) [role=option]", { timeout: 5000 }).catch(() => {});
+    const found = await matches(page);
+    check(found && found.options.length === 1 && /Apple Inc\. common stock/.test(found.options[0]) && /INS-3f1c9a02/.test(found.options[0]) && /ticker:AAPL/.test(found.options[0]),
+      `typing does not show the few that match, with name, identifiers and ID: ${JSON.stringify(found)}`);
+    check(found && found.inside, `the matches are not within the screen: ${JSON.stringify(found)}`);
+    const asked = (found?.asked || []).map((u) => new URL(u));
+    check(asked.length >= 1 && asked.every((u) => u.searchParams.get("limit") === "8" && u.pathname.endsWith("/gallery/search")) && asked.at(-1).searchParams.get("q") === "appl",
+      `the search did not ask the page's own server for a few: ${JSON.stringify(found?.asked)}`);
+    await fits("the matches open");
+    await shot("instrument-search");
+    await page.keyboard.press("Enter");
+    const one = await chosen(page, 2);
+    check(one.value === "INS-3f1c9a02" && one.name === "watchlist[2].instrument" && one.shown === "Apple Inc. common stock (AAPL)", `choosing does not set the cell to the ID: ${JSON.stringify(one)}`);
+    await page.locator("#watchlist button.primary", { hasText: "Save" }).click();
+    const sent = await page.locator("#watched").textContent();
+    check(sent.includes("watchlist[0].instrument=INS-8d20b7e4") && sent.includes("watchlist[2].instrument=INS-3f1c9a02") && !sent.includes("Apple Inc"), `the form would not post the IDs: "${sent}"`);
+    await fits("an instrument chosen");
+    await shot("instrument-chosen");
+
+    // In the stand-in host's frame, as a plugin's page is.
+    await page.goto(`${base}gallery/host.html`);
+    await settled(page);
+    const frame = page.frames().find((f) => f !== page.mainFrame());
+    await frame.evaluate(() => { location.hash = "watchlist"; });
+    await still(frame);
+    await listen(frame);
+    await frame.locator("#watchlist .om-entry-add").click();
+    await page.keyboard.type("micro");
+    await frame.waitForSelector("ul.om-picker-list:not([hidden]) [role=option]", { timeout: 5000 }).catch(() => {});
+    const framed = await matches(frame);
+    check(framed && framed.options.length === 1 && /Microsoft/.test(framed.options[0]) && framed.inside, `framed, typing does not show the matches within the frame: ${JSON.stringify(framed)}`);
+    await fits("framed, the matches open", frame);
+    await shot("framed-instrument-search");
+    await page.keyboard.press("Enter");
+    const two = await chosen(frame, 2);
+    check(two.value === "INS-8d20b7e4" && two.name === "watchlist[2].instrument", `framed, choosing does not set the cell to the ID: ${JSON.stringify(two)}`);
+    await shot("framed-instrument-chosen");
+
+    // Facts: one line a row, the label a row header, the whole a click away.
+    await page.goto(`${base}gallery/patterns.html#p-facts`);
+    await settled(page);
+    const facts = await page.evaluate(() => [...document.querySelectorAll("#p-facts table.one-line tbody tr")].map((tr) => ({
+      height: Math.round(tr.getBoundingClientRect().height), label: tr.querySelector("th[scope=row]").textContent, transform: getComputedStyle(tr.querySelector("th")).textTransform,
+      labelWidth: Math.round(tr.querySelector("th").getBoundingClientRect().width), rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    })));
+    const wide = size.width > 640 ? 12 : 7.5;
+    check(facts.length === 3 && facts.every((f) => f.height <= 48 && f.transform === "none" && Math.abs(f.labelWidth - wide * f.rem) <= 1),
+      `facts are not one line a row with plain labels ${wide}rem wide: ${JSON.stringify(facts)}`);
+    await page.locator("#p-facts tbody tr").nth(2).locator("td").first().click();
+    const detail = await page.evaluate(() => document.querySelectorAll("#p-facts details.row-detail")[2].open);
+    check(detail, "a click on a fact's row does not open its whole");
+    await fits("a fact's whole open");
+    await shot("facts");
+    await page.keyboard.press("Escape");
+
+    // Prepare: the act's own form posts with the reserved field; its submit without.
+    for (const where of ["alone", "framed"]) {
+      let target = page;
+      if (where === "alone") {
+        await page.goto(`${base}gallery/patterns.html#p-prepare`);
+        await settled(page);
+      } else {
+        await page.goto(`${base}gallery/host.html?page=patterns.html`);
+        await settled(page);
+        target = page.frames().find((f) => f !== page.mainFrame());
+        await target.evaluate(() => { location.hash = "p-prepare"; });
+        await still(target);
+      }
+      await target.locator("#p-prepare form").first().locator("button", { hasText: "Prepare" }).click();
+      const prepared = await target.locator("#said").textContent();
+      await target.locator("#p-prepare form").first().locator("button.primary").click();
+      const made = await target.locator("#said").textContent();
+      check(/[?&\s]?prepare=1/.test(prepared) && prepared.includes("account_id=ACC-7b20c1e5") && prepared.includes("csrf="), `${where}, Prepare does not post the form with prepare=1: "${prepared}"`);
+      check(!made.includes("prepare=") && made.includes("account_id=ACC-7b20c1e5"), `${where}, the act's submit posts prepare: "${made}"`);
+      await fits(`${where}, Prepare`, target);
+      await shot(`prepare-${where}`);
+    }
+
+    // om-account-map, page-size="auto" and grouped, three unlinked accounts on
+    // three connections (SnapTrade's Account links): every page holds rows
+    // under their heads, never a head alone, and the page still fits.
+    await page.goto(`${base}gallery/accounts.html`);
+    await settled(page);
+    await page.evaluate(() => {
+      const data = {
+        external_accounts: [1, 2, 3].map((i) => ({ external_account_id: `st-${i}`, name: `Account ${i}`, detail: "Interactive Brokers · Cash", custodian: "Interactive Brokers", account_type: "Cash", connection: `Interactive Brokers · Connection ${i}`, connection_id: `c-${i}` })),
+        accounts: [{ account_id: "ACC-1", name: "Main", open: true }],
+        links: [],
+      };
+      const main = document.querySelector("main");
+      main.innerHTML = `<header class="page-head"><div><h1>Account links</h1></div></header><section class="panel"><om-account-map action="link" token-name="csrf" token="t" page-size="auto" group-by="connection"><script type="application/json">${JSON.stringify(data)}</script></om-account-map></section>`;
+    });
+    await still(page);
+    const mapPages = [];
+    for (let i = 0; i < 8; i++) {
+      const now = await page.evaluate(() => {
+        const m = document.querySelector("om-account-map");
+        const pager = m.querySelector(".om-account-map-pager");
+        return {
+          body: [...m.querySelectorAll("tbody tr")].map((tr) => (tr.classList.contains("om-account-map-group") ? "H" : tr.dataset.external)),
+          where: pager.hidden ? "one page" : pager.querySelector(".om-account-map-page").textContent,
+          last: pager.hidden || pager.querySelectorAll("button")[1].disabled,
+        };
+      });
+      mapPages.push(now);
+      if (now.last) break;
+      await page.locator("om-account-map .om-account-map-pager").first().locator("button").nth(1).click();
+      await still(page);
+    }
+    const rowsShown = mapPages.flatMap((p) => p.body.filter((e) => e !== "H"));
+    check(mapPages.every((p) => p.body.some((e) => e !== "H") && p.body.at(-1) !== "H") && rowsShown.join() === "st-1,st-2,st-3" && mapPages.length <= 3,
+      `the grouped map's pages are not rows under their heads: ${JSON.stringify(mapPages)}`);
+    if (size.width > 640) check(mapPages.length === 1 && mapPages[0].where === "one page", `at a desktop's height the three accounts are not one page: ${JSON.stringify(mapPages)}`);
+    await fits("the grouped map, its last page");
+    await shot("account-map-grouped");
+
+    // om-account-map with prepare, on its own and framed: "Prepare link", posting prepare=1.
+    for (const where of ["alone", "framed"]) {
+      await page.goto(where === "alone" ? `${base}gallery/accounts.html` : `${base}gallery/host.html?page=accounts.html`);
+      await settled(page);
+      const target = where === "alone" ? page : page.frames().find((f) => f !== page.mainFrame());
+      // Prepare, and an account named as the first unlinked one, so it is
+      // suggested; the gallery's own notice over the map goes, so the row its
+      // suggestion makes taller still leaves the framed phone page room.
+      await target.evaluate(() => {
+        for (const n of document.querySelectorAll("main > .notice")) n.hidden = true;
+        const m = document.getElementById("map");
+        m.setAttribute("prepare", "");
+        const data = m.data;
+        const free = data.external_accounts.find((x) => !data.links.some((l) => l.external_account_id === x.external_account_id));
+        data.accounts.push({ account_id: "ACC-SUGGESTED", name: free.name, custodian: free.custodian, account_type: free.account_type, open: true });
+        m.data = data;
+      });
+      await still(target);
+      await fits(`${where}, the map with prepare`, target);
+      await shot(`account-map-prepare-${where}`);
+      const sent = await target.evaluate(() => {
+        const m = document.getElementById("map");
+        let posted = null;
+        m.addEventListener("om-link", (e) => { e.preventDefault(); posted = { ...e.detail, form: undefined, fields: Object.fromEntries(new FormData(e.detail.form)) }; }, { once: true });
+        const take = m.querySelector("tr.om-account-map-row button[type=submit]");
+        const words = take ? take.textContent : null;
+        take?.form.requestSubmit(take);
+        return { words, posted, labels: [...m.querySelectorAll("button[type=submit]")].map((b) => b.textContent).filter((t) => /^(Link|Unlink|Create and link)$/.test(t)) };
+      });
+      check(sent.words === "Prepare link" && sent.posted?.prepare === true && sent.posted?.fields?.prepare === "1" && sent.posted?.fields?.account_id === "ACC-SUGGESTED" && sent.labels.length === 0,
+        `${where}, the map with prepare does not offer Prepare link posting prepare=1: ${JSON.stringify(sent)}`);
+    }
+
+    // A next step on its own: words, and nothing asked.
+    await page.goto(`${base}gallery/patterns.html#p-next`);
+    await settled(page);
+    const before = page.url();
+    await page.locator('#p-next a[data-om-opens="settings"]').click();
+    const alone = await page.evaluate(() => {
+      const a = document.querySelector('#p-next a[data-om-opens="settings"]');
+      return { same: getComputedStyle(a).color === getComputedStyle(a.parentElement).color, tabindex: a.getAttribute("tabindex") };
+    });
+    check(page.url() === before && alone.same && alone.tabindex === null, `on its own, a next step is not its words: ${JSON.stringify(alone)} ${page.url()}`);
+    await shot("next-step-alone");
+
+    // Framed: the link opens the host's own Settings tab.
+    await page.goto(`${base}gallery/host.html?page=patterns.html`);
+    await settled(page);
+    const pf = page.frames().find((f) => f !== page.mainFrame());
+    await pf.evaluate(() => { location.hash = "p-next"; });
+    await still(pf);
+    const link = await pf.evaluate(() => {
+      const a = document.querySelector('#p-next a[data-om-opens="settings"]');
+      return { tabindex: a.getAttribute("tabindex"), role: a.getAttribute("role"), cursor: getComputedStyle(a).cursor };
+    });
+    check(link.tabindex === "0" && link.role === "link" && link.cursor === "pointer", `framed, a next step is not a link: ${JSON.stringify(link)}`);
+    await fits("framed, a next step", pf);
+    await shot("next-step-framed");
+    await pf.locator('#p-next a[data-om-opens="settings"]').click();
+    await page.waitForFunction(() => !document.getElementById("core").hidden, null, { timeout: 5000 }).catch(() => {});
+    const host = await page.evaluate(() => ({
+      core: !document.getElementById("core").hidden,
+      frame: document.getElementById("plugin").hidden,
+      title: document.getElementById("core-title").textContent,
+      on: document.querySelector("#host-tabs .tab[aria-current=page]")?.textContent,
+    }));
+    check(host.core && host.frame && host.title === "Settings" && host.on === "Settings", `the next step does not open the host's Settings tab: ${JSON.stringify(host)}`);
+    await fits("the host's tab opened");
+    await shot("next-step-opened");
+    await page.close();
+  }
+  return failed;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   let shots = null;
@@ -450,6 +702,9 @@ async function main() {
     const searched = await searchChecks(browser, base, shots);
     console.log(searched.length ? `search and gated fields: FAILED\n  ${searched.join("\n  ")}` : "search and gated fields: the components upgrade with their boxes; a search narrows the orders' grid in its pager, the accounts' pager and the quotes' high-rate grid, each saying how many match; Enter asks a server; a gated field appears for its choice; every page still fits, at both sizes");
     failed.push(...searched);
+    const v20 = await v20Checks(browser, base, shots);
+    console.log(v20.length ? `kit 0.12.0: FAILED\n  ${v20.join("\n  ")}` : "kit 0.12.0: an instrument column searches the page's own server for a few and posts the ID chosen, on its own and framed, the matches within the screen; facts one line a row, the whole a click away; a next step opens the host's tab from the frame and is words on its own; Prepare posts the act's form with prepare=1, on its own and framed; a grouped account map pages rows under their heads; the map with prepare offers Prepare link posting prepare=1, on its own and framed; every page still fits, at both sizes");
+    failed.push(...v20);
     const entry = await entryChecks(browser, base, shots);
     console.log(entry.length ? `the entry grid on a phone: FAILED\n  ${entry.join("\n  ")}` : `the entry grid on a phone: a row one line, its number, two fields and "…"; "…" opens the row over the page with every field and the hidden field's message, the page still fitting; Escape puts it back; 42 rows paged, the page fitting; Add a row turns to the new one`);
     failed.push(...entry);

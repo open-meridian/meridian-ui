@@ -165,7 +165,8 @@
     channel.port1.onmessage = () => {
       if (frameStart !== null) work.push(performance.now() - frameStart);
       frameStart = null;
-      rowsMax = Math.max(rowsMax, map.querySelectorAll("tbody tr").length);
+      // A page's rows (an open group's head rides with its first row, so it is not one).
+      rowsMax = Math.max(rowsMax, map.querySelectorAll('tbody tr:not(.om-account-map-group:has([aria-expanded="true"]))').length);
       draws += seen.takeRecords().length;
       drawsMax = Math.max(drawsMax, draws);
       draws = 0;

@@ -185,3 +185,10 @@ const said = (text) => {
 };
 if (new URLSearchParams(location.search).get("refreshed") === "1") said("Refreshed: the Refresh form was sent, and this is the page it answered with.");
 document.querySelector('[data-om-action="new-order"]').addEventListener("click", () => said(`New order pressed at ${new Date().toLocaleTimeString()}.`));
+
+// The watchlist's form, shown rather than posted: what the grid would send.
+document.getElementById("watch-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const fields = [...new FormData(event.target)].map(([name, value]) => `${name}=${value}`).join("&");
+  document.getElementById("watched").textContent = `It would post ${fields}.`;
+});

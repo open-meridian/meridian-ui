@@ -152,7 +152,9 @@ const ENTRY_SCENARIOS = [
   { name: "for the record: the same in the first of 100 rows", rows: 100, values: "messages", held: false },
   { name: "for the record: the same in the first of 1,000 rows; then 500 rows pasted", rows: 1000, values: "messages", paste: 500, held: false },
 ];
-// A page of rows (50), the head of a group a page opens inside, and one row's choices.
+// A page of rows (50; a folded group's head counts as one, an open group's
+// head rides with its first row and is not counted, 0.12.0), one row's
+// choices, and one to spare.
 const MAP_ROWS_MOST = 52;
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };

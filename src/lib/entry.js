@@ -8,8 +8,9 @@
 
 import { compareDecimal, parseDecimal } from "./decimal.js";
 
-/** The column types an entry grid knows. */
-export const ENTRY_TYPES = Object.freeze(["text", "decimal", "date", "code", "choice", "readonly"]);
+/** The column types an entry grid knows. `instrument` (0.12.0) is chosen
+ * from a search on the page's own server and posts the instrument's ID. */
+export const ENTRY_TYPES = Object.freeze(["text", "decimal", "date", "code", "choice", "readonly", "instrument"]);
 
 // A field's name in a path (meridian-design's data dictionary, "Paths"), and a path.
 const FIELD = "[A-Za-z_][A-Za-z0-9_]*";
@@ -165,6 +166,10 @@ export function checkEntryValue(col, raw) {
       const o = matchOption(col, text);
       return o ? { value: o.value, empty: false, message: null } : { value: text, empty: false, message: "Not one of the choices" };
     }
+    case "instrument":
+      // An instrument's ID, as chosen, pasted or given: the server knows
+      // which IDs it holds, so the grid takes it as it is.
+      return { value: text, empty: false, message: null };
     default: {
       if (col.max_length && characters(text) > col.max_length) return { value: text, empty: false, message: `At most ${col.max_length} characters` };
       return { value: text, empty: false, message: null };

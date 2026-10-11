@@ -107,6 +107,8 @@ ul.plain li + li { margin-top: .2rem; }
  * actions and status (data-om-empty, set by meridian.js only when framed)
  * goes whole, and its gap with it. */
 :root[data-om-framed] :is(.page-head, .pagehead)[data-om-empty] { display: none; }
+/* A next step's link asks the host to open its tab (0.12.0): a link, framed. */
+:root[data-om-framed] a[data-om-opens] { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 
 /* ── Panels and cards ────────────────────────────────────────────────────── */
 
@@ -150,6 +152,12 @@ ul.plain li + li { margin-top: .2rem; }
 .empty-state strong { display: block; color: var(--ink); font-size: 1rem; margin-bottom: .25rem; }
 .empty-state p { margin: 0 0 1rem; }
 
+/* A next step (0.12.0): a link marked data-om-opens names one of the host's
+ * own tabs. On its own, with no href, it is the words naming the place;
+ * framed, the kit asks the host to open it (meridian:open), so it is drawn
+ * as a link ("Framed", above). */
+a[data-om-opens]:not([href]) { color: inherit; }
+
 /* ── Tables ──────────────────────────────────────────────────────────────── */
 
 .table-wrap { overflow-x: auto; }
@@ -187,10 +195,20 @@ table.one-line td > :is(div, p, .hint, .meta) { display: inline; margin: 0; }
 table.one-line td > * + :is(div, p, .hint, .meta) { margin-left: .4rem; }
 table.one-line :is(th, td).more { width: 3rem; padding-inline: .25rem; text-align: right; overflow: visible; }
 table.one-line .empty-state { white-space: normal; }
+/* Facts (0.12.0): a section's label, value and note on one line, the label a
+ * row header (th scope="row"), the whole a click away in the row's detail. */
+table.one-line tbody th[scope="row"] {
+  width: 12rem; height: 2.5rem; padding-block: 0; text-transform: none; letter-spacing: normal;
+  font-family: var(--sans); font-size: .9rem; font-weight: 550;
+  color: var(--ink-soft); border-bottom: 1px solid var(--line-soft);
+}
+table.one-line tbody tr:last-child th[scope="row"] { border-bottom: 0; }
+table.one-line tbody tr:hover th[scope="row"] { background: var(--hover); }
 @media (max-width: 40rem) {
   table.one-line th { padding: .35rem .6rem; }
   table.one-line td { padding-inline: .6rem; height: 2.75rem; }
   table.one-line :is(th, td).more { width: 3.25rem; padding-inline: .25rem; }
+  table.one-line tbody th[scope="row"] { width: 7.5rem; height: 2.75rem; padding-block: 0; }
 }
 
 /* A row's detail: the whole row, one click or tap away. A <details> whose
@@ -650,22 +668,28 @@ om-status[state="error"] .om-status-detail { color: var(--ink); }
 
 om-instrument-picker { display: block; position: relative; }
 om-instrument-picker input[type="search"] { width: 100%; min-width: 0; }
-om-instrument-picker .om-picker-list {
-  position: absolute; left: 0; right: 0; top: calc(100% + .25rem); z-index: 30;
+/* A list of instruments found: the picker's, under its box, and an entry
+ * grid's instrument cell's (0.12.0), over the page, placed by the grid under
+ * the cell so no table, frame or dialog cuts it off. */
+.om-picker-list {
+  position: fixed; z-index: 45;
   margin: 0; padding: .3rem; list-style: none; max-height: 20rem; overflow-y: auto;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  text-align: left; white-space: normal;
 }
-om-instrument-picker .om-picker-option {
+om-instrument-picker .om-picker-list { position: absolute; left: 0; right: 0; top: calc(100% + .25rem); z-index: 30; }
+.om-picker-option {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .1rem .75rem;
   padding: .45rem .6rem; border-radius: calc(var(--radius) - 2px); cursor: pointer; color: var(--ink);
 }
-om-instrument-picker .om-picker-option[aria-selected="true"], om-instrument-picker .om-picker-option:hover { background: var(--hover); }
-om-instrument-picker .om-picker-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-om-instrument-picker .om-picker-ids { grid-column: 1 / -1; color: var(--ink-soft); font: .8rem var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-om-instrument-picker .om-picker-meta { color: var(--ink-soft); font-size: .8rem; white-space: nowrap; }
-om-instrument-picker .om-picker-status { padding: .45rem .6rem; color: var(--ink-soft); font-size: .86rem; }
-om-instrument-picker .om-picker-status.bad { color: var(--danger); }
+.om-picker-option[aria-selected="true"], .om-picker-option:hover { background: var(--hover); }
+.om-picker-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.om-picker-ids { grid-column: 1 / -1; color: var(--ink-soft); font: .8rem var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.om-picker-meta { color: var(--ink-soft); font-size: .8rem; white-space: nowrap; }
+.om-picker-status { padding: .45rem .6rem; color: var(--ink-soft); font-size: .86rem; }
+.om-picker-status.bad { color: var(--danger); }
 om-instrument-picker .om-picker-chosen { margin-top: .4rem; }
+@media (max-width: 40rem) { .om-picker-option { min-height: 2.75rem; } }
 
 /* ── om-entry-grid ───────────────────────────────────────────────────────── */
 

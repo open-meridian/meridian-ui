@@ -26,6 +26,11 @@
 //   as text. It draws the dot right after the plugin's name with the kit's own
 //   om-status, so its look and its note are the page's; state null, or a new
 //   load of the frame, takes it away.
+// - It takes meridian:open (0.12.0) under the same guards: an id of the
+//   kit's shape naming one of its own tabs (Summary, Settings) or, its
+//   person being a deployment admin here, Data sources. It opens that tab in
+//   place of the frame; anything else it ignores. The way back is the page's
+//   tab.
 //
 // Here the plugin's page is beside this one, so its origin is this one's; on
 // the dashboard it is the plugin's own host.
@@ -37,7 +42,8 @@ const PAGES = { "sample.html": "Positions", "accounts.html": "Account links", "a
 const asked = new URLSearchParams(location.search).get("page");
 const chosen = Object.hasOwn(PAGES, asked) ? asked : "sample.html";
 const PAGE = new URL(chosen, import.meta.url);
-document.querySelector(".tabs .tab.on").textContent = PAGES[chosen];
+const PAGE_TAB = document.querySelector("#host-tabs .tab.on");
+PAGE_TAB.textContent = PAGES[chosen];
 const ORIGIN = PAGE.origin;
 
 const theme = () => window.Meridian.theme.current();
@@ -149,10 +155,59 @@ function show(status) {
   if (!drawn) DOT.append(dot);
 }
 
+// The host's own tabs, and what a next step may open: Summary and Settings
+// for the instance, and Data sources for a deployment admin, which this
+// stand-in's person is.
+const PLACES = { summary: "Summary", settings: "Settings", "data-sources": "Data sources" };
+const PLACE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const CORE = document.getElementById("core");
+const TABS = [...document.querySelectorAll("#host-tabs .tab")];
+
+function mark(tab) {
+  for (const t of TABS) {
+    t.classList.toggle("on", t === tab);
+    if (t === tab) t.setAttribute("aria-current", "page");
+    else t.removeAttribute("aria-current");
+  }
+}
+
+/** Open one of this host's own tabs in place of the frame; null, the page's. */
+function place(id, how) {
+  if (!id) {
+    CORE.hidden = true;
+    frame.hidden = false;
+    mark(PAGE_TAB);
+    return;
+  }
+  document.getElementById("core-title").textContent = PLACES[id];
+  document.getElementById("core-said").textContent = how;
+  document.getElementById("core-back").textContent = `Back to ${PAGES[chosen]}`;
+  frame.hidden = true;
+  CORE.hidden = false;
+  mark(TABS.find((t) => t.getAttribute("href") === `#${id}`) || null);
+}
+
+for (const tab of TABS) {
+  tab.addEventListener("click", (event) => {
+    event.preventDefault();
+    const id = tab.getAttribute("href").slice(1);
+    place(Object.hasOwn(PLACES, id) ? id : null, `The host's own ${PLACES[id]} tab.`);
+  });
+}
+document.getElementById("core-back").addEventListener("click", (event) => {
+  event.preventDefault();
+  place(null);
+});
+
 window.addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow || event.origin !== ORIGIN) return;
   const d = event.data;
   if (!d || typeof d !== "object" || d.version !== 1) return;
+  if (d.type === "meridian:open") {
+    if (typeof d.id !== "string" || !PLACE.test(d.id) || !Object.hasOwn(PLACES, d.id)) return;
+    place(d.id, `The host's own ${PLACES[d.id]} tab, opened by the page's next step: { type: "meridian:open", version: 1, id: "${d.id}" } from ${event.origin}.`);
+    return;
+  }
   if (d.type === "meridian:actions") {
     const list = validActions(d.actions);
     if (!list) return;

@@ -46,10 +46,13 @@
     <a class="tab" href="#p-grid">Grid</a>
     <a class="tab" href="#p-entry">Entry grid</a>
     <a class="tab" href="#p-rows">One-line rows</a>
+    <a class="tab" href="#p-facts">Facts</a>
     <a class="tab" href="#p-pager">Pager</a>
     <a class="tab" href="#p-search">Search</a>
     <a class="tab" href="#p-gated">Gated fields</a>
+    <a class="tab" href="#p-prepare">Prepare</a>
     <a class="tab" href="#p-empty">Nothing here</a>
+    <a class="tab" href="#p-next">Next step</a>
   </nav>
 
   <section id="p-head">
@@ -182,6 +185,22 @@
     </section>
   </section>
 
+  <section id="p-facts">
+    <section class="section-head"><h2>Facts</h2><p>A section's label, value and note on one line, the whole a click away.</p></section>
+    <section class="panel">
+<!-- pattern: facts -->
+<table class="one-line" aria-label="Key">
+  <tbody>
+    <tr><th scope="row">Mode</th><td>Live <span class="hint">Alpaca is called with the key below.</span></td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Mode">…</summary><div class="row-detail-pop"><h3>Mode</h3><p>Live</p><p>Alpaca is called with the key below.</p></div></details></td></tr>
+    <tr><th scope="row">Key</th><td>API key ID set, API secret key not set</td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Key">…</summary><div class="row-detail-pop"><h3>Key</h3><p>API key ID set, API secret key not set</p></div></details></td></tr>
+    <tr><th scope="row">Entitled at the vendor</th><td>IEX, SIP history <span class="hint">What Alpaca serves this key.</span></td><td class="more"><details class="row-detail" name="key"><summary aria-label="Details of Entitled at the vendor">…</summary><div class="row-detail-pop"><h3>Entitled at the vendor</h3><p>IEX, SIP history</p><p>What Alpaca serves this key.</p></div></details></td></tr>
+  </tbody>
+</table>
+<!-- /pattern -->
+      <div class="panel-body"><details class="notice quiet markup" data-markup="facts"><summary>Markup</summary></details></div>
+    </section>
+  </section>
+
   <section id="p-pager">
     <section class="section-head"><h2>Pager</h2><p>A page of the server's rows, as many as fit; Previous and Next ask the server for the next that fit.</p></section>
     <section class="panel">
@@ -240,6 +259,27 @@
     </section>
   </section>
 
+  <section id="p-prepare">
+    <section class="section-head"><h2>Prepare</h2><p>Beside an act's submit, a person prepares the change for someone who may make it; under a second pair of eyes, Prepare alone.</p></section>
+    <section class="panel padded">
+<!-- pattern: prepare -->
+<form method="post" action="/accounts/link">
+  <input type="hidden" name="csrf" value="…">
+  <label class="field"><span>Account</span><input name="account_id" value="ACC-7b20c1e5"></label>
+  <div class="row"><button type="submit" name="prepare" value="1">Prepare</button><button class="primary">Link</button></div>
+</form>
+<!-- /pattern -->
+      <details class="notice quiet markup" data-markup="prepare"><summary>Markup</summary></details>
+    </section>
+    <section class="section-head"><h2>Under a second pair of eyes</h2><p>The page leaves its submit out: nobody makes the change alone.</p></section>
+    <section class="panel padded">
+      <form method="post" action="/accounts/link" id="prepare-only">
+        <input type="hidden" name="csrf" value="…">
+        <div class="row"><button type="submit" name="prepare" value="1">Prepare</button></div>
+      </form>
+    </section>
+  </section>
+
   <section id="p-empty">
     <section class="section-head"><h2>Nothing here</h2><p>For somebody who may read none of the plugin's accounts: in a plugin, the page's whole content.</p></section>
 <!-- pattern: nothing-here -->
@@ -256,6 +296,20 @@
 <!-- /pattern -->
     </section>
     <details class="notice quiet markup" data-markup="empty"><summary>Markup</summary></details>
+  </section>
+
+  <section id="p-next">
+    <section class="section-head"><h2>Next step</h2><p>A state not set up yet: its title, what to do, and a link to where. Framed, the link opens the host's tab.</p></section>
+    <section class="panel">
+<!-- pattern: next-step -->
+<div class="empty-state"><strong>No key yet</strong><p>Enter it in <a data-om-opens="settings">Settings</a>.</p></div>
+<!-- /pattern -->
+    </section>
+    <details class="notice quiet markup" data-markup="next-step"><summary>Markup</summary></details>
+    <section class="section-head"><h2>Whose it is</h2><p>Where the next step is a deployment admin's, it says so.</p></section>
+    <section class="panel padded">
+      <div class="notice warn" role="status">No wants yet: nothing reads these datasets until a deployment admin licenses them and entitles a plugin on <a data-om-opens="data-sources">Data sources</a>.</div>
+    </section>
   </section>
 
 </main>
