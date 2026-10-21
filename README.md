@@ -6,21 +6,22 @@ the person's colour scheme, light or dark, and their market-direction
 convention (green-up or red-up), handed over by the dashboard's frame; the platform's components in CSS; and web components for what trading
 pages need: a data grid (with a high-rate mode for streams, and a layout for a
 phone), a grid of typed inputs a person enters rows in, charts, an as-of control and an as-of moment, a status dot, an instrument picker, a
-live feed that never misses a change, resizable, rearrangeable panels, and the
-map a plugin links its external accounts with.
+live feed that never misses a change, resizable, rearrangeable panels, the
+map a plugin links its external accounts with, and a grouped sidebar for a
+site's sections.
 
 It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
 `spec/plugin-pages-share-one-kit.md`, and its role pages' parts
-`spec/plugin-pages-follow-their-role.md`. This is release 0.12.0; the guide to
+`spec/plugin-pages-follow-their-role.md`. This is release 0.13.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
 - [Linking the kit](#linking-the-kit)
 - [Never raw colours](#never-raw-colours)
 - [CSS components](#css-components)
-- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-pager](#om-pager), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
+- [Web components](#web-components): [data without script](#data-without-script), [om-grid](#om-grid) (and its [rich cells](#rich-cells), [narrow layouts](#narrow-layouts) and [high-rate mode](#high-rate-mode)), [om-chart](#om-chart), [om-asof](#om-asof), [om-moment](#om-moment), [om-status](#om-status), [om-instrument-picker](#om-instrument-picker), [om-live](#om-live), [om-panels](#om-panels), [om-pager](#om-pager), [om-sidebar](#om-sidebar), [om-account-map](#om-account-map), [om-entry-grid](#om-entry-grid)
 - [Search](#search) and [fields gated on a choice](#fields-gated-on-a-choice)
 - [Patterns](#patterns): [the head](#the-head), [status](#status), [action](#action), [notice](#notice), [badge](#badge), [tiles](#tiles), [a moment](#a-moment), [grid](#grid), [entry grid](#entry-grid), [one-line rows](#one-line-rows), [facts](#facts), [pager](#pager), [search over a server's rows](#search-over-a-servers-rows), [gated fields](#gated-fields), [prepare](#prepare), [nothing here](#nothing-here), [empty](#empty), [next step](#next-step)
 - [The theme: the frame's message](#the-theme-the-frames-message)
@@ -143,6 +144,10 @@ pager, `search` on `om-grid`, `om-pager` and `om-entry-grid` (and
 `search-param` on `om-pager`), with the `om-search` event; and
 [fields gated on a choice](#fields-gated-on-a-choice),
 `data-om-applies-when` and `data-om-one-of` on any element of a form.
+0.13.0 adds [`om-sidebar`](#om-sidebar), a grouped left sidebar of plain
+links in a shell (`.om-shell`) beside the page's own content, collapsing to
+icons on a desktop and a drawer on a phone, and the kit's stroked icons
+(`lib/icons.js`).
 
 ## Never raw colours
 
@@ -671,6 +676,111 @@ the kit hides it and draws its own. A row the page hides itself stays hidden
 and is not counted. One `om-pager` to a screen: two would each take all the
 space left. A page laid out to exactly the viewport's height (a box with a
 fixed height holding the rows) pages down when it overflows, not up.
+
+### om-sidebar
+
+A site's sections as a grouped left sidebar (0.13.0; meridian-design
+rulings 447 to 451, the dashboard's administration). The groups are data, so
+one element serves the dashboard's settings, a plugin's Manage page inside
+them, and any other site of sections (the platform's staff pages).
+
+```html
+<div class="om-shell">
+  <om-sidebar label="Settings" remember="admin">
+    <script type="application/json">
+      { "groups": [
+        { "label": "Plugins", "items": [
+          { "id": "plugins", "label": "Plugins", "href": "/admin#plugins", "icon": "grid" },
+          { "id": "versions", "label": "Versions · Browse · Registries", "href": "/plugins?tab=installed",
+            "icon": "package", "also": ["/plugins?tab=browse", "/plugins?tab=registries"] } ] },
+        { "label": "Deployment", "items": [
+          { "id": "time-zone", "label": "Time zone", "href": "/admin#time-zone", "icon": "clock" } ] } ] }
+    </script>
+    <nav aria-label="Settings">…the server's own links, for a browser without the kit…</nav>
+  </om-sidebar>
+  <main class="om-shell-main">…the page, with its own head and tab row…</main>
+</div>
+```
+
+**The data.** `groups`, in order, each a `label` (its heading, and the
+group's name to a screen reader) and its `items`, in order. An item is:
+
+| Field | |
+|---|---|
+| `label` | Its words (required) |
+| `href` | Its address (required): a plain link, followed by the browser, so every address stays what it was |
+| `id` | Its name for the `current` attribute |
+| `icon` | One of the kit's [icons](#icons), drawn beside the words and alone when collapsed; any other name (or none) draws the label's first letter |
+| `also` | Other addresses that are this item too (a page of three tabs by its query) |
+| `current` | `true` to mark it current from the data |
+
+A group or an item is added by adding it to the data: nothing in the element
+changes. What is not of this shape is dropped. The `groups` property reads
+and sets the same.
+
+**The current item** is marked `aria-current="page"` (and drawn on the
+accent's wash): the one the `current` attribute names by `id`; else the one
+the data marks `current`; else the item whose address, or one of its `also`
+addresses, best names the page's. An address names the page when its path is
+the page's, each query parameter it gives is the page's (the page may have
+more), and its fragment is the page's; a fragment on a page with none is a
+weak match, so on a page of hash tabs with none chosen the first is current.
+The best match wins, the first of equals. It is worked out again on every
+`hashchange`, so a page whose sections are hash tabs keeps it right. A page
+whose address is none of the items' (a plugin's Manage page) names its item
+with `current`.
+
+**A desktop.** It is a column 16.5rem wide beside the page, sticky under the
+host's own header: set `--om-sidebar-top` to the header's height, and the
+sidebar is as tall as the screen leaves, scrolling within itself only when
+taller. Its first control collapses it to its icons (3.25rem) and back: the
+words stay each link's name, and its tooltip while collapsed. The choice is
+the person's, remembered in the browser (`localStorage`, under
+`om-sidebar:<remember>`, `om-sidebar:default` with none); storage refused
+changes only the remembering. With nothing remembered the page's own
+`collapsed` attribute is the default, and open without it.
+
+**A phone** (below 48rem, 768px at the default size). The sidebar is a bar
+of one line: Menu, and the current item's words. Menu opens the sidebar as a
+drawer from the left: a modal dialog, so the page under it is inert, focus
+on the current item. Escape, a click outside it, its close button or a link
+followed closes it, and focus returns to Menu. Widened past 48rem with the
+drawer open, it closes.
+
+**A page's own tabs** stay its own: the shell holds the page whole, its head
+and tab row in `.om-shell-main`, so a plugin's Manage page keeps its tabs
+inside the shell, `current` naming its item, and no second sidebar.
+
+| Attribute | |
+|---|---|
+| `label` | The sidebar's name to a screen reader, and the drawer's heading (default "Sections") |
+| `current` | The `id` of the current item, over the address |
+| `remember` | The name the collapsed state is remembered under |
+| `collapsed` | Collapsed to icons (a desktop's); the default when nothing is remembered |
+| `--om-sidebar-top` | The host's header's height, which the sticky sidebar sits under (default 0) |
+
+| Property, method or event | |
+|---|---|
+| `groups` | The groups, normalised; setting them draws them again |
+| `collapsed` | Whether collapsed; setting it is the person's choice, remembered |
+| `currentItem` | `{ id, label, href, group }` of the current item, or null |
+| `openDrawer()`, `closeDrawer()`, `drawerOpen` | The drawer, on a phone |
+| `om-collapse` | `{ collapsed }` when the person collapses or expands it |
+
+`.om-shell` is a flex row (a column below 48rem); `.om-shell-main` pads the
+page beside it as `.page` does. A server's own `nav` inside the element is
+what a browser without the kit shows; the kit hides it once drawn.
+
+#### Icons
+
+The kit's stroked icons (`lib/icons.js`, 0.13.0), drawn inline in the
+element's own colour, so they hold the contrast its words do: `iconSvg(name)`
+gives the markup, hidden from a screen reader, and `ICON_NAMES` lists them.
+The platform's names, drawn the same: `users`, `server`, `database`,
+`shield`, `user`, `menu`, `building`, `collapse`, `expand`, `search`,
+`grid`, `history`, `chart`, `close`, `calendar`, `inbox`. Added for the
+sidebar: `package`, `route`, `key`, `bot`, `link`, `wallet`, `layers`,
+`lock`, `list`, `clock`.
 
 ### om-account-map
 
@@ -2165,9 +2275,9 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it; and (0.13.0) `om-sidebar`'s groups as data, its current item by attribute, data and address (hash, query, `also`, the weak fragment), groups added with no change, collapsing remembered with storage refused, the drawer on a phone with focus back on Menu, and the icons |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. A frame time is wall-clock time, so a busy machine adds to it: a held scenario over its budget is run again, up to five runs, and judged by the least each frame took in any run (each run takes the same steps, so a frame the kit makes slow is slow in every one); every run's p95 is printed, and a run under budget the first time is not run again. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
-| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes; and (0.12.0) an entry grid's instrument column searching the page's own server and posting the ID chosen, on its own and framed by the stand-in host, its matches within the screen, facts one line a row, a next step opening the host's tab from the framed page and staying words on its own, and Prepare posting the act's form with `prepare=1` (its submit without), on its own and framed. To `.fit.log` too |
+| `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes; and (0.12.0) an entry grid's instrument column searching the page's own server and posting the ID chosen, on its own and framed by the stand-in host, its matches within the screen, facts one line a row, a next step opening the host's tab from the framed page and staying words on its own, and Prepare posting the act's form with `prepare=1` (its submit without), on its own and framed; and (0.13.0) the sidebar at 1280, 582 and 375 px, light and dark: nothing sideways, the page fitting, one item `aria-current` by hash, by query and on a Manage page by its attribute (its own tabs kept, one sidebar), on a desktop the tab order and focus rings and collapsing by the keyboard remembered across a reload, below 768 px Menu opening the drawer with focus on the current item, Tab never reaching the page under it, Escape closing it with focus back on Menu. To `.fit.log` too |
 | `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |
 | `make serve` | The gallery at `http://127.0.0.1:8765/.meridian/ui/<version>/gallery.html`, under the dashboard's base path |
 | `make install-hooks` | Point git at `hooks/`, so a push runs `ci-local` |

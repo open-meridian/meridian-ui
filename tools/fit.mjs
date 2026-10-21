@@ -39,6 +39,8 @@ export const GALLERY = [
   "gallery/host.html?page=patterns.html",
   "gallery/host.html?page=accounts.html",
   "gallery/host.html?page=accounts-many.html",
+  "gallery/sidebar.html",
+  "gallery/sidebar-manage.html",
 ];
 
 // What the check measures but does not fail on, each until a ruling: the
@@ -213,6 +215,170 @@ async function rowChecks(browser, base, shots) {
   const said = await page.locator("#book om-pager .pager-said").textContent();
   check(said === `Rows ${after.first}–${after.last} of 40`, `the pager says "${said}"`);
   await page.close();
+  return failed;
+}
+
+/**
+ * Kit 0.13.0, the sidebar (rulings 447 to 451), in a real browser at 1280,
+ * 582 and 375 px wide, light and dark: nothing sideways and the page fitting;
+ * one item aria-current, by hash, by query and by the `current` attribute
+ * (a Manage page keeping its own tab row, one sidebar); on a desktop the tab
+ * order (collapse, then the items in order), the focus ring seen, collapsing
+ * by the keyboard to icons and the choice remembered across a reload; below
+ * 768 px the bar (Menu and the current item), Enter opening the drawer with
+ * focus on the current item and Tab never reaching the page under it, Escape closing it and focus back
+ * on Menu. Returns what failed.
+ */
+export const SIDEBAR_WIDTHS = [1280, 582, 375];
+
+async function sidebarChecks(browser, base, shots) {
+  const failed = [];
+  for (const width of SIDEBAR_WIDTHS) {
+    for (const mode of ["light", "dark"]) {
+      const at = `${width}px ${mode}`;
+      const check = (ok, what) => ok || failed.push(`sidebar at ${at}: ${what}`);
+      const size = { name: `${width}`, width, height: 800 };
+      const context = await browser.newContext({ viewport: { width, height: 800 }, colorScheme: mode });
+      const page = await context.newPage();
+      page.on("pageerror", (e) => failed.push(`sidebar at ${at}: the page threw: ${e.message}`));
+      const shot = async (name) => {
+        if (shots) await page.screenshot({ path: join(shots, `sidebar-${name}-${width}-${mode}.png`) });
+      };
+      const state = () => page.evaluate(() => {
+        const s = document.querySelector("om-sidebar");
+        const root = document.documentElement;
+        const current = [...s.querySelectorAll("a[aria-current='page']")].map((a) => a.textContent);
+        return {
+          sideways: root.scrollWidth > root.clientWidth,
+          current,
+          here: s.querySelector(".om-sidebar-here").textContent,
+          narrow: s.hasAttribute("data-narrow"),
+          navShown: getComputedStyle(s.querySelector(":scope > .om-sidebar-nav") || s).display !== "none",
+          barShown: getComputedStyle(s.querySelector(".om-sidebar-bar")).display !== "none",
+          width: Math.round((s.querySelector(":scope > .om-sidebar-nav") || s).getBoundingClientRect().width),
+          collapsed: s.collapsed,
+          sidebars: document.querySelectorAll("om-sidebar").length,
+        };
+      });
+      const focused = () => page.evaluate(() => {
+        const el = document.activeElement;
+        const st = getComputedStyle(el);
+        return {
+          text: (el.textContent || "").trim(),
+          cls: el.className || el.localName,
+          inDrawer: !!el.closest("dialog.om-sidebar-drawer"),
+          // Past the drawer's last control focus leaves the document (the
+          // browser's own chrome), never reaching the page under it.
+          outside: el !== document.body && !el.closest("dialog.om-sidebar-drawer"),
+          ring: el.matches(":focus-visible") && st.outlineStyle !== "none" && parseFloat(st.outlineWidth) > 0,
+        };
+      });
+      const fits = async (what) => {
+        const problems = fitProblems(await page.evaluate(measureFit), size);
+        check(!problems.length, `${what}, the page does not fit: ${problems.join("; ")}`);
+      };
+
+      await page.goto(`${base}gallery/sidebar.html#holds`);
+      await settled(page);
+      let s = await state();
+      check(!s.sideways, "the page scrolls sideways");
+      check(s.current.length === 1 && s.current[0] === "Holds", `#holds marks ${JSON.stringify(s.current)} current`);
+      await fits("on #holds");
+      await shot("admin");
+
+      if (width >= 768) {
+        check(!s.narrow && s.navShown && !s.barShown, `on a desktop it is not the sidebar: ${JSON.stringify(s)}`);
+        // The tab order: the collapse button, then the items in order.
+        const order = [];
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press("Tab");
+          order.push(await focused());
+        }
+        check(order[0].cls.includes("om-sidebar-collapse"), `the first Tab is ${order[0].cls}, not the collapse button`);
+        check(order.slice(1).map((f) => f.text).join("|") === "Plugins|Versions · Browse · Registries|Model routing", `Tab goes ${order.map((f) => f.text || f.cls).join(" → ")}`);
+        check(order.every((f) => f.ring), "a focused control shows no focus ring");
+        // A click on an item: a plain link, the mark following the hash.
+        await page.locator("om-sidebar a.om-sidebar-link", { hasText: "Permissions" }).click();
+        await settled(page);
+        s = await state();
+        check(page.url().endsWith("sidebar.html#permissions"), `the link went to ${page.url()}`);
+        check(s.current.join() === "Permissions", `after a click ${JSON.stringify(s.current)} is current`);
+        check((await page.locator("#where").textContent()) === "Permissions", "the page's heading did not follow");
+        // Collapse by the keyboard; remembered across a reload.
+        await page.locator(".om-sidebar-collapse").focus();
+        await page.keyboard.press("Enter");
+        s = await state();
+        check(s.collapsed && s.width <= 60, `Enter on the collapse button leaves it ${s.width}px wide, collapsed ${s.collapsed}`);
+        await fits("collapsed");
+        await shot("collapsed");
+        await page.reload();
+        await settled(page);
+        s = await state();
+        check(s.collapsed && s.current.join() === "Permissions", `after a reload: collapsed ${s.collapsed}, current ${JSON.stringify(s.current)}`);
+        const tip = await page.locator("om-sidebar a.om-sidebar-link", { hasText: "Holds" }).getAttribute("title");
+        check(tip === "Holds", `collapsed, an icon's tooltip is ${JSON.stringify(tip)}`);
+        await page.locator(".om-sidebar-collapse").click();
+        check(!(await state()).collapsed, "the collapse button does not expand it again");
+      } else {
+        check(s.narrow && !s.navShown && s.barShown && s.here === "Holds", `below 768px it is not the bar naming Holds: ${JSON.stringify(s)}`);
+        await page.keyboard.press("Tab");
+        let f = await focused();
+        check(f.cls.includes("om-sidebar-open") && f.ring, `the first Tab is ${f.cls} (ring ${f.ring}), not Menu`);
+        await page.keyboard.press("Enter");
+        await settled(page);
+        f = await focused();
+        check(f.inDrawer && f.text === "Holds", `Enter on Menu leaves focus on ${f.text || f.cls} (in the drawer: ${f.inDrawer})`);
+        check((await page.locator(".om-sidebar-open").getAttribute("aria-expanded")) === "true", "Menu does not say the drawer is open");
+        let kept = true;
+        for (let i = 0; i < 25; i++) {
+          await page.keyboard.press("Tab");
+          if ((await focused()).outside) kept = false;
+        }
+        check(kept, "Tab reaches the page under the open drawer");
+        const box = await page.evaluate(() => {
+          const r = document.querySelector("dialog.om-sidebar-drawer").getBoundingClientRect();
+          return { left: r.left, right: r.right, sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+        });
+        check(box.left === 0 && box.right <= width && !box.sideways, `the drawer is not within the screen from the left: ${JSON.stringify(box)}`);
+        await shot("drawer");
+        await page.keyboard.press("Escape");
+        await settled(page);
+        f = await focused();
+        s = await state();
+        check(f.cls.includes("om-sidebar-open"), `after Escape focus is on ${f.text || f.cls}, not Menu`);
+        check(!(await page.evaluate(() => document.querySelector("om-sidebar").drawerOpen)) && !s.navShown, "Escape does not close the drawer");
+        check((await page.locator(".om-sidebar-open").getAttribute("aria-expanded")) === "false", "Menu still says the drawer is open");
+        // An item followed from the drawer: the drawer shuts, the mark follows.
+        await page.keyboard.press("Enter");
+        await page.locator("dialog.om-sidebar-drawer a", { hasText: "Time zone" }).click();
+        await settled(page);
+        s = await state();
+        check(!(await page.evaluate(() => document.querySelector("om-sidebar").drawerOpen)), "following an item leaves the drawer open");
+        check(s.current.join() === "Time zone" && s.here === "Time zone", `after following Time zone: ${JSON.stringify(s)}`);
+      }
+
+      // One address of three by its query: Versions · Browse · Registries.
+      await page.goto(`${base}gallery/sidebar.html?tab=registries`);
+      await settled(page);
+      s = await state();
+      check(s.current.join() === "Versions · Browse · Registries", `?tab=registries marks ${JSON.stringify(s.current)} current`);
+
+      // A plugin's Manage page: its own tab row in the shell, Plugins current, one sidebar.
+      await page.goto(`${base}gallery/sidebar-manage.html#settings`);
+      await settled(page);
+      s = await state();
+      const tabs = await page.evaluate(() => {
+        const nav = document.querySelector(".om-shell-main nav.tabs");
+        return { shown: !!nav && getComputedStyle(nav).display !== "none", on: nav?.querySelector("[aria-current='page']")?.textContent };
+      });
+      check(s.current.join() === "Plugins" && s.sidebars === 1, `the Manage page marks ${JSON.stringify(s.current)} with ${s.sidebars} sidebars`);
+      check(tabs.shown && tabs.on === "Settings", `the Manage page's own tabs: ${JSON.stringify(tabs)}`);
+      check(!s.sideways, "the Manage page scrolls sideways");
+      await fits("the Manage page");
+      await shot("manage");
+      await context.close();
+    }
+  }
   return failed;
 }
 
@@ -708,6 +874,9 @@ async function main() {
     const entry = await entryChecks(browser, base, shots);
     console.log(entry.length ? `the entry grid on a phone: FAILED\n  ${entry.join("\n  ")}` : `the entry grid on a phone: a row one line, its number, two fields and "…"; "…" opens the row over the page with every field and the hidden field's message, the page still fitting; Escape puts it back; 42 rows paged, the page fitting; Add a row turns to the new one`);
     failed.push(...entry);
+    const sidebar = await sidebarChecks(browser, base, shots);
+    console.log(sidebar.length ? `kit 0.13.0, the sidebar: FAILED\n  ${sidebar.join("\n  ")}` : `kit 0.13.0, the sidebar: at ${SIDEBAR_WIDTHS.join(", ")} px, light and dark, nothing sideways and the page fitting; one item aria-current by hash, by query and on a Manage page by its attribute, which keeps its own tabs under one sidebar; on a desktop Tab goes collapse then the items in order, each with its focus ring, Enter collapses it to icons with tooltips, remembered across a reload; below 768 px the bar names the current item, Menu opens the drawer with focus on it and Tab never reaching the page under it, Escape closes it with focus back on Menu, and an item followed shuts it`);
+    failed.push(...sidebar);
   } finally {
     await browser.close();
     server.close();
