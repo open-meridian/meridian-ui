@@ -194,12 +194,14 @@ test("below 768px it is a bar whose Menu opens the sidebar as a drawer, and focu
   assert.equal(menu.getAttribute("aria-expanded"), "true");
   assert.ok(drawer.contains(el.querySelector("nav.om-sidebar-nav")), "the sidebar moves into the drawer");
   assert.equal(document.activeElement.textContent, "Holds", "focus on the current item");
+  assert.equal(el.querySelector("button.om-sidebar-collapse").hidden, true, "no collapse button in the drawer");
 
   el.querySelector("button.om-sidebar-close").click();
   assert.equal(el.drawerOpen, false);
   assert.ok(el.querySelector(":scope > nav.om-sidebar-nav"), "back in its place");
   assert.equal(menu.getAttribute("aria-expanded"), "false");
   assert.equal(document.activeElement, menu, "focus back on Menu");
+  assert.equal(el.querySelector("button.om-sidebar-collapse").hidden, false, "the collapse button back with the sidebar");
 
   // Closed as Escape closes it (the dialog's own close): put back the same way.
   menu.click();

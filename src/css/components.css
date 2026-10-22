@@ -1040,7 +1040,7 @@ om-sidebar .om-sidebar-drawer-head {
 }
 om-sidebar .om-sidebar-drawer-title { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 om-sidebar .om-sidebar-drawer-body { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-om-sidebar .om-sidebar-drawer-body button.om-sidebar-collapse { display: none; }
+om-sidebar .om-sidebar-drawer button.om-sidebar-collapse { display: none !important; }
 om-sidebar .om-sidebar-drawer button.om-sidebar-close, om-sidebar .om-sidebar-drawer a.om-sidebar-link { min-height: 2.75rem; }
 om-sidebar .om-sidebar-drawer button.om-sidebar-close { min-width: 2.75rem; justify-content: center; }
 

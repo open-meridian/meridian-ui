@@ -743,7 +743,8 @@ changes only the remembering. With nothing remembered the page's own
 **A phone** (below 48rem, 768px at the default size). The sidebar is a bar
 of one line: Menu, and the current item's words. Menu opens the sidebar as a
 drawer from the left: a modal dialog, so the page under it is inert, focus
-on the current item. Escape, a click outside it, its close button or a link
+on the current item, and without the collapse button, which means nothing
+there (hidden, and so out of the accessibility tree). Escape, a click outside it, its close button or a link
 followed closes it, and focus returns to Menu. Widened past 48rem with the
 drawer open, it closes.
 

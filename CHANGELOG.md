@@ -19,8 +19,9 @@ The admin sidebar, as a kit component (meridian-design rulings 447 to 451).
   browser (`localStorage`, `om-sidebar:<remember>`), storage refused changing
   only the remembering; the page's `collapsed` is the default.
 - **A drawer below 48rem (768px)**: a one-line bar (Menu and the current
-  item); Menu opens the sidebar as a modal dialog from the left, focus on the
-  current item; Escape, a click outside, its close button or a link followed
+  item); Menu opens the sidebar as a modal dialog from the left, without the
+  desktop's collapse button (hidden, and from the accessibility tree), focus
+  on the current item; Escape, a click outside, its close button or a link followed
   closes it, focus back on Menu.
 - **`.om-shell` and `.om-shell-main`**: the sidebar beside the page, which
   keeps its own head and tab row (a plugin's Manage page inside the shell,

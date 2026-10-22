@@ -190,6 +190,9 @@ export class OmSidebar extends HTMLElement {
   openDrawer() {
     if (!this.#built || !this.#narrow() || this.#drawer.open) return;
     this.#drawer.querySelector(".om-sidebar-drawer-body").append(this.#nav);
+    // Collapsing means nothing in the drawer: gone, and from a screen
+    // reader too, whatever a host's own button styles say.
+    this.#collapse.hidden = true;
     if (typeof this.#drawer.showModal === "function") this.#drawer.showModal();
     else this.#drawer.setAttribute("open", "");
     this.#open.setAttribute("aria-expanded", "true");
@@ -376,6 +379,7 @@ export class OmSidebar extends HTMLElement {
   /** The drawer shut: the sidebar back in its place, Menu told, and focused. */
   #settle(focus) {
     if (this.#nav.parentNode !== this) this.insertBefore(this.#nav, this.#drawer);
+    this.#collapse.hidden = false;
     this.#open.setAttribute("aria-expanded", "false");
     if (focus && this.#narrow()) this.#open.focus();
   }

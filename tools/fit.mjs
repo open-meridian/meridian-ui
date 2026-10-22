@@ -329,6 +329,14 @@ async function sidebarChecks(browser, base, shots) {
         f = await focused();
         check(f.inDrawer && f.text === "Holds", `Enter on Menu leaves focus on ${f.text || f.cls} (in the drawer: ${f.inDrawer})`);
         check((await page.locator(".om-sidebar-open").getAttribute("aria-expanded")) === "true", "Menu does not say the drawer is open");
+        // No collapse button in the drawer: not drawn, not in the accessibility tree.
+        const collapse = await page.evaluate(() => {
+          const b = document.querySelector("dialog.om-sidebar-drawer button.om-sidebar-collapse");
+          return b ? { drawn: b.getClientRects().length > 0 && getComputedStyle(b).display !== "none", hidden: b.hidden } : null;
+        });
+        check(!collapse || (!collapse.drawn && collapse.hidden), `the drawer shows the collapse button: ${JSON.stringify(collapse)}`);
+        const named = await page.getByRole("button", { name: /Collapse the menu|Expand the menu/ }).count();
+        check(named === 0, `the drawer's accessibility tree has ${named} collapse button(s)`);
         let kept = true;
         for (let i = 0; i < 25; i++) {
           await page.keyboard.press("Tab");
@@ -875,7 +883,7 @@ async function main() {
     console.log(entry.length ? `the entry grid on a phone: FAILED\n  ${entry.join("\n  ")}` : `the entry grid on a phone: a row one line, its number, two fields and "…"; "…" opens the row over the page with every field and the hidden field's message, the page still fitting; Escape puts it back; 42 rows paged, the page fitting; Add a row turns to the new one`);
     failed.push(...entry);
     const sidebar = await sidebarChecks(browser, base, shots);
-    console.log(sidebar.length ? `kit 0.13.0, the sidebar: FAILED\n  ${sidebar.join("\n  ")}` : `kit 0.13.0, the sidebar: at ${SIDEBAR_WIDTHS.join(", ")} px, light and dark, nothing sideways and the page fitting; one item aria-current by hash, by query and on a Manage page by its attribute, which keeps its own tabs under one sidebar; on a desktop Tab goes collapse then the items in order, each with its focus ring, Enter collapses it to icons with tooltips, remembered across a reload; below 768 px the bar names the current item, Menu opens the drawer with focus on it and Tab never reaching the page under it, Escape closes it with focus back on Menu, and an item followed shuts it`);
+    console.log(sidebar.length ? `kit 0.13.0, the sidebar: FAILED\n  ${sidebar.join("\n  ")}` : `kit 0.13.0, the sidebar: at ${SIDEBAR_WIDTHS.join(", ")} px, light and dark, nothing sideways and the page fitting; one item aria-current by hash, by query and on a Manage page by its attribute, which keeps its own tabs under one sidebar; on a desktop Tab goes collapse then the items in order, each with its focus ring, Enter collapses it to icons with tooltips, remembered across a reload; below 768 px the bar names the current item, Menu opens the drawer, with no collapse button, with focus on it and Tab never reaching the page under it, Escape closes it with focus back on Menu, and an item followed shuts it`);
     failed.push(...sidebar);
   } finally {
     await browser.close();
