@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit sidebar: a Manage page</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<script type="module" src="../components/om-sidebar.js"></script>
+<script type="module" src="tabs.js"></script>
+<style>
+  /* The gallery's own: a header standing in for the dashboard's, which the
+   * sidebar sits under (--om-sidebar-top), and the shell under it filling
+   * the screen. Colours are still only the scheme's. */
+  :root { --om-sidebar-top: 3rem; }
+  body { display: flex; flex-direction: column; height: var(--om-page-height); }
+  .stand-in-bar { flex: none; display: flex; align-items: center; gap: var(--space-3); height: 3rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--card); white-space: nowrap; overflow: hidden; }
+  .stand-in-bar strong { color: var(--ink); }
+  .om-shell { flex: 1 1 0; min-height: 0; }
+</style>
+</head>
+<body>
+<header class="stand-in-bar"><strong>Open Meridian</strong><span class="faint">A plugin's Manage page, inside the shell</span></header>
+<!-- A plugin's Manage page (ruling 450): its own tab row inside the shell,
+     Plugins current (the `current` attribute names it), and no second
+     sidebar. -->
+<div class="om-shell">
+  <om-sidebar label="Settings" remember="gallery" current="plugins">
+    <script type="application/json">
+    { "groups": [
+      { "label": "Plugins", "items": [
+        {"id": "plugins", "label": "Plugins", "href": "sidebar.html#plugins", "icon": "grid"},
+        {"id": "versions", "label": "Versions · Browse · Registries", "href": "sidebar.html?tab=installed", "icon": "package", "also": ["sidebar.html?tab=browse", "sidebar.html?tab=registries"]},
+        {"id": "model-routing", "label": "Model routing", "href": "sidebar.html#model-routing", "icon": "route"} ] },
+      { "label": "People and access", "items": [
+        {"id": "permissions", "label": "Permissions", "href": "sidebar.html#permissions", "icon": "shield"},
+        {"id": "user-groups", "label": "User groups", "href": "sidebar.html#user-groups", "icon": "users"},
+        {"id": "access-groups", "label": "Access groups", "href": "sidebar.html#access-groups", "icon": "key"},
+        {"id": "service-accounts", "label": "Service accounts", "href": "sidebar.html#service-accounts", "icon": "server"},
+        {"id": "agents", "label": "Agents", "href": "sidebar.html#agents", "icon": "bot"},
+        {"id": "connected-clients", "label": "Connected clients", "href": "sidebar.html#connected-clients", "icon": "link"} ] },
+      { "label": "Accounts", "items": [
+        {"id": "accounts", "label": "Accounts", "href": "sidebar.html#accounts", "icon": "wallet"},
+        {"id": "account-groups", "label": "Account groups", "href": "sidebar.html#account-groups", "icon": "layers"},
+        {"id": "holds", "label": "Holds", "href": "sidebar.html#holds", "icon": "lock"},
+        {"id": "trading-instructions", "label": "Trading instructions", "href": "sidebar.html#trading-instructions", "icon": "list"} ] },
+      { "label": "Data", "items": [
+        {"id": "data-sources", "label": "Data sources", "href": "sidebar.html#data-sources", "icon": "database"},
+        {"id": "instruments", "label": "Instruments", "href": "sidebar.html#instruments", "icon": "chart"} ] },
+      { "label": "Deployment", "items": [
+        {"id": "time-zone", "label": "Time zone", "href": "sidebar.html#time-zone", "icon": "clock"} ] }
+    ] }
+    </script>
+    <nav aria-label="Settings">
+      <a href="sidebar.html#plugins">Plugins</a> <a href="sidebar.html?tab=installed">Versions · Browse · Registries</a>
+      <a href="sidebar.html#permissions">Permissions</a> <a href="sidebar.html#accounts">Accounts</a>
+      <a href="sidebar.html#data-sources">Data sources</a> <a href="sidebar.html#time-zone">Time zone</a>
+    </nav>
+  </om-sidebar>
+  <main class="om-shell-main">
+    <header class="page-head"><div><h1>Sample plugin</h1><p>Its Manage page, with its own tabs.</p></div></header>
+    <nav class="tabs" aria-label="Sections" data-sections>
+      <a class="tab on" href="#summary" aria-current="page">Summary</a>
+      <a class="tab" href="#settings">Settings</a>
+      <a class="tab" href="#access">Access</a>
+    </nav>
+    <section id="summary" class="panel padded"><p>The plugin's summary: its state, its version and what it last did.</p></section>
+    <section id="settings" class="panel padded"><p>Its settings, as the plugin declares them.</p></section>
+    <section id="access" class="panel padded"><p>Who may use it, and at which level.</p></section>
+  </main>
+</div>
+</body>
+</html>

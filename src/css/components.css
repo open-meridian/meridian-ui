@@ -961,3 +961,97 @@ om-panels .om-panels-drop {
   position: absolute; z-index: 4; pointer-events: none;
   background: var(--accent-wash); border: 2px solid var(--accent); border-radius: var(--radius-lg);
 }
+
+/* ── om-sidebar and the shell ────────────────────────────────────────────── */
+
+/* The shell (0.13.0): a sidebar beside the page's own content, which keeps
+ * everything it had, its own tab row too (ruling 450). A flex row on a
+ * desktop; below 48rem a column, the sidebar a one-line bar above. */
+.om-shell { display: flex; align-items: stretch; min-width: 0; }
+.om-shell > :not(om-sidebar) { flex: 1 1 0; min-width: 0; }
+.om-shell > .om-shell-main { padding: var(--space-5) var(--space-8); }
+.om-shell > .om-shell-main > * + * { margin-top: var(--space-4); }
+
+om-sidebar { display: block; flex: none; min-width: 0; }
+/* The server's own links, for a browser without the kit, one under another. */
+om-sidebar:not(:defined) > nav { padding: var(--space-3); }
+om-sidebar:not(:defined) > nav a { display: block; padding: .2rem 0; }
+
+om-sidebar .om-icon { display: block; width: 1.15rem; height: 1.15rem; flex: none; }
+
+/* The sidebar: as tall as the screen leaves under the host's own header
+ * (--om-sidebar-top, which a page sets to its header's height), and
+ * scrolling within itself only when it is taller. */
+om-sidebar .om-sidebar-nav { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); min-width: 0; }
+om-sidebar > .om-sidebar-nav {
+  position: sticky; top: var(--om-sidebar-top, 0px);
+  width: 16.5rem; max-height: calc(var(--om-page-height) - var(--om-sidebar-top, 0px));
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin;
+}
+om-sidebar { align-self: stretch; background: var(--card); border-right: 1px solid var(--line); }
+
+om-sidebar button.om-sidebar-collapse, om-sidebar button.om-sidebar-close {
+  align-self: flex-end; flex: none; padding: .4rem; border: 0; background: none; color: var(--ink-soft);
+}
+om-sidebar button.om-sidebar-collapse:hover, om-sidebar button.om-sidebar-close:hover { background: var(--hover); color: var(--ink); }
+
+om-sidebar .om-sidebar-groups { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+om-sidebar .om-sidebar-group-label {
+  display: block; padding: .15rem .6rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+om-sidebar .om-sidebar-group ul { list-style: none; margin: 0; padding: 0; }
+om-sidebar a.om-sidebar-link {
+  display: flex; align-items: center; gap: .6rem; min-height: 2rem; padding: .3rem .6rem;
+  border-radius: var(--radius-sm); color: var(--ink-soft); white-space: nowrap; text-decoration: none;
+}
+om-sidebar a.om-sidebar-link:hover { background: var(--hover); color: var(--ink); text-decoration: none; }
+om-sidebar a.om-sidebar-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+om-sidebar a.om-sidebar-link[aria-current="page"] { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+om-sidebar .om-sidebar-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; flex: none; }
+om-sidebar .om-sidebar-letter { font-size: .8rem; font-weight: 650; line-height: 1; }
+om-sidebar .om-sidebar-letter::before { content: attr(data-letter); }
+om-sidebar .om-sidebar-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Collapsed to its icons (a desktop's, the person's choice): the words stay
+ * every link's name and a pointer's tooltip, and a group's label its name;
+ * a line between groups stands for the label. */
+om-sidebar[collapsed]:not([data-narrow]) > .om-sidebar-nav { width: 3.25rem; padding-inline: .3rem; }
+om-sidebar[collapsed]:not([data-narrow]) button.om-sidebar-collapse { align-self: center; }
+om-sidebar[collapsed]:not([data-narrow]) :is(.om-sidebar-label, .om-sidebar-group-label) {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+om-sidebar[collapsed]:not([data-narrow]) a.om-sidebar-link { justify-content: center; padding-inline: 0; min-height: 2.25rem; }
+om-sidebar[collapsed]:not([data-narrow]) .om-sidebar-group + .om-sidebar-group { border-top: 1px solid var(--line-soft); padding-top: var(--space-2); }
+
+/* The bar a phone sees, in place of the sidebar: Menu and where the page is. */
+om-sidebar > .om-sidebar-bar { display: none; }
+
+/* The drawer: the sidebar over the page from the left, full height. */
+om-sidebar dialog.om-sidebar-drawer {
+  margin: 0 auto 0 0; inset: 0 auto 0 0; width: min(18rem, calc(100vw - 3rem)); max-width: none;
+  height: 100%; max-height: none; border: 0; border-right: 1px solid var(--line); border-radius: 0;
+  padding: 0; overflow: hidden;
+}
+om-sidebar dialog.om-sidebar-drawer[open] { display: flex; flex-direction: column; }
+om-sidebar .om-sidebar-drawer-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-bottom: 1px solid var(--line-soft);
+}
+om-sidebar .om-sidebar-drawer-title { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+om-sidebar .om-sidebar-drawer-body { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+om-sidebar .om-sidebar-drawer button.om-sidebar-collapse { display: none !important; }
+om-sidebar .om-sidebar-drawer button.om-sidebar-close, om-sidebar .om-sidebar-drawer a.om-sidebar-link { min-height: 2.75rem; }
+om-sidebar .om-sidebar-drawer button.om-sidebar-close { min-width: 2.75rem; justify-content: center; }
+
+@media (max-width: 47.99rem) {
+  .om-shell { flex-direction: column; }
+  .om-shell > .om-shell-main { padding: var(--space-3) var(--space-4); }
+  .om-shell > .om-shell-main > * + * { margin-top: var(--space-3); }
+  om-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+  om-sidebar > .om-sidebar-nav { display: none; }
+  om-sidebar > .om-sidebar-bar { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-1) var(--space-3); }
+  om-sidebar button.om-sidebar-open { flex: none; min-height: 2.75rem; gap: .45rem; border: 0; background: none; padding-inline: .5rem; }
+  om-sidebar button.om-sidebar-open:hover { background: var(--hover); }
+  om-sidebar .om-sidebar-here { min-width: 0; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

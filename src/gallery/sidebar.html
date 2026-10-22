@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit sidebar</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<script type="module" src="../components/om-sidebar.js"></script>
+<script type="module" src="sidebar.js"></script>
+<style>
+  /* The gallery's own: a header standing in for the dashboard's, which the
+   * sidebar sits under (--om-sidebar-top), and the shell under it filling
+   * the screen. Colours are still only the scheme's. */
+  :root { --om-sidebar-top: 3rem; }
+  body { display: flex; flex-direction: column; height: var(--om-page-height); }
+  .stand-in-bar { flex: none; display: flex; align-items: center; gap: var(--space-3); height: 3rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--card); white-space: nowrap; overflow: hidden; }
+  .stand-in-bar strong { color: var(--ink); }
+  .om-shell { flex: 1 1 0; min-height: 0; }
+</style>
+</head>
+<body>
+<header class="stand-in-bar"><strong>Open Meridian</strong><span class="faint">A stand-in for the dashboard's header</span></header>
+<!-- The admin sidebar (rulings 447 to 451): the groups and names of 448 as
+     data, each item a plain link. Here every item is a section of this page
+     by its hash, but Versions · Browse · Registries, which is three
+     addresses by their query (also), as the dashboard's Plugins page is. -->
+<div class="om-shell">
+  <om-sidebar label="Settings" remember="gallery">
+    <script type="application/json">
+    { "groups": [
+      { "label": "Plugins", "items": [
+        {"id": "plugins", "label": "Plugins", "href": "sidebar.html#plugins", "icon": "grid"},
+        {"id": "versions", "label": "Versions · Browse · Registries", "href": "sidebar.html?tab=installed", "icon": "package", "also": ["sidebar.html?tab=browse", "sidebar.html?tab=registries"]},
+        {"id": "model-routing", "label": "Model routing", "href": "sidebar.html#model-routing", "icon": "route"} ] },
+      { "label": "People and access", "items": [
+        {"id": "permissions", "label": "Permissions", "href": "sidebar.html#permissions", "icon": "shield"},
+        {"id": "user-groups", "label": "User groups", "href": "sidebar.html#user-groups", "icon": "users"},
+        {"id": "access-groups", "label": "Access groups", "href": "sidebar.html#access-groups", "icon": "key"},
+        {"id": "service-accounts", "label": "Service accounts", "href": "sidebar.html#service-accounts", "icon": "server"},
+        {"id": "agents", "label": "Agents", "href": "sidebar.html#agents", "icon": "bot"},
+        {"id": "connected-clients", "label": "Connected clients", "href": "sidebar.html#connected-clients", "icon": "link"} ] },
+      { "label": "Accounts", "items": [
+        {"id": "accounts", "label": "Accounts", "href": "sidebar.html#accounts", "icon": "wallet"},
+        {"id": "account-groups", "label": "Account groups", "href": "sidebar.html#account-groups", "icon": "layers"},
+        {"id": "holds", "label": "Holds", "href": "sidebar.html#holds", "icon": "lock"},
+        {"id": "trading-instructions", "label": "Trading instructions", "href": "sidebar.html#trading-instructions", "icon": "list"} ] },
+      { "label": "Data", "items": [
+        {"id": "data-sources", "label": "Data sources", "href": "sidebar.html#data-sources", "icon": "database"},
+        {"id": "instruments", "label": "Instruments", "href": "sidebar.html#instruments", "icon": "chart"} ] },
+      { "label": "Deployment", "items": [
+        {"id": "time-zone", "label": "Time zone", "href": "sidebar.html#time-zone", "icon": "clock"} ] }
+    ] }
+    </script>
+    <nav aria-label="Settings">
+      <a href="sidebar.html#plugins">Plugins</a> <a href="sidebar.html?tab=installed">Versions · Browse · Registries</a>
+      <a href="sidebar.html#permissions">Permissions</a> <a href="sidebar.html#accounts">Accounts</a>
+      <a href="sidebar.html#data-sources">Data sources</a> <a href="sidebar.html#time-zone">Time zone</a>
+    </nav>
+  </om-sidebar>
+  <main class="om-shell-main">
+    <div class="page-head"><div><h1 id="where">Settings</h1><p>The page the sidebar marks current, by its address.</p></div></div>
+    <section class="panel padded">
+      <p>Each item is a plain link, so every address is what it was. Collapse the sidebar to its icons with
+        the button at its top; the choice is remembered in this browser. Below 768px it is a bar with
+        <strong>Menu</strong>, which opens it as a drawer; Escape closes it.</p>
+      <p class="muted">A plugin's Manage page keeps its own tabs inside the shell:
+        <a href="sidebar-manage.html">see it</a>.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
