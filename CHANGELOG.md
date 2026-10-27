@@ -4,6 +4,26 @@ What each release of the kit adds. A 0.x release only adds: nothing is
 removed or renamed. Releases before 0.13.0 are described in the README's
 opening and in each release's commit ("Kit 0.12.0: …").
 
+## 0.15.0
+
+An entry grid's instrument column brings in what the page does not hold yet,
+as the picker does, and neither shows a record's ID (meridian-design ruling
+786, for the one search everywhere a person picks an instrument, 727).
+
+- **A bring-in hook on `om-entry-grid`**: the `bring-in` attribute or the
+  `bringIn` property, as `om-instrument-picker`'s (0.14.0). With one, an
+  instrument cell's search asks for candidates and lists them with the held
+  results, the record's ID shown for neither; choosing one brings it in, the
+  cell holding the submit ("The instrument is still being brought in") until
+  the hook resolves to the instrument the page holds, whose ID then posts. A
+  refusal is the cell's problem, saying why, and fires `om-error`; typing in
+  the cell abandons it. `bringing` is true while any cell is bringing one in.
+- **An instrument is named by its name and ticker** (`instrumentLabel`):
+  the ticker -- else the first identifier -- in brackets, with the exchange's
+  MIC where known (`Apple Inc. (AAPL · XNAS)`), never the record's ID; a
+  record with no name is named by its ticker. An entry grid's instrument cell
+  no longer puts the ID in its title beside the name.
+
 ## 0.14.0
 
 The instrument picker brings in what the page does not hold yet

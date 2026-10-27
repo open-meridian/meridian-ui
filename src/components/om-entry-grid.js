@@ -73,12 +73,22 @@
 // every record. A cell left holding words that were not chosen holds the
 // submit, saying so. An ID the grid is given (its rows, a paste, a CSV) posts
 // as it is, and is shown by its name once the same search finds it by ID.
+//
+// Bringing an instrument in (0.15.0), as om-instrument-picker does (0.14.0):
+// with a bring-in hook -- the `bringIn` property, a function, or the
+// `bring-in` attribute, a URL on the page's origin that lib/instruments.js's
+// bringInstrumentIn POSTs to -- an instrument cell's search asks for
+// candidates too, listed with the held ones, the record's ID shown for
+// neither. Choosing one calls the hook; until it resolves to the instrument
+// the page holds, the cell holds the submit, saying it is being brought in;
+// then the cell holds that instrument's ID, and shows its name. A refusal is
+// the cell's problem, saying why, until another is chosen or the cell cleared.
 
 import { contentHeight, pageBudget, rowsThatFit } from "../lib/budget.js";
 import { declaredJson, whenParsed } from "../lib/declared.js";
 import { askSearch, fold, matchedSaid, matches, searchBox, wordsOf } from "../lib/search.js";
 import { addDecimals, compareDecimal, parseDecimal } from "../lib/decimal.js";
-import { findInstruments, instrumentLabel, instrumentOption, instrumentStatus } from "../lib/instruments.js";
+import { bringInstrumentIn, findInstruments, instrumentLabel, instrumentOption, instrumentStatus, isCandidate } from "../lib/instruments.js";
 import {
   checkEntryValue,
   columnForField,
@@ -233,6 +243,7 @@ export class OmEntryGrid extends HTMLElement {
   #looked = new Set();
   #lookUps = [];
   #lookingUp = 0;
+  #bringIn = null;
   #onScroll = () => this.#placeMatches();
 
   constructor() {
@@ -331,6 +342,23 @@ export class OmEntryGrid extends HTMLElement {
     this.#rowsSet = true;
     this.#seed = (value || []).map((r) => ({ ...r }));
     if (this.#built) this.#load(this.#seed, []);
+  }
+
+  /** The bring-in hook for its instrument columns (0.15.0): `(candidate, {
+   * signal }) => Promise<instrument>`, the instrument the page holds once it
+   * is brought in; or null. Without one, a `bring-in` attribute's URL is
+   * POSTed to (lib/instruments.js). */
+  get bringIn() {
+    return this.#bringIn;
+  }
+
+  set bringIn(hook) {
+    this.#bringIn = typeof hook === "function" ? hook : null;
+  }
+
+  /** Whether any instrument cell is still bringing its choice in. */
+  get bringing() {
+    return this.#rows.some((row) => [...row.cells.values()].some((cell) => cell.bringing));
   }
 
   /** How many rows the grid holds, blank ones included, on every page. */
@@ -681,6 +709,8 @@ export class OmEntryGrid extends HTMLElement {
         cell.post = el("input");
         cell.post.type = "hidden";
         cell.pending = null;
+        cell.bringing = null;
+        cell.refused = "";
         cell.err = el("span", "om-entry-error");
         cell.err.id = `${this.#uid}-${row.id}-${col.key}-error`;
         cell.err.hidden = true;
@@ -758,6 +788,7 @@ export class OmEntryGrid extends HTMLElement {
     }
     if (col.type === "instrument") {
       // The ID posts; its name shows, once known.
+      this.#stopBringing(cell);
       cell.pending = null;
       cell.post.value = value;
       this.#showInstrument(cell);
@@ -848,6 +879,9 @@ export class OmEntryGrid extends HTMLElement {
   // A cell's own problem: its type and bounds, and required in a row that is
   // not blank. A blank row has none.
   #own(row, cell) {
+    // An instrument being brought in, or one that could not be (0.15.0).
+    if (cell.bringing) return { type: "The instrument is still being brought in", required: null };
+    if (cell.refused) return { type: cell.refused, required: null };
     // Words typed in an instrument cell and not chosen, in any row.
     if (cell.pending) return { type: "Choose one of the instruments found, or clear the cell", required: null };
     if (row.blank || cell.col.type === "readonly") return { type: null, required: null };
@@ -1661,14 +1695,30 @@ export class OmEntryGrid extends HTMLElement {
     return (this.getAttribute("src") || "").trim();
   }
 
-  // An instrument cell shows its ID's name once it is known, else the ID; its
-  // title says both.
+  /** The bring-in hook: the property's, or the `bring-in` attribute's URL; or null. */
+  #hook() {
+    if (this.#bringIn) return this.#bringIn;
+    const url = (this.getAttribute("bring-in") || "").trim();
+    return url ? (candidate, options) => bringInstrumentIn(url, candidate, options) : null;
+  }
+
+  #stopBringing(cell) {
+    cell.refused = "";
+    if (!cell.bringing) return;
+    cell.bringing.abort();
+    cell.bringing = null;
+    cell.control.removeAttribute("aria-busy");
+  }
+
+  // An instrument cell shows its ID's name once it is known, else the ID;
+  // its title says the same (0.15.0: the record's ID is never shown beside
+  // its name).
   #showInstrument(cell) {
     const id = cell.post.value;
     const known = id ? this.#known.get(id) : null;
     const shown = known ? instrumentLabel(known) : id;
     if (cell.control.value !== shown) cell.control.value = shown;
-    const title = known ? `${shown}, ${id}` : id;
+    const title = shown;
     if (title) cell.control.title = title;
     else cell.control.removeAttribute("title");
   }
@@ -1676,6 +1726,7 @@ export class OmEntryGrid extends HTMLElement {
   // Typed into an instrument cell: emptied, it holds no instrument; otherwise
   // the words wait to be chosen from what the search finds once typing pauses.
   #typedInstrument(row, cell) {
+    this.#stopBringing(cell);
     const text = cell.control.value;
     if (text.trim() === "") {
       if (this.#match && this.#match.cell === cell) this.#closeMatches();
@@ -1712,7 +1763,7 @@ export class OmEntryGrid extends HTMLElement {
     this.#showMatches([instrumentStatus("Searching…")]);
     let found;
     try {
-      found = await findInstruments(src, q, { limit: MATCHES, signal: abort.signal });
+      found = await findInstruments(src, q, { limit: MATCHES, signal: abort.signal, candidates: this.#hook() !== null });
     } catch (e) {
       if ((e && e.name === "AbortError") || this.#match !== m) return;
       m.results = [];
@@ -1769,8 +1820,9 @@ export class OmEntryGrid extends HTMLElement {
       this.#showMatches([instrumentStatus("No instrument matches.")]);
       return;
     }
+    const ids = this.#hook() === null;
     const items = m.results.map((inst, i) => {
-      const li = instrumentOption(inst, `${this.#uid}-match-${i}`, i === m.active);
+      const li = instrumentOption(inst, `${this.#uid}-match-${i}`, i === m.active, { ids });
       li.dataset.index = String(i);
       return li;
     });
@@ -1854,19 +1906,71 @@ export class OmEntryGrid extends HTMLElement {
     return false;
   }
 
-  // A match chosen: the cell holds its ID, and shows its name.
+  // A match chosen: the cell holds its ID, and shows its name; a candidate
+  // is brought in first (0.15.0).
   #chooseMatch(i) {
     const m = this.#match;
     const inst = m && m.results[i];
     if (!inst) return;
     const { cell } = m;
-    this.#known.set(inst.instrument_id, inst);
     this.#closeMatches();
+    const hook = isCandidate(inst) ? this.#hook() : null;
+    if (hook) {
+      this.#bringInto(cell, inst, hook);
+      return;
+    }
+    this.#stopBringing(cell);
+    this.#hold(cell, inst);
+  }
+
+  // The cell holds a held instrument: its ID posts, its name shows.
+  #hold(cell, inst) {
+    this.#known.set(inst.instrument_id, inst);
     cell.pending = null;
     cell.post.value = inst.instrument_id;
     this.#showInstrument(cell);
     this.#edited(cell.row, cell, inst.instrument_id, true);
     this.#say(`${cell.col.label}, row ${cell.row.n + 1}: ${instrumentLabel(inst)}.`);
+  }
+
+  // A candidate chosen in a cell: brought in by the hook, the cell holding
+  // the submit until it resolves to the instrument the page holds; typing in
+  // the cell, or the cell set, abandons it.
+  async #bringInto(cell, candidate, hook) {
+    this.#stopBringing(cell);
+    const abort = new AbortController();
+    const label = instrumentLabel(candidate);
+    const where = `${cell.col.label}, row ${cell.row.n + 1}`;
+    cell.bringing = abort;
+    cell.pending = label;
+    cell.control.value = `${label}: bringing in…`;
+    cell.control.setAttribute("aria-busy", "true");
+    this.#paintCell(cell.row, cell);
+    this.#say(`${where}: bringing in ${label}…`);
+    let held;
+    try {
+      held = await hook(candidate, { signal: abort.signal });
+      if (!held || typeof held.instrument_id !== "string" || !held.instrument_id) {
+        throw new Error("bringing it in answered no instrument");
+      }
+    } catch (e) {
+      if (cell.bringing !== abort) return;
+      cell.bringing = null;
+      cell.control.removeAttribute("aria-busy");
+      if (e && e.name === "AbortError") return;
+      const why = `Could not bring in ${label}: ${e && e.message ? e.message : e}`;
+      cell.refused = why;
+      cell.control.value = label;
+      cell.touched = true;
+      this.#paintCell(cell.row, cell, true);
+      this.#say(`${where}: ${why}`);
+      this.#error(`om-entry-grid: ${why}`);
+      return;
+    }
+    if (cell.bringing !== abort) return;
+    cell.bringing = null;
+    cell.control.removeAttribute("aria-busy");
+    this.#hold(cell, held);
   }
 
   // The IDs on the page shown whose names are not known yet, each looked up

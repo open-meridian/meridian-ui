@@ -80,11 +80,19 @@ export function describeInstrument(inst) {
   return { ids, meta };
 }
 
-/** What a person reads for a chosen instrument: its name, and its first
- * identifier's value in brackets (`Apple Inc. common stock (AAPL)`). */
+/** What a person reads for a chosen instrument (0.15.0): its name, and in
+ * brackets its ticker -- else its first identifier's value -- with its
+ * exchange's MIC where known (`Apple Inc. (AAPL · XNAS)`,
+ * `SPDR S&P 500 ETF Trust (SPY)`). Never the record's ID: a record with no
+ * name is named by its ticker. */
 export function instrumentLabel(inst) {
-  const first = (inst.identifiers || [])[0];
-  return `${inst.description || inst.instrument_id}${first ? ` (${first.value})` : ""}`;
+  const ids = (inst && inst.identifiers) || [];
+  const ticker = ids.find((i) => i && i.scheme === "ticker" && i.value);
+  const code = (ticker || ids.find((i) => i && i.value) || {}).value || "";
+  const mic = /^[A-Z0-9]{4}$/.test(inst.exchange_mic || "") ? inst.exchange_mic : ticker && /^[A-Z0-9]{4}$/.test(ticker.source || "") ? ticker.source : "";
+  const name = (inst.description || "").trim() || code || "An instrument";
+  const bracket = [name === code ? "" : code, mic].filter(Boolean).join(" · ");
+  return bracket ? `${name} (${bracket})` : name;
 }
 
 /** One option of a list of matches, as both components draw it: the name,
