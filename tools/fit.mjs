@@ -645,7 +645,7 @@ async function v20Checks(browser, base, shots) {
       return { defined: !!customElements.get("om-entry-grid"), upgraded: !!g.querySelector("table.om-entry"), role: box?.getAttribute("role"), first: box?.value, rows: g.querySelectorAll("tbody tr[data-row]").length };
     });
     check(up.defined && up.upgraded && up.role === "combobox" && up.rows === 2, `the watchlist's grid did not upgrade with its instrument column: ${JSON.stringify(up)}`);
-    check(up.first === "Microsoft Corporation common stock (MSFT)", `an ID given is not shown by its name: ${JSON.stringify(up)}`);
+    check(up.first === "Microsoft Corporation common stock (MSFT · XNAS)", `an ID given is not shown by its name: ${JSON.stringify(up)}`);
     await listen(page);
     await page.locator("#watchlist .om-entry-add").click();
     await page.keyboard.type("appl");
@@ -661,7 +661,7 @@ async function v20Checks(browser, base, shots) {
     await shot("instrument-search");
     await page.keyboard.press("Enter");
     const one = await chosen(page, 2);
-    check(one.value === "INS-3f1c9a02" && one.name === "watchlist[2].instrument" && one.shown === "Apple Inc. common stock (AAPL)", `choosing does not set the cell to the ID: ${JSON.stringify(one)}`);
+    check(one.value === "INS-3f1c9a02" && one.name === "watchlist[2].instrument" && one.shown === "Apple Inc. common stock (AAPL · XNAS)", `choosing does not set the cell to the ID: ${JSON.stringify(one)}`);
     await page.locator("#watchlist button.primary", { hasText: "Save" }).click();
     const sent = await page.locator("#watched").textContent();
     check(sent.includes("watchlist[0].instrument=INS-8d20b7e4") && sent.includes("watchlist[2].instrument=INS-3f1c9a02") && !sent.includes("Apple Inc"), `the form would not post the IDs: "${sent}"`);
