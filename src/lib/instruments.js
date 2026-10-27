@@ -7,14 +7,20 @@
 //   200 { "results": [ { "instrument_id": "INS-…", "description": "…", "identifiers": [ … ], … } ] }
 //
 // It never lists every record: it asks for the few that match what was typed.
+//
+// 0.14.0: a page that can bring in an instrument it does not hold yet marks
+// such a result `"candidate": true`, with an empty `instrument_id`; only a
+// picker with a bring-in hook asks for them (`candidates`), and
+// bringInstrumentIn is the hook's default, a POST to the page's own server.
 
 import { sameOrigin } from "./url.js";
 
 /** The matches for `q` at `src` (on the page's origin, or this throws), at
- * most `limit`, each with an `instrument_id`. Throws an Error saying what
- * went wrong: another origin, a status other than 200, an answer without a
- * results list. An aborted `signal` throws its AbortError. */
-export async function findInstruments(src, q, { limit = 10, asOf = "", signal } = {}) {
+ * most `limit`, each with an `instrument_id` -- or, with `candidates`, marked
+ * `candidate: true` instead (0.14.0). Throws an Error saying what went wrong:
+ * another origin, a status other than 200, an answer without a results list.
+ * An aborted `signal` throws its AbortError. */
+export async function findInstruments(src, q, { limit = 10, asOf = "", signal, candidates = false } = {}) {
   const url = sameOrigin(src || "");
   url.searchParams.set("q", q);
   url.searchParams.set("limit", String(limit));
@@ -27,7 +33,43 @@ export async function findInstruments(src, q, { limit = 10, asOf = "", signal } 
   if (!res.ok) throw new Error(`the search answered ${res.status}`);
   const body = await res.json();
   if (!body || !Array.isArray(body.results)) throw new Error("the search's answer has no results list");
-  return body.results.filter((r) => r && typeof r.instrument_id === "string" && r.instrument_id);
+  return body.results.filter((r) => r && (isHeld(r) || (candidates && isCandidate(r))));
+}
+
+function isHeld(r) {
+  return typeof r.instrument_id === "string" && r.instrument_id !== "";
+}
+
+/** Whether a search's result is one the page does not hold yet (0.14.0). */
+export function isCandidate(r) {
+  return !!r && r.candidate === true && !isHeld(r);
+}
+
+/** Bring a candidate in at `url` (on the page's origin, or this throws): the
+ * picker's default bring-in hook (0.14.0). It POSTs `{ "candidate": … }` as
+ * the search answered it and resolves to the instrument the page now holds,
+ * `{ "instrument": { "instrument_id": …, … } }`'s. Throws an Error saying
+ * why not: the answer's `error`, or its status; an answer naming no held
+ * instrument. An aborted `signal` throws its AbortError. */
+export async function bringInstrumentIn(url, candidate, { signal } = {}) {
+  const to = sameOrigin(url || "");
+  const res = await globalThis.fetch(to.href, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ candidate }),
+    signal,
+  });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  if (!res.ok) throw new Error((body && typeof body.error === "string" && body.error) || `bringing it in answered ${res.status}`);
+  const held = body && body.instrument;
+  if (!held || !isHeld(held)) throw new Error("bringing it in answered no instrument");
+  return held;
 }
 
 /** An instrument's identifiers on one line (`ticker:AAPL  isin:…`) and what
@@ -46,8 +88,10 @@ export function instrumentLabel(inst) {
 }
 
 /** One option of a list of matches, as both components draw it: the name,
- * what it is, and the ID with its identifiers. */
-export function instrumentOption(inst, id, selected) {
+ * what it is, and the ID with its identifiers. Without `ids` (a picker that
+ * brings candidates in, 0.14.0) the record's ID is left out, so a record the
+ * page holds and one it does not read alike. */
+export function instrumentOption(inst, id, selected, { ids: showId = true } = {}) {
   const li = document.createElement("li");
   li.id = id;
   li.className = "om-picker-option";
@@ -62,7 +106,7 @@ export function instrumentOption(inst, id, selected) {
   m.textContent = meta;
   const idl = document.createElement("span");
   idl.className = "om-picker-ids";
-  idl.textContent = `${inst.instrument_id}${ids ? `  ${ids}` : ""}`;
+  idl.textContent = showId ? `${inst.instrument_id}${ids ? `  ${ids}` : ""}` : ids;
   li.append(name, m, idl);
   return li;
 }

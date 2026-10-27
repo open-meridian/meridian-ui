@@ -283,6 +283,113 @@ test("om-instrument-picker refuses another origin and reports a failed search", 
   assert.match(p.querySelector(".om-picker-status").textContent, /No instrument matches/);
 });
 
+// 0.14.0: a candidate the page does not hold, brought in by a hook.
+const SPY = {
+  instrument_id: "",
+  candidate: true,
+  description: "SPDR S&P 500 ETF Trust",
+  asset_class: "fund",
+  currency: "USD",
+  exchange_mic: "",
+  identifiers: [{ scheme: "ticker", value: "SPY", source: "" }],
+};
+
+test("om-instrument-picker without a bring-in hook drops candidates, as before", async () => {
+  const p = mount('<om-instrument-picker src="search"></om-instrument-picker>');
+  const calls = stubFetch({ results: [AAPL, SPY] });
+  await p.search("s");
+  assert.equal(p.querySelectorAll('[role="option"]').length, 1);
+  assert.match(p.querySelector('[role="option"]').textContent, /INS-3f1c9a02/, "the ID shown, as before");
+  assert.equal(calls[0].init.method, undefined, "a GET");
+});
+
+test("om-instrument-picker brings a chosen candidate in at bring-in, by keyboard, before it has a value", async () => {
+  const p = mount('<om-instrument-picker src="search" bring-in="instruments/bring-in"></om-instrument-picker>');
+  let release;
+  const posted = [];
+  globalThis.fetch = async (url, init) => {
+    if (!init || init.method !== "POST") {
+      return new Response(JSON.stringify({ results: [AAPL, SPY] }), { status: 200 });
+    }
+    posted.push({ url, init });
+    await new Promise((r) => (release = r));
+    return new Response(JSON.stringify({ instrument: { ...SPY, candidate: undefined, instrument_id: "INS-9SPY" } }), { status: 200 });
+  };
+  await p.search("spy");
+  const options = p.querySelectorAll('[role="option"]');
+  assert.equal(options.length, 2, "held and candidate in one list");
+  for (const o of options) assert.doesNotMatch(o.textContent, /INS-/, "no record ID shown for either");
+  assert.match(options[1].textContent, /SPDR S&P 500 ETF Trust/);
+  let chosen = null;
+  p.addEventListener("om-select", (e) => (chosen = e.detail.instrument));
+  const input = p.querySelector('input[role="combobox"]');
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  await settle();
+  // Still bringing it in: no value yet, busy, announced.
+  assert.equal(posted.length, 1);
+  const to = new URL(posted[0].url);
+  assert.equal(to.pathname, "/app/instruments/bring-in");
+  assert.equal(posted[0].init.credentials, "same-origin");
+  assert.deepEqual(JSON.parse(posted[0].init.body), { candidate: SPY });
+  assert.equal(p.bringing, true);
+  assert.equal(p.value, "");
+  assert.equal(chosen, null);
+  assert.equal(p.querySelector(".om-picker-chosen").getAttribute("aria-busy"), "true");
+  assert.match(p.querySelector('[role="status"]').textContent, /Bringing in SPDR S&P 500 ETF Trust/);
+  release();
+  await settle();
+  assert.equal(p.bringing, false);
+  assert.equal(p.value, "INS-9SPY");
+  assert.equal(chosen.instrument_id, "INS-9SPY");
+  assert.equal(p.querySelector(".om-picker-chosen").hasAttribute("aria-busy"), false);
+  assert.match(p.querySelector('[role="status"]').textContent, /SPDR S&P 500 ETF Trust \(SPY\) chosen/);
+});
+
+test("om-instrument-picker's bringIn hook is called, and a refusal leaves no value and says why", async () => {
+  const p = mount('<om-instrument-picker src="search"></om-instrument-picker>');
+  const asked = [];
+  p.bringIn = async (candidate) => {
+    asked.push(candidate);
+    throw new Error("the platform could not be reached");
+  };
+  stubFetch({ results: [SPY] });
+  await p.search("spy");
+  assert.equal(p.querySelectorAll('[role="option"]').length, 1, "a hook asks for candidates");
+  let error = null;
+  p.addEventListener("om-error", (e) => (error = e.detail.error));
+  p.querySelector('[role="option"]').click();
+  await settle();
+  assert.deepEqual(asked, [SPY]);
+  assert.equal(p.value, "");
+  assert.equal(p.bringing, false);
+  assert.match(error, /Could not bring in SPDR S&P 500 ETF Trust \(SPY\): the platform could not be reached/);
+  assert.match(p.querySelector(".om-picker-status.bad").textContent, /Could not bring in/);
+  assert.match(p.querySelector('[role="status"]').textContent, /Could not bring in/);
+});
+
+test("om-instrument-picker cleared while bringing in ignores the late answer", async () => {
+  const p = mount('<om-instrument-picker src="search"></om-instrument-picker>');
+  let release;
+  let aborted = false;
+  p.bringIn = (candidate, { signal }) =>
+    new Promise((resolve) => {
+      signal.addEventListener("abort", () => (aborted = true));
+      release = () => resolve({ ...candidate, instrument_id: "INS-LATE" });
+    });
+  stubFetch({ results: [SPY] });
+  await p.search("spy");
+  p.querySelector('[role="option"]').click();
+  await settle();
+  assert.equal(p.bringing, true);
+  p.clear();
+  assert.equal(aborted, true);
+  release();
+  await settle();
+  assert.equal(p.value, "");
+  assert.equal(p.querySelector(".om-picker-chosen").hidden, true);
+});
+
 test("every component is defined", async () => {
   await settle();
   for (const name of ["om-grid", "om-chart", "om-asof", "om-instrument-picker", "om-live"]) {
