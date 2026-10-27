@@ -18,8 +18,18 @@
 // reference.proto), by their proto names. `asof` names an <om-asof> on the
 // page, or is a date; resolution is dated, so a search as of a date asks
 // what an identifier meant then.
+//
+// Bringing an instrument in (0.14.0): with a bring-in hook -- the `bringIn`
+// property, a function, or the `bring-in` attribute, a URL on the page's
+// origin that lib/instruments.js's bringInstrumentIn POSTs to -- the search
+// asks for candidates too: results the page does not hold yet, marked
+// `"candidate": true` with an empty `instrument_id`. They are listed as the
+// held ones are, the record's ID shown for neither. Choosing one calls the
+// hook, which resolves to the instrument the page now holds; until it does,
+// the picker's value is empty and the control invalid, so its form does not
+// submit, and the outcome is announced.
 
-import { findInstruments, instrumentLabel, instrumentOption, instrumentStatus } from "../lib/instruments.js";
+import { bringInstrumentIn, findInstruments, instrumentLabel, instrumentOption, instrumentStatus, isCandidate } from "../lib/instruments.js";
 import { sameOrigin } from "../lib/url.js";
 
 let counter = 0;
@@ -37,6 +47,9 @@ export class OmInstrumentPicker extends HTMLElement {
   #abort = null;
   #value = null;
   #built = false;
+  #live = null;
+  #bringIn = null;
+  #bringing = null;
   #id = `om-picker-${++counter}`;
 
   constructor() {
@@ -69,6 +82,10 @@ export class OmInstrumentPicker extends HTMLElement {
     this.#chosen = document.createElement("div");
     this.#chosen.className = "om-picker-chosen";
     this.#chosen.hidden = true;
+    // What a choice came to, for a screen reader: bringing in, chosen, or why not.
+    this.#live = document.createElement("span");
+    this.#live.className = "visually-hidden";
+    this.#live.setAttribute("role", "status");
     this.#input.addEventListener("input", () => this.#queue());
     this.#input.addEventListener("keydown", (e) => this.#key(e));
     this.#input.addEventListener("blur", () => setTimeout(() => this.#close(), 150));
@@ -77,7 +94,7 @@ export class OmInstrumentPicker extends HTMLElement {
       const li = e.target.closest("[data-index]");
       if (li) this.#choose(Number(li.dataset.index));
     });
-    this.append(this.#input, this.#list, this.#chosen);
+    this.append(this.#input, this.#list, this.#chosen, this.#live);
   }
 
   /** The chosen instrument's id, or "". */
@@ -91,8 +108,31 @@ export class OmInstrumentPicker extends HTMLElement {
   }
 
   set instrument(inst) {
+    this.#stopBringing();
     this.#value = inst || null;
     this.#showChosen();
+  }
+
+  /** The bring-in hook (0.14.0): `(candidate, { signal }) => Promise<instrument>`,
+   * the instrument the page holds once it is brought in; or null. Without one,
+   * a `bring-in` attribute's URL is POSTed to (lib/instruments.js). */
+  get bringIn() {
+    return this.#bringIn;
+  }
+
+  set bringIn(hook) {
+    this.#bringIn = typeof hook === "function" ? hook : null;
+  }
+
+  /** Whether a chosen candidate is still being brought in. */
+  get bringing() {
+    return this.#bringing !== null;
+  }
+
+  #hook() {
+    if (this.#bringIn) return this.#bringIn;
+    const url = this.getAttribute("bring-in");
+    return url ? (candidate, options) => bringInstrumentIn(url, candidate, options) : null;
   }
 
   clear() {
@@ -141,7 +181,12 @@ export class OmInstrumentPicker extends HTMLElement {
     this.#status("Searching…");
     let found;
     try {
-      found = await findInstruments(src, q, { limit: Number(this.getAttribute("limit") || 10), asOf: this.#asOf(), signal: abort.signal });
+      found = await findInstruments(src, q, {
+        limit: Number(this.getAttribute("limit") || 10),
+        asOf: this.#asOf(),
+        signal: abort.signal,
+        candidates: this.#hook() !== null,
+      });
     } catch (e) {
       if (e && e.name === "AbortError") return;
       this.#results = [];
@@ -165,8 +210,9 @@ export class OmInstrumentPicker extends HTMLElement {
       this.#status("No instrument matches.");
       return;
     }
+    const ids = this.#hook() === null;
     const items = this.#results.map((inst, i) => {
-      const li = instrumentOption(inst, `${this.#id}-opt-${i}`, i === this.#active);
+      const li = instrumentOption(inst, `${this.#id}-opt-${i}`, i === this.#active, { ids });
       li.dataset.index = String(i);
       return li;
     });
@@ -208,25 +254,87 @@ export class OmInstrumentPicker extends HTMLElement {
   #choose(i) {
     const inst = this.#results[i];
     if (!inst) return;
-    this.#value = inst;
     this.#input.value = "";
     this.#close();
+    const hook = isCandidate(inst) ? this.#hook() : null;
+    if (hook) {
+      this.#bringInto(inst, hook);
+      return;
+    }
+    this.#stopBringing();
+    this.#value = inst;
     this.#showChosen();
+    this.#announce(`${instrumentLabel(inst)} chosen.`);
     this.dispatchEvent(new CustomEvent("om-select", { bubbles: true, detail: { instrument: inst } }));
   }
 
-  #showChosen() {
+  // A candidate chosen: brought in by the hook, the value empty and the
+  // control invalid until it resolves to the instrument the page holds.
+  async #bringInto(candidate, hook) {
+    this.#stopBringing();
+    const abort = new AbortController();
+    this.#bringing = abort;
+    this.#value = null;
+    this.#showChosen(candidate);
+    const label = instrumentLabel(candidate);
+    this.#announce(`Bringing in ${label}…`);
+    let held;
+    try {
+      held = await hook(candidate, { signal: abort.signal });
+      if (!held || typeof held.instrument_id !== "string" || !held.instrument_id) {
+        throw new Error("bringing it in answered no instrument");
+      }
+    } catch (e) {
+      if (this.#bringing !== abort) return;
+      this.#bringing = null;
+      this.#showChosen();
+      if (e && e.name === "AbortError") return;
+      const why = `Could not bring in ${label}: ${e && e.message ? e.message : e}`;
+      this.#status(why, true);
+      this.#announce(why);
+      this.dispatchEvent(new CustomEvent("om-error", { bubbles: true, detail: { error: why } }));
+      return;
+    }
+    if (this.#bringing !== abort) return;
+    this.#bringing = null;
+    this.#value = held;
+    this.#showChosen();
+    this.#announce(`${instrumentLabel(held)} chosen.`);
+    this.dispatchEvent(new CustomEvent("om-select", { bubbles: true, detail: { instrument: held } }));
+  }
+
+  #stopBringing() {
+    if (!this.#bringing) return;
+    this.#bringing.abort();
+    this.#bringing = null;
+  }
+
+  #announce(text) {
+    if (this.#live) this.#live.textContent = text;
+  }
+
+  // The chosen instrument as a chip; or, with `bringing`, the candidate
+  // being brought in, marked busy.
+  #showChosen(bringing = null) {
     if (this.#internals && this.#internals.setFormValue) this.#internals.setFormValue(this.value);
+    if (this.#internals && this.#internals.setValidity) {
+      if (bringing) this.#internals.setValidity({ customError: true }, "The instrument is still being brought in.", this.#input || undefined);
+      else this.#internals.setValidity({});
+    }
     if (!this.#chosen) return;
-    if (!this.#value) {
+    const shown = bringing || this.#value;
+    if (!shown) {
       this.#chosen.hidden = true;
+      this.#chosen.removeAttribute("aria-busy");
       this.#chosen.replaceChildren();
       return;
     }
     const chip = document.createElement("span");
     chip.className = "chip";
     const text = document.createElement("span");
-    text.textContent = instrumentLabel(this.#value);
+    text.textContent = bringing ? `${instrumentLabel(bringing)}: bringing in…` : instrumentLabel(shown);
+    if (bringing) this.#chosen.setAttribute("aria-busy", "true");
+    else this.#chosen.removeAttribute("aria-busy");
     const x = document.createElement("button");
     x.type = "button";
     x.setAttribute("aria-label", "Clear the instrument");

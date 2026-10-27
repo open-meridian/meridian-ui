@@ -14,7 +14,7 @@ It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
 `spec/plugin-pages-share-one-kit.md`, and its role pages' parts
-`spec/plugin-pages-follow-their-role.md`. This is release 0.13.0; the guide to
+`spec/plugin-pages-follow-their-role.md`. This is release 0.14.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -458,6 +458,7 @@ Find an instrument by any identifier or its name, as of a date.
 |---|---|
 | `src` | The search URL, on the page's origin: the plugin's backend answers it and proxies the security master |
 | `asof` | The id of an `om-asof` on the page, or a date: resolution is dated |
+| `bring-in` | 0.14.0: a URL on the page's origin that brings a candidate in (below); or set the `bringIn` property |
 | `limit` (10), `min-chars` (1), `debounce` (200 ms), `placeholder`, `label`, `name` | |
 
 It asks:
@@ -501,6 +502,36 @@ chosen `instrument_id`. An entry grid's [`instrument`](#om-entry-grid) column
 settable), `search(text)` (search now; resolves when drawn), `clear()`.
 Events: `om-select` with `detail: { instrument }` (null when cleared), and
 `om-error` with `detail: { error }`.
+
+**Bringing an instrument in** (0.14.0). A page that can bring in an
+instrument it does not hold yet gives the picker a bring-in hook: the
+`bringIn` property, `(candidate, { signal }) => Promise<instrument>`, or the
+`bring-in` attribute, a URL on the page's origin. With one, the search's
+answer may also carry candidates, results the page does not hold, each marked
+`"candidate": true` with an empty `instrument_id` and the rest of its fields
+as a held result's; without one, they are dropped, as before. Held results and
+candidates are one list, read alike: the record's ID is shown for neither.
+Choosing a candidate (by keyboard or a click) calls the hook, and until it
+resolves to the instrument the page now holds, the chip says it is being
+brought in (`aria-busy`), the picker's value is empty and the control is
+invalid ("The instrument is still being brought in."), so its form does not
+submit; then the value is the held `instrument_id` and `om-select` fires
+with the held record. A refusal leaves no value, says why in the list, and
+fires `om-error`; clearing, or choosing again, aborts the hook's `signal` and
+ignores its late answer. A `role="status"` line inside the picker announces
+each outcome: bringing in, chosen, or why not. The attribute's hook asks:
+
+```
+POST <bring-in>
+Content-Type: application/json   Accept: application/json
+(the page's cookies, same origin)
+
+{ "candidate": { "instrument_id": "", "candidate": true, "description": "…", … } }
+```
+
+and expects `200` with `{ "instrument": { "instrument_id": "INS-…", … } }`;
+any other status shows the answer's `error`, or the status. The property
+`bringing` is true while a candidate is being brought in.
 
 ### om-live
 
@@ -2276,7 +2307,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it; and (0.13.0) `om-sidebar`'s groups as data, its current item by attribute, data and address (hash, query, `also`, the weak fragment), groups added with no change, collapsing remembered with storage refused, the drawer on a phone with focus back on Menu, and the icons |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it; and (0.13.0) `om-sidebar`'s groups as data, its current item by attribute, data and address (hash, query, `also`, the weak fragment), groups added with no change, collapsing remembered with storage refused, the drawer on a phone with focus back on Menu, and the icons; and (0.14.0) the picker's bring-in hook: candidates listed only with a hook, no record ID shown, a candidate brought in at `bring-in` or by `bringIn` before the picker has a value, a refusal said and announced, and a late answer ignored once cleared |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. A frame time is wall-clock time, so a busy machine adds to it: a held scenario over its budget is run again, up to five runs, and judged by the least each frame took in any run (each run takes the same steps, so a frame the kit makes slow is slow in every one); every run's p95 is printed, and a run under budget the first time is not run again. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
 | `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes; and (0.12.0) an entry grid's instrument column searching the page's own server and posting the ID chosen, on its own and framed by the stand-in host, its matches within the screen, facts one line a row, a next step opening the host's tab from the framed page and staying words on its own, and Prepare posting the act's form with `prepare=1` (its submit without), on its own and framed; and (0.13.0) the sidebar at 1280, 582 and 375 px, light and dark: nothing sideways, the page fitting, one item `aria-current` by hash, by query and on a Manage page by its attribute (its own tabs kept, one sidebar), on a desktop the tab order and focus rings and collapsing by the keyboard remembered across a reload, below 768 px Menu opening the drawer with focus on the current item, Tab never reaching the page under it, Escape closing it with focus back on Menu. To `.fit.log` too |
 | `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |
