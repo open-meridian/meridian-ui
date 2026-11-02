@@ -5,6 +5,12 @@
  *   search          GET ?q=&limit=&as_of=  ->  { results: [InstrumentRecord…] }
  *   snapshot.json   GET                    ->  { sequence, rows }
  *   events          text/event-stream      ->  id: <sequence>, data: { rows }
+ *   rates/live      GET                    ->  { sequence, rows, now_ms }: live values
+ *   rates/live/events  text/event-stream   ->  id: <sequence>, data: { rows, sent_ms }
+ *
+ * The rates are an SDK's pages.live_values as a page receives them (0.16.0's
+ * om-live cells): each value with its source dataset, its confirmed time and
+ * when it is stale, closed out of session, or why it has nothing to show.
  *
  * Prices are integer cents and quantities integers, formatted as decimal
  * strings: never floating point for money, even in a demonstration. Every
@@ -66,13 +72,70 @@
   var sequence = 1000;
   var sources = [];
 
+  function isRates(s) { return /rates\/live\/events$/.test(new URL(s.url, location.href).pathname); }
+
   function tick() {
     var p = book[Math.floor(Math.random() * book.length)];
     p.px = Math.max(1, p.px + Math.round((Math.random() - 0.5) * 60));
     sequence += 1;
     if (sequence % 20 === 0) return; // dropped on the way: the page sees a gap
     var data = JSON.stringify({ rows: [row(p)] });
-    sources.forEach(function (s) { s._deliver(String(sequence), data); });
+    sources.forEach(function (s) { if (!isRates(s)) s._deliver(String(sequence), data); });
+  }
+
+  // pair, mid in 1e-5 (pips), the prior cut's mid, its source; and how it is:
+  // live (ticking), stale (its feed silent), closed (out of its session),
+  // unlimited (a reference rate, no stale limit declared), missing (why).
+  var started = Date.now();
+  var rates = [
+    ["EUR/USD", 108420, 108290, "oanda-1:quotes", "live"],
+    ["USD/JPY", 15211000, 15240000, "oanda-1:quotes", "live"],
+    ["GBP/USD", 129850, 129900, "kraken-1:quotes", "stale"],
+    ["USD/TRY", 3421000, 3418000, "oanda-1:quotes", "closed"],
+    ["EUR/GBP", 83410, 83520, "ecb-1:ecb_fx", "unlimited"],
+    ["AUD/USD", 0, 0, "", "missing"]
+  ].map(function (r) {
+    var at = r[4] === "stale" ? started - 42000 : r[4] === "closed" ? started - 3 * 3600000 : r[4] === "unlimited" ? started - 20 * 3600000 : started - 800;
+    return { pair: r[0], mid: r[1], prev: r[2], source: r[3], how: r[4], at: at, recorded: at + 3 };
+  });
+  var rateSequence = 0;
+
+  function pips(v, places) {
+    var s = String(v).padStart(places + 1, "0");
+    return s.slice(0, s.length - places) + "." + s.slice(s.length - places);
+  }
+
+  function rateRow(r) {
+    // Prices in 1e-5; a yen or lira pair is shown to 3 places, others to 5.
+    var places = r.pair.indexOf("JPY") >= 0 || r.pair.indexOf("TRY") >= 0 ? 3 : 5;
+    if (r.how === "missing") {
+      return { key: "rate:" + r.pair, f: { pair: r.pair, mid: "–", chg: "–" }, tone: {}, title: r.pair, source: "",
+        at_ms: 0, stale_at_ms: 0, closed: false, recorded_ms: 0, why: "no AUD/USD quote is entitled" };
+    }
+    var chg = Math.round(((r.mid - r.prev) * 10000) / r.prev) / 100;
+    return {
+      key: "rate:" + r.pair,
+      f: { pair: r.pair, mid: pips(Math.round(r.mid / Math.pow(10, 5 - places)), places), chg: (chg > 0 ? "+" : "") + chg.toFixed(2) + "%" },
+      tone: { chg: chg > 0 ? "up" : chg < 0 ? "down" : "" },
+      title: r.pair + " mid " + pips(Math.round(r.mid / Math.pow(10, 5 - places)), places),
+      source: r.source,
+      at_ms: r.at,
+      stale_at_ms: r.how === "unlimited" ? 0 : r.at + 5000,
+      closed: r.how === "closed",
+      recorded_ms: r.recorded,
+      why: ""
+    };
+  }
+
+  function rateTick() {
+    var live = rates.filter(function (r) { return r.how === "live"; });
+    var r = live[Math.floor(Math.random() * live.length)];
+    r.mid = Math.max(1, r.mid + Math.round((Math.random() - 0.5) * 12));
+    r.at = Date.now() - 40;
+    r.recorded = r.at + 3;
+    rateSequence += 1;
+    var data = JSON.stringify({ rows: [rateRow(r)], removed: [], sent_ms: Date.now() });
+    sources.forEach(function (s) { if (isRates(s)) s._deliver(String(rateSequence), data); });
   }
 
   function FakeEventSource(url) {
@@ -102,6 +165,7 @@
   };
   window.EventSource = FakeEventSource;
   setInterval(tick, 900);
+  setInterval(rateTick, 700);
 
   function json(body, status) {
     return Promise.resolve(new Response(JSON.stringify(body), {
@@ -116,6 +180,9 @@
       return new Promise(function (resolve) {
         setTimeout(function () { resolve(json({ sequence: String(sequence), rows: book.map(row) })); }, 250);
       });
+    }
+    if (/\/gallery\/rates\/live$/.test(path)) {
+      return json({ sequence: String(rateSequence), rows: rates.map(rateRow), now_ms: Date.now() });
     }
     if (/\/gallery\/search$/.test(path)) {
       var q = (url.searchParams.get("q") || "").toLowerCase();

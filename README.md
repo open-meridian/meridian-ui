@@ -14,7 +14,7 @@ It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
 `spec/plugin-pages-share-one-kit.md`, and its role pages' parts
-`spec/plugin-pages-follow-their-role.md`. This is release 0.15.0; the guide to
+`spec/plugin-pages-follow-their-role.md`. This is release 0.16.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -552,6 +552,7 @@ the page re-reading on reconnect.
 | `events` | Named events to follow as well as unnamed ones (optional) |
 | `quiet` | Hide its status badge |
 | `manual` | Do not start on connect; call `start()` |
+| `cells` | Since 0.16.0, keep a page's live values in the elements marked `data-live` ([below](#live-cells)): in the document, or in the element whose id it names |
 
 The wire:
 
@@ -586,6 +587,64 @@ anything in `data`.
 
 Properties and methods: `sequence` (the last applied, a string), `state`,
 `start()`, `stop()` (also on leaving the page), `resync()`.
+
+#### Live cells
+
+With `cells` (0.16.0) `om-live` keeps a page's live values, as an SDK's
+`pages.live_values` sends them (meridian-design
+`spec/one-data-access-model.md` §§5 and 6; never blind, rule 1050): every
+value shows its age, counted on once a second, and its source dataset; it is
+flagged stale past its dataset's ceiling, and only in session, shown closed
+with its age out of session; and with nothing to show it says why, never a
+blank. The wire is the one above; each row is a value:
+
+```
+GET <snapshot>   { "sequence": "4", "now_ms": 1793620800000, "rows": [ { ...a value... } ] }
+GET <src>        id: 5
+                 data: { "rows": [ { ...a value... } ], "removed": [ "key" ], "sent_ms": 1793620801000 }
+
+a value          { "key": "pair:EUR/USD", "f": { "mid": "1.08420" }, "tone": { "chg": "up" },
+                   "title": "EUR/USD bid 1.08415 ask 1.08425", "source": "oanda-1:quotes",
+                   "at_ms": 1793620798000, "stale_at_ms": 1793620803000, "closed": false,
+                   "recorded_ms": 1793620798010, "why": "" }
+```
+
+```html
+<om-live src="rates/live/events" snapshot="rates/live" cells="rates"></om-live>
+<table id="rates"><tbody>
+  <tr data-live="pair:EUR/USD">
+    <td data-f="mid">–</td><td data-f="chg" data-tone-chg="">–</td>
+    <td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td>
+    <td data-f="source">–</td>
+  </tr>
+</tbody></table>
+```
+
+- `f`'s texts go to the elements marked `data-f="<field>"`, the live element
+  itself or within it; `tone`'s to `data-tone-<name>`, which the page styles.
+- The kit fills `data-f="age"` ("12 s", "3 min", "2 h", "4 d"), `"source"`,
+  `"state"` (`stale`, `closed` or `no value`, empty otherwise and then
+  hidden), `"limit"` ("stale after 5 s", or "no stale limit declared" where
+  `stale_at_ms` is 0) and `"why"`; and the element's hover text: the
+  value's title, its source, its age, stale or closed, and no stale limit
+  declared, or why it has none.
+- The live element is marked `data-stale` (underlined in the warning ink),
+  `data-closed` and `data-missing` (faint), and `data-no-limit`. A value
+  with nothing to show, or removed, shows "–" in every field, never a
+  figure left over.
+- `at_ms` (its confirmed time) and `stale_at_ms` are the deployment's clock,
+  which the page follows by the snapshot's `now_ms` and each event's
+  `sent_ms`, so a browser's clock never ages a value. A value `closed` is
+  never stale.
+- **Measured, for the browser check** (§5): each change's quote-to-screen,
+  the server's part (`sent_ms` less the row's `recorded_ms`, for a row newly
+  recorded) plus the browser's (the event's receipt to its next frame), and
+  each row's redraws, on `window.meridianLive` (also the element's
+  `measures`): `quoteToScreen` and `toFrame` (ms), `redraws` (by key, the
+  times drawn), `events`, `snapshots`, and `summary()`, answering
+  `quote_to_screen_p99_ms`, `to_frame_p99_ms` and
+  `ticking_row_redraws_per_second`, the most redraws one row made in any
+  one second.
 
 ### om-panels
 
@@ -2324,7 +2383,7 @@ Playwright's (Chromium, pinned).
 | `make build` | `generated/` from `../meridian-design/brand/tokens.json` when it is there (`DESIGN=` to point elsewhere), then `dist/<version>/` |
 | `make check-tokens` | Fails when `generated/` differs from the tokens |
 | `make lint` | Scripts parse; no raw colour in anything hand-written; every `var(--…)` is defined; nothing served names another origin or an absolute path |
-| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it; and (0.13.0) `om-sidebar`'s groups as data, its current item by attribute, data and address (hash, query, `also`, the weak fragment), groups added with no change, collapsing remembered with storage refused, the drawer on a phone with focus back on Menu, and the icons; and (0.14.0) the picker's bring-in hook: candidates listed only with a hook, no record ID shown, a candidate brought in at `bring-in` or by `bringIn` before the picker has a value, a refusal said and announced, and a late answer ignored once cleared; and (0.15.0) the entry grid's bring-in: candidates asked and listed with no record ID, the submit held while one is brought in, the held ID posted and its name and ticker shown, a refusal the cell's problem, the property's hook, typing again abandoning it; and an instrument named by its name and ticker, never its ID |
+| `make test` | The tests: the generator reproduces the tokens exactly, the default scheme passes under both direction conventions, a bad scheme fails naming its pairs, the components render and behave (the high-rate grid and the panels included), the theme (and the direction convention) follows only the parent frame, red-up swaps buy and sell and no status colour, `om-live` resumes after a gap, the size message goes only to the host's learned origin and only on a change, the framed marker is the host's word in a frame, the framed look hides only the heading and the tab row, and a page on its own computes as it did; the header actions and the header status go to the host's origin alone, in their shape, only on a change, and cleared when unframed, one the kit cannot offer kept in the page; a head left empty once the host draws its parts is dropped, framed only; the account map's states, search, filters, groups, pages, chooser, suggestions, several links, forms and `om-link`; the grid's declared JSON, rich cells and narrow layouts; list rows wrapping; options and the field row; `om-moment`; `om-status`'s states, marks, note, words as text and reduced motion; the account map's Status column and filter by state; each of the [patterns](#patterns) here is the gallery's patterns page's, and its head, framed, hands the host its icon action and its status and is left empty; the entry grid's column types and their words, paths, CSV and pasted cells read as a spreadsheet writes them, exact sums, its table, names, blank rows, rows added and removed, the keyboard, cells checked as typed, a held submit, the server's messages by path, rules, a paste, the CSV dialog, the page's own table posting the same names without the kit, and its cards at a phone's width; the [search](#search) on `om-grid` (high-rate too), `om-pager` (rows all here, and a server's) and `om-entry-grid`, and `om-search`; [fields gated on a choice](#fields-gated-on-a-choice) on a radio, a select, a checkbox and a gated choice, neither required nor sent while hidden; the entry grid's `instrument` column (searched on the page's own origin, a few at a time, after a pause; chosen by keyboard or a click, the ID posted and the name shown; words not chosen holding the submit; Escape and emptying; IDs given looked up once each; IDs pasted; another origin, a failed search and no `src`); [facts](#facts) and the [next step](#next-step) patterns; and `meridian:open` (only framed, only to the host's learned origin, a plain click or Enter, the place's shape, a link with no `href` reached by the keyboard while framed) and the stand-in host opening its tab for it; and (0.13.0) `om-sidebar`'s groups as data, its current item by attribute, data and address (hash, query, `also`, the weak fragment), groups added with no change, collapsing remembered with storage refused, the drawer on a phone with focus back on Menu, and the icons; and (0.14.0) the picker's bring-in hook: candidates listed only with a hook, no record ID shown, a candidate brought in at `bring-in` or by `bringIn` before the picker has a value, a refusal said and announced, and a late answer ignored once cleared; and (0.15.0) the entry grid's bring-in: candidates asked and listed with no record ID, the submit held while one is brought in, the held ID posted and its name and ticker shown, a refusal the cell's problem, the property's hook, typing again abandoning it; and an instrument named by its name and ticker, never its ID; and (0.16.0) `om-live`'s cells: each value's texts, tone, source and age on the deployment's clock, counted on, stale past its ceiling, closed out of session and never stale, no stale limit declared, why with nothing to show and no figure left over, a key removed, and quote-to-screen and each row's redraws measured on `window.meridianLive` |
 | `make bench` | The high-rate grid's budget, the account map's at 2,000 and 1,500 accounts, and the entry grid's (typing a number into 1,000 rows, and a cell's message coming and going in 50, every rule run on each key) with its checks in a real page (script off, the page's own table posts; with script, checked as typed, a held submit, the server's messages, a paste, rows added and removed, the post by path; at 390px cards, 44px targets and nothing sideways, light and dark), in a real browser: headless Chromium, driven by Playwright (the image and `playwright-core` pinned together, in `Dockerfile.check` and `package-lock.json`). It prints what it measured, to `.bench.log` too, and fails when a budget is not held. A frame time is wall-clock time, so a busy machine adds to it: a held scenario over its budget is run again, up to five runs, and judged by the least each frame took in any run (each run takes the same steps, so a frame the kit makes slow is slow in every one); every run's p95 is printed, and a run under budget the first time is not run again. Every budget is 16.7 ms a frame, but three on GitHub's hosted runners, measured there: the map's page a frame and filters (45 ms) and typing into the entry grid's 1,000 rows (22 ms) |
 | `make fit` | [One screen](#one-screen): every gallery page, each tab, on its own and framed by the stand-in host, at 1440×900 and 390×844, in the bench's browser; and a one-line row's detail opening on a click on its row, over a page that still fits, closing on Escape, opening with script off; a pager turning its pages; and a search narrowing the orders' grid, the accounts' pager and the quotes' high-rate grid, a server's search asked, and a gated field appearing for its choice, each page still fitting, at both sizes; and (0.12.0) an entry grid's instrument column searching the page's own server and posting the ID chosen, on its own and framed by the stand-in host, its matches within the screen, facts one line a row, a next step opening the host's tab from the framed page and staying words on its own, and Prepare posting the act's form with `prepare=1` (its submit without), on its own and framed; and (0.13.0) the sidebar at 1280, 582 and 375 px, light and dark: nothing sideways, the page fitting, one item `aria-current` by hash, by query and on a Manage page by its attribute (its own tabs kept, one sidebar), on a desktop the tab order and focus rings and collapsing by the keyboard remembered across a reload, below 768 px Menu opening the drawer with focus on the current item, Tab never reaching the page under it, Escape closing it with focus back on Menu. To `.fit.log` too |
 | `make shots` | `make fit`, with a screenshot of each page, size and tab, to `SHOTS=<dir>` (default `.shots/`) |

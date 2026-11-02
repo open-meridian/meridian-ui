@@ -11,6 +11,19 @@
 <script src="../meridian.js"></script>
 <script type="module" src="sample.js"></script>
 <script type="module" src="tabs.js"></script>
+<style>
+  /* The page's own tones for its live cells: a change up or down, in the
+   * scheme's direction colours (the person's convention). */
+  [data-tone-chg="up"] { color: var(--buy); }
+  [data-tone-chg="down"] { color: var(--sell); }
+  /* Rates' columns: on a phone, the change, the source and the limit go,
+   * and the age with its state takes their room. */
+  #rates col.pair { width: 13%; } #rates col.mid { width: 13%; } #rates col.chg { width: 12%; }
+  #rates col.age { width: 20%; } #rates col.src { width: 18%; } #rates col.lim { width: 24%; }
+  @media (max-width: 40rem) {
+    #rates col.pair { width: 32%; } #rates col.mid { width: 28%; } #rates col.age { width: 40%; }
+  }
+</style>
 </head>
 <body>
 <main class="page">
@@ -43,6 +56,7 @@
     <a class="tab on" href="#overview" aria-current="page">Overview</a>
     <a class="tab" href="#holdings">Positions <span class="count">8</span></a>
     <a class="tab" href="#book">Orders <span class="count">40</span></a>
+    <a class="tab" href="#rates">Rates</a>
     <a class="tab" href="#accounts">Accounts</a>
     <a class="tab" href="#charts">Charts</a>
     <a class="tab" href="#flows-tab">Flows</a>
@@ -82,6 +96,27 @@
     <om-pager>
       <om-grid id="orders" row-key="order_id" dense one-line narrow="priority" search="Search orders"></om-grid>
     </om-pager>
+  </section>
+
+  <!-- Live cells (0.16.0): om-live cells keeps each value an SDK's
+       pages.live_values sends -- its age counted on, its source, stale past
+       its ceiling, closed out of session, or why it has none. Never blind. -->
+  <section id="rates" class="panel">
+    <div class="panel-body row" style="padding-block: var(--space-2)"><h2>Rates</h2><span class="spacer"></span><om-live id="rates-live" src="rates/live/events" snapshot="rates/live" cells="rates"></om-live></div>
+    <table class="one-line">
+      <caption class="visually-hidden">Rates, live</caption>
+      <colgroup><col class="pair"><col class="mid"><col class="chg wide-only"><col class="age"><col class="src wide-only"><col class="lim wide-only"></colgroup>
+      <thead><tr><th>Pair</th><th class="num">Mid</th><th class="num wide-only">Change</th><th>Age</th><th class="wide-only">Source</th><th class="wide-only">Stale limit</th></tr></thead>
+      <tbody>
+        <tr data-live="rate:EUR/USD"><td data-f="pair">EUR/USD</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="limit">–</td></tr>
+        <tr data-live="rate:USD/JPY"><td data-f="pair">USD/JPY</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="limit">–</td></tr>
+        <tr data-live="rate:GBP/USD"><td data-f="pair">GBP/USD</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="limit">–</td></tr>
+        <tr data-live="rate:USD/TRY"><td data-f="pair">USD/TRY</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="limit">–</td></tr>
+        <tr data-live="rate:EUR/GBP"><td data-f="pair">EUR/GBP</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="limit">–</td></tr>
+        <tr data-live="rate:AUD/USD"><td data-f="pair">AUD/USD</td><td class="num" data-f="mid">–</td><td class="num wide-only" data-f="chg" data-tone-chg="">–</td><td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td><td class="wide-only" data-f="source">–</td><td class="wide-only" data-f="why">–</td></tr>
+      </tbody>
+    </table>
+    <p class="panel-body faint" id="rates-measured" style="margin: 0">Measuring quote-to-screen…</p>
   </section>
 
   <section id="accounts">

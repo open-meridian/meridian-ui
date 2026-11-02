@@ -917,6 +917,16 @@ om-live[state="live"] .badge .dot { animation: om-pulse 2s ease-in-out infinite;
 @keyframes om-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { om-live[state="live"] .badge .dot { animation: none; } }
 
+/* Live cells (0.16.0; om-live cells): never blind. A stale value is
+ * underlined in the warning ink, a closed one and one with nothing to show
+ * read faint; the kit's state field is a badge only when it says something. */
+[data-live][data-stale] { text-decoration: underline dotted var(--warn-ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+[data-live][data-closed], [data-live][data-missing] { color: var(--ink-faint); }
+[data-live] [data-f="state"]:empty, [data-live][data-f="state"]:empty { display: none; }
+[data-f="state"][data-state="stale"] { background: var(--warn-wash); color: var(--warn-ink); }
+[data-f="state"][data-state="closed"], [data-f="state"][data-state="missing"] { background: var(--line-soft); color: var(--ink-soft); }
+[data-live] [data-f="age"], [data-live] [data-f="limit"], [data-live] [data-f="source"] { font-variant-numeric: tabular-nums; }
+
 /* ── om-panels ───────────────────────────────────────────────────────────── */
 
 /* One positioned box, --om-panels-height tall; each panel is placed over it
