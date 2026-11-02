@@ -192,3 +192,12 @@ document.getElementById("watch-form").addEventListener("submit", (event) => {
   const fields = [...new FormData(event.target)].map(([name, value]) => `${name}=${value}`).join("&");
   document.getElementById("watched").textContent = `It would post ${fields}.`;
 });
+
+// Rates' live cells (0.16.0): what om-live measures for the browser check,
+// window.meridianLive, said under the table once a second.
+const measured = document.getElementById("rates-measured");
+setInterval(() => {
+  const said = window.meridianLive && window.meridianLive.summary ? window.meridianLive.summary() : null;
+  if (!said || !said.events) return;
+  measured.textContent = `Quote to screen p99 ${said.quote_to_screen_p99_ms} ms · at most ${said.ticking_row_redraws_per_second} redraws a second a row · ${said.events} changes`;
+}, 1000);

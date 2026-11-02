@@ -204,3 +204,139 @@ test("om-live stops when it leaves the page", async () => {
   await settle();
   assert.equal(live.sequence, null, "a read that finishes after stop is ignored");
 });
+
+// ── Cells (0.16.0): a page's live values, never blind ──────────────────────
+
+// The deployment's clock: 2026-11-02 12:00:00 UTC, in ms.
+const NOW = 1793620800000;
+
+function cellsPage() {
+  document.body.innerHTML = `
+    <table id="rates"><tbody>
+      <tr data-live="pair:EUR/USD">
+        <td data-f="mid">–</td><td data-f="chg" data-tone-chg="">–</td>
+        <td><span data-f="age">–</span> <span class="badge" data-f="state"></span></td>
+        <td data-f="source">–</td><td data-f="limit">–</td><td data-f="why">–</td>
+      </tr>
+      <tr><td data-live="cell:EUR/JPY" data-f="mid">–</td></tr>
+    </tbody></table>
+    <om-live id="live" src="rates/live/events" snapshot="rates/live" cells="rates" manual></om-live>`;
+  return { live: document.getElementById("live"), row: document.querySelector('[data-live="pair:EUR/USD"]'), cell: document.querySelector('[data-live="cell:EUR/JPY"]') };
+}
+
+const f = (el, name) => (el.getAttribute("data-f") === name ? el : el.querySelector(`[data-f="${name}"]`)).textContent;
+
+function value(over = {}) {
+  return {
+    key: "pair:EUR/USD",
+    f: { mid: "1.08420", chg: "+0.12%" },
+    tone: { chg: "up" },
+    title: "EUR/USD bid 1.08415 ask 1.08425",
+    source: "oanda-1:quotes",
+    at_ms: NOW - 2000,
+    stale_at_ms: NOW + 3000,
+    closed: false,
+    recorded_ms: NOW - 1990,
+    why: "",
+    ...over,
+  };
+}
+
+async function started(t, rows) {
+  const reads = snapshots();
+  const parts = cellsPage();
+  t.mock.timers.enable({ apis: ["setInterval", "Date"], now: NOW + 7200000 }); // the browser's clock, 2 h off
+  parts.live.start();
+  const es = FakeEventSource.all[0];
+  es.open();
+  reads[0].answer({ sequence: "4", rows, now_ms: NOW });
+  await settle();
+  return { ...parts, es, reads };
+}
+
+test("om-live cells show each value with its source and age, counted on the deployment's clock", async (t) => {
+  const { live, row } = await started(t, [value()]);
+  assert.equal(f(row, "mid"), "1.08420");
+  assert.equal(row.querySelector("[data-tone-chg]").getAttribute("data-tone-chg"), "up");
+  assert.equal(f(row, "source"), "oanda-1:quotes");
+  assert.equal(f(row, "age"), "2 s", "the deployment's clock, not the browser's");
+  assert.equal(f(row, "limit"), "stale after 5 s");
+  assert.equal(f(row, "why"), "–");
+  assert.ok(!row.hasAttribute("data-stale"));
+  assert.equal(row.title, "EUR/USD bid 1.08415 ask 1.08425; source oanda-1:quotes; 2 s old");
+  t.mock.timers.tick(1000);
+  assert.equal(f(row, "age"), "3 s", "counting on");
+  t.mock.timers.tick(3000);
+  assert.ok(row.hasAttribute("data-stale"), "past its ceiling");
+  assert.equal(f(row, "state"), "stale");
+  assert.equal(row.querySelector('[data-f="state"]').getAttribute("data-state"), "stale");
+  assert.match(row.title, /6 s old; stale$/);
+  live.stop();
+});
+
+test("om-live cells: out of session a value is closed with its age, never stale", async (t) => {
+  const { live, row } = await started(t, [value({ closed: true, at_ms: NOW - 3 * 3600000, stale_at_ms: NOW - 3 * 3600000 + 5000 })]);
+  assert.ok(row.hasAttribute("data-closed"));
+  assert.ok(!row.hasAttribute("data-stale"), "out of session, staleness is not counted");
+  assert.equal(f(row, "state"), "closed");
+  assert.equal(f(row, "age"), "3 h");
+  assert.match(row.title, /closed, 3 h old$/);
+  live.stop();
+});
+
+test("om-live cells: with no ceiling declared a value says so and is never stale", async (t) => {
+  const { live, row } = await started(t, [value({ stale_at_ms: 0, at_ms: NOW - 86400000 * 3 })]);
+  assert.ok(row.hasAttribute("data-no-limit"));
+  assert.ok(!row.hasAttribute("data-stale"));
+  assert.equal(f(row, "limit"), "no stale limit declared");
+  assert.equal(f(row, "age"), "3 d");
+  assert.match(row.title, /3 d old; no stale limit declared$/);
+  live.stop();
+});
+
+test("om-live cells: a value with nothing to show says why, never a blank or an old figure", async (t) => {
+  const { live, row, cell, es } = await started(t, [value(), { ...value(), key: "cell:EUR/JPY", f: { mid: "162.10" } }]);
+  assert.equal(cell.textContent, "162.10");
+  es.send(5, { rows: [value({ f: { chg: "" }, why: "no EUR/USD quote is entitled", at_ms: 0, stale_at_ms: 0 })], sent_ms: NOW });
+  assert.ok(row.hasAttribute("data-missing"));
+  assert.equal(f(row, "mid"), "–", "the old figure is not left");
+  assert.equal(f(row, "chg"), "–");
+  assert.equal(f(row, "why"), "no EUR/USD quote is entitled");
+  assert.equal(f(row, "age"), "–");
+  assert.equal(f(row, "state"), "no value");
+  assert.equal(row.querySelector('[data-f="state"]').getAttribute("data-state"), "missing");
+  assert.equal(row.title, "EUR/USD bid 1.08415 ask 1.08425; no EUR/USD quote is entitled");
+  es.send(6, { rows: [], removed: ["cell:EUR/JPY"], sent_ms: NOW });
+  assert.equal(cell.textContent, "–");
+  assert.equal(cell.getAttribute("data-why"), "no longer served");
+  live.stop();
+});
+
+test("om-live cells measure quote-to-screen and each row's redraws for the browser check", async (t) => {
+  globalThis.meridianLive = undefined;
+  const { live, es } = await started(t, [value()]);
+  const frames = [];
+  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+  // A new quote: the server's part is sent_ms less recorded_ms.
+  es.send(5, { rows: [value({ f: { mid: "1.08430" }, recorded_ms: NOW + 900 })], sent_ms: NOW + 1000 });
+  // The same input again (an age or a session changed): not a new quote.
+  es.send(6, { rows: [value({ f: { mid: "1.08430" }, closed: true, recorded_ms: NOW + 900 })], sent_ms: NOW + 1300 });
+  // A key no element shows: neither drawn nor counted.
+  es.send(7, { rows: [value({ key: "pair:GBP/USD", recorded_ms: NOW + 1400 })], sent_ms: NOW + 1500 });
+  frames.forEach((fn) => fn());
+  delete globalThis.requestAnimationFrame;
+  const held = live.measures;
+  assert.equal(held, globalThis.meridianLive, "the samples' window.meridianLive, read as before");
+  assert.equal(held.quoteToScreen.length, 1);
+  assert.ok(held.quoteToScreen[0] >= 100 && held.quoteToScreen[0] < 1000, `server 100 ms plus the frame: ${held.quoteToScreen[0]}`);
+  assert.equal(held.toFrame.length, 3);
+  assert.deepEqual(Object.keys(held.redraws), ["pair:EUR/USD"]);
+  assert.equal(held.redraws["pair:EUR/USD"].length, 2);
+  assert.equal(held.events, 3);
+  assert.equal(held.snapshots, 1);
+  const said = held.summary();
+  assert.equal(said.ticking_row_redraws_per_second, 2);
+  assert.equal(said.quote_to_screen_p99_ms, held.quoteToScreen[0]);
+  assert.equal(said.rows, 1);
+  live.stop();
+});

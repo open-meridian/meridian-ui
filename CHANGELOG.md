@@ -4,6 +4,31 @@ What each release of the kit adds. A 0.x release only adds: nothing is
 removed or renamed. Releases before 0.13.0 are described in the README's
 opening and in each release's commit ("Kit 0.12.0: …").
 
+## 0.16.0
+
+`om-live` keeps a page's live values: never blind (meridian-design rule 1050;
+`spec/one-data-access-model.md` §§5 and 6; ruling 1070). No new component.
+
+- **`om-live cells`**: each value an SDK's `pages.live_values` sends is
+  applied to the elements marked `data-live="<key>"`, in the document or in
+  the element `cells` names: its texts (`data-f`) and tones
+  (`data-tone-<name>`), its source, its age counted on once a second on the
+  deployment's clock (the snapshot's `now_ms`, each event's `sent_ms`), a
+  stale flag past its ceiling, closed out of session and never stale there,
+  "no stale limit declared" where it has no ceiling, and why it has nothing
+  to show, never a blank or a figure left over. The kit fills the fields
+  `age`, `source`, `state`, `limit` and `why` and the hover text, and marks
+  the element `data-stale`, `data-closed`, `data-missing` and
+  `data-no-limit`, which its CSS styles.
+- **Measured for the browser check**: each change's quote-to-screen (the
+  server's part plus the event's receipt to its next frame) and each row's
+  redraws, on `window.meridianLive`, the shape the step 3a samples' own
+  script used (`quoteToScreen`, `redraws`, `events`, `snapshots`), with
+  `toFrame` and `summary()` added (`quote_to_screen_p99_ms`,
+  `ticking_row_redraws_per_second`).
+- The gallery's sample page has a Rates tab: a live, a stale, a closed, an
+  unlimited and a missing value.
+
 ## 0.15.0
 
 An entry grid's instrument column brings in what the page does not hold yet,
