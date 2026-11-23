@@ -4,6 +4,29 @@ What each release of the kit adds. A 0.x release only adds: nothing is
 removed or renamed. Releases before 0.13.0 are described in the README's
 opening and in each release's commit ("Kit 0.12.0: …").
 
+## 0.17.0
+
+Things to open, and a status in a word. For the dashboard's home and its
+Settings › Plugins; every rule scheme properties and brand tokens only.
+
+- **`.open-grid`, `.open-item`**: a grid of equal tiles to open, each a mark,
+  a name on one line and Open (`.button`), a second line a `.hint`; and
+  `.open-grid.list`, one-line rows. Hover lifts a tile 1 px (not under
+  reduced motion); focus is a 2 px accent outline.
+- **`.monogram`, `.monogram.small`**: a thing's initials, or an image inside.
+- **`.segmented`**: a choice of views, icon and word, `aria-pressed`; the
+  word read, not shown, on a phone.
+- **`.empty-state .empty-icon`**: an empty state's mark.
+- **om-pager pages grid rows**: rows in a CSS grid are paged by whole grid
+  rows times its columns; the pager is drawn only past one page.
+- **om-pager `label`**: the word before the range, "Rows" by default;
+  `label=""` says "1–8 of 21".
+- **om-status `badge`**: the label as a badge toned by the state, its note
+  placed over the page (above the badge where the window's bottom is near),
+  so no table cuts it off.
+- **`tr.attention`**: a bar at the start of a row that needs a person.
+- **A one-line table's cell holding an `om-status`** lets its note out.
+
 ## 0.16.0
 
 `om-live` keeps a page's live values: never blind (meridian-design rule 1050;

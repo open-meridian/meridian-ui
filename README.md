@@ -14,7 +14,7 @@ It is framework-free: CSS and custom elements, used the same way from plain
 HTML, React, Vue or Svelte. It has no runtime dependencies and loads nothing
 from anywhere but itself. The design is meridian-design's
 `spec/plugin-pages-share-one-kit.md`, and its role pages' parts
-`spec/plugin-pages-follow-their-role.md`. This is release 0.16.0; the guide to
+`spec/plugin-pages-follow-their-role.md`. This is release 0.17.0; the guide to
 building a plugin's page with it is at
 [open-meridian.dev](https://open-meridian.dev/how-to/build-a-plugin-page/).
 
@@ -188,6 +188,32 @@ keeps them.
 | `.menu`, `.menu-pop`, `dialog` | A `<details class="menu">` menu, and dialogs with `.dialog-head`, `.dialog-body`, `.dialog-foot` |
 | `.chips`, `.chip` | Removable filters |
 | Text | `.muted`, `.faint`, `.hint`, `.mono`, `.num`; `.bad-ink`, `.good-ink`, `.warn-ink`, `.buy-ink`, `.sell-ink`; `.row` and `.spacer`; `ul.plain`; `.visually-hidden` |
+
+### Things to open
+
+A grid of things to open (0.17.0): equal tiles, each its mark,
+its name on one line and Open, or one-line rows (`.open-grid.list`). The
+whole item is one link and one tab stop, named by its `aria-label`; its
+`.button` is the link's look, not a second control. A second line, where two
+items would read the same, is a `.hint`. Paged by `om-pager` in whole grid
+rows.
+
+```html
+<om-pager label=""><ul class="open-grid" aria-label="Your plugins">
+  <li><a class="open-item" href="/plugins/alpaca-1" aria-label="Open alpaca" title="open-meridian/alpaca">
+    <span class="monogram" aria-hidden="true">A</span><strong>alpaca</strong><span class="button" aria-hidden="true">Open</span></a></li>
+  <li><a class="open-item" href="/plugins/fed-board-1" aria-label="Open fed-board" title="open-meridian/fed-board">
+    <span class="monogram" aria-hidden="true">FB</span><strong>fed-board</strong><span class="button" aria-hidden="true">Open</span></a></li>
+</ul></om-pager>
+```
+
+A thing's mark (`.monogram`, 40 px; `.monogram.small`, 28 px, beside a name
+in a row) is its initials until it declares an image, which fills it. A
+choice of views (`.segmented`, `role="group"`) is buttons pressed one at a
+time (`aria-pressed`), each an icon and a word in a `span`; on a phone the
+word is read, not shown. An empty state's mark (`.empty-icon`) is a disc
+holding one of the kit's icons. A row that needs a person (`tr.attention`) is
+marked by a bar at its start, never washed; what it needs is said in the row.
 
 ## Web components
 
@@ -439,6 +465,19 @@ hides it until the pointer or focus leaves. Every word is set as text, never
 as markup. What the page puts inside is shown, beside the dot the kit's CSS
 draws from `state`, until the kit's script draws it: so without script the
 label, detail and moment show as plain text. `state` is also a property.
+
+**As a worded badge** (`badge`, 0.17.0). The label is drawn as a badge
+toned by `state` (`ok` good, `warn` warn, `error` bad; `busy` and any other
+neutral), in place of the dot: one status word, its note on hover, focus or a
+tap as the dot's, the detail and the moment its description. The note is
+placed over the page, under the badge or, where the window's bottom is near,
+above it (`data-up`), so a table, its one-line cells or a scrolling box never
+cut it off. A one-line table's cell holding a status lets it out.
+
+```html
+<om-status badge state="ok" label="Working" detail="Last data 20 s ago.">Working</om-status>
+<om-status badge state="error" label="Not healthy" detail="Tradier refused the token (401).">Not healthy</om-status>
+```
 
 **In the page's head.** Marked `data-om-header`, the head's status is the
 plugin's own, which a framed page hands to the host to draw beside the
@@ -720,8 +759,12 @@ store `detail.layout`, and set `layout` from it when the page loads.
 Pages of rows instead of a long page (0.10.0), as many a page as fit the
 page's [height budget](#one-screen), so the page fits one screen. It pages
 the rows inside it: the first table's body rows (an `om-grid`'s too), or else
-its `.list-row`s; and draws the pager under them: Previous, "Rows 1–12 of
-240", Next, on one line.
+its `.list-row`s, or else the items of its `.open-grid` (0.17.0); and draws
+the pager under them: Previous, "Rows 1–12 of 240", Next, on one line.
+Rows that sit in a CSS grid, [things to open](#things-to-open) say, are paged
+by whole grid rows (0.17.0): a page is as many of the grid's rows as fit,
+times its columns, read from its `grid-template-columns` as laid out. The
+pager is drawn only when there is more than one page.
 
 ```html
 <om-pager total="240" offset="0" size="25">
@@ -752,6 +795,7 @@ what the page holds:
 | `offset-param`, `size-param` | The query's names for the offset and the size (default `offset` and `size`) |
 | `search` | Since 0.11.0, a [search](#search) above the rows, beside the pager, its words the box's name. Rows all here: narrowed as typed, by each row's text. A server's pages (`total` given): Enter asks the server |
 | `search-param` | Since 0.11.0, the query's name for a server's search (default `q`) |
+| `label` | Since 0.17.0, the word before the range (default "Rows"); `label=""` says "1–8 of 21" |
 
 | Property, method or event | |
 |---|---|

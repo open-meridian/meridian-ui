@@ -663,6 +663,20 @@ om-status .om-status-label { display: block; font-weight: 650; color: var(--ink)
 om-status[state="error"] .om-status-label { color: var(--danger); }
 om-status :is(.om-status-detail, .om-status-at) { display: block; color: var(--ink-soft); }
 om-status[state="error"] .om-status-detail { color: var(--ink); }
+/* A worded status (`badge`, 0.17.0): the label is a badge toned by the state
+ * (ok good, warn warn, error bad, any other neutral), pressed for the same
+ * note; the note is placed over the page by the kit, below the badge or,
+ * where the window's bottom is near, above it, so no table cuts it off. */
+om-status[badge]:not(:defined)::before { content: none; display: none; }
+om-status[badge] button.om-status-badge { margin: 0; border: 0; padding: .12rem .55rem; border-radius: var(--radius-pill);
+  font-size: .8rem; line-height: 1.4; font-weight: 550; cursor: help; transition: none; }
+om-status[badge] button.om-status-badge:not(.good, .warn, .bad):hover { background: var(--line-soft); }
+om-status[badge] button.om-status-badge.good:hover { background: var(--good-wash); }
+om-status[badge] button.om-status-badge.warn:hover { background: var(--warn-wash); }
+om-status[badge] button.om-status-badge.bad:hover { background: var(--danger-wash); }
+om-status[badge] button.om-status-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+om-status[badge] .om-status-note { position: fixed; min-width: 14rem; }
+om-status[badge][data-up] .om-status-note::before { top: auto; bottom: -.5rem; }
 
 /* ── om-instrument-picker ────────────────────────────────────────────────── */
 
@@ -1065,3 +1079,79 @@ om-sidebar .om-sidebar-drawer button.om-sidebar-close { min-width: 2.75rem; just
   om-sidebar button.om-sidebar-open:hover { background: var(--hover); }
   om-sidebar .om-sidebar-here { min-width: 0; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ── Things to open (0.17.0) ─────────────────────────────────────────────── */
+
+/* A grid of things to open: equal tiles, each its mark, its name on one line
+ * and Open (.open-grid, .open-item), or one-line rows (.open-grid.list). The
+ * whole item is one link and one tab stop; its .button is the link's look,
+ * not a second control. A second line, where two items would read the same,
+ * is a .hint. om-pager pages it by whole grid rows. */
+.open-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
+.open-grid > li { min-width: 0; }
+.open-item { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); height: 100%;
+  padding: var(--space-4); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); color: var(--ink); text-decoration: none;
+  transition: border-color .15s, transform .15s, background-color .15s; }
+.open-item:hover { border-color: var(--line-strong); transform: translateY(-1px); text-decoration: none; }
+.open-item:hover .button { background: var(--hover); }
+.open-item:active { transform: none; }
+.open-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.open-item > strong { max-width: 100%; font-weight: 600; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.open-item > .hint { max-width: 100%; margin-top: -.35rem; font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.open-item > .button { width: 100%; margin-top: auto; }
+@media (prefers-reduced-motion: reduce) { .open-item, .open-item:hover { transition: none; transform: none; } }
+@media (max-width: 40rem) {
+  .open-grid { gap: var(--space-2); }
+  .open-item { padding: var(--space-3); }
+  .open-grid .monogram { width: 2.25rem; height: 2.25rem; }
+}
+/* The list: one card of one-line rows, as many columns as fit (16rem each). */
+.open-grid.list { gap: 0; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
+.open-grid.list > li { border-top: 1px solid var(--line-soft); margin-top: -1px; }
+.open-grid.list .open-item { flex-direction: row; gap: var(--space-3); height: auto; min-height: 3rem;
+  padding: var(--space-2) var(--space-4); background: none; border: 0; border-radius: 0; box-shadow: none; }
+.open-grid.list .open-item:hover { transform: none; background: var(--hover); }
+.open-grid.list .open-item:focus-visible { outline-offset: -2px; }
+.open-grid.list .open-item > strong { flex: 1 1 0; min-width: 0; text-align: left; }
+.open-grid.list .open-item > .hint { display: none; }
+.open-grid.list .open-item > .button { width: auto; margin: 0; padding: .22rem .7rem; font-size: .86rem; }
+.open-grid.list .monogram { width: 2rem; height: 2rem; font-size: .78rem; }
+@media (max-width: 40rem) { .open-grid.list .open-item { min-height: 2.75rem; } }
+
+/* A thing's mark (.monogram): its initials, upper-cased here, until it
+ * declares an image, which fills it. .small beside a name in a row. */
+.monogram { display: inline-grid; place-items: center; flex: none; width: 2.5rem; height: 2.5rem;
+  border-radius: var(--radius); background: var(--accent-wash); color: var(--accent);
+  font-weight: 650; font-size: .92rem; letter-spacing: .02em; line-height: 1; text-transform: uppercase; }
+.monogram img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.monogram.small { width: 1.75rem; height: 1.75rem; font-size: .7rem; border-radius: var(--radius-sm); }
+
+/* A segmented choice (.segmented, role="group"): buttons pressed one at a
+ * time (aria-pressed), each an icon and a word; on a phone the word is read,
+ * not shown. */
+.segmented { display: inline-flex; flex: none; gap: 2px; padding: 2px; background: var(--line-soft); border-radius: var(--radius); }
+.segmented button { gap: .35rem; padding: .3rem .6rem; border: 0; background: none; color: var(--ink-soft);
+  font-size: .86rem; border-radius: calc(var(--radius) - 2px); }
+.segmented button:hover { background: none; color: var(--ink); }
+.segmented button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: var(--shadow); outline: 1px solid var(--line); }
+.segmented svg { width: 1rem; height: 1rem; flex: none; }
+@media (max-width: 40rem) {
+  .segmented button { padding: .45rem .55rem; }
+  .segmented button:has(svg) > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* An empty state's mark (.empty-icon): a disc holding one of the kit's icons. */
+.empty-state .empty-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto var(--space-3);
+  border-radius: 50%; background: var(--accent-wash); color: var(--accent); }
+.empty-state .empty-icon svg { width: 1.4rem; height: 1.4rem; }
+.empty-state .empty-icon + strong + p, .empty-state .empty-icon ~ p { max-width: 28rem; margin-inline: auto; }
+
+/* A row that needs a person (tr.attention): a bar at its start, never the
+ * row washed; what it needs is said in the row. */
+tr.attention > :first-child { box-shadow: inset 3px 0 0 var(--warn-ink); }
+
+/* A one-line cell holding a status lets its note out. */
+table.one-line td:has(om-status) { overflow: visible; }
