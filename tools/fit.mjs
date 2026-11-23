@@ -390,6 +390,113 @@ async function sidebarChecks(browser, base, shots) {
   return failed;
 }
 
+/** A page in the kit's shell whose sidebar is taller than the window (the
+ * dashboard's Settings › Plugins, say): a header, the sidebar under it held to
+ * the budget, and beside it the page's own column, a 22-row table in an
+ * om-pager. Served by the check itself, beside the gallery. */
+const SHELL_PAGER = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A pager in the shell</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<script type="module" src="../components/om-sidebar.js"></script>
+<script type="module" src="../components/om-pager.js"></script>
+<style>
+  :root { --om-sidebar-top: 3rem; }
+  .stand-in-bar { display: flex; align-items: center; height: 3rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--card); }
+</style>
+</head>
+<body>
+<header class="stand-in-bar"><strong>Open Meridian</strong></header>
+<div class="om-shell">
+  <om-sidebar label="Settings">
+    <script type="application/json">
+    { "groups": ${JSON.stringify(
+      Array.from({ length: 6 }, (_, g) => ({
+        label: `Group ${g + 1}`,
+        items: Array.from({ length: 7 }, (_, i) => ({ id: `g${g}i${i}`, label: `Item ${g + 1}.${i + 1}`, href: `#g${g}i${i}` })),
+      })),
+    )} }
+    </script>
+  </om-sidebar>
+  <main class="om-shell-main">
+    <div class="page-head"><div><h1>Plugins</h1><p>Every plugin installed, paged to the screen.</p></div></div>
+    <om-pager>
+      <table class="one-line">
+        <thead><tr><th>Plugin</th><th>Version</th></tr></thead>
+        <tbody>${Array.from({ length: 22 }, (_, i) => `<tr><td>Plugin ${i + 1}</td><td>1.${i}.0</td></tr>`).join("")}</tbody>
+      </table>
+    </om-pager>
+  </main>
+</div>
+</body>
+</html>`;
+
+/**
+ * om-pager in the shell, in a real browser: with the sidebar taller than the
+ * window, the pager shows the true fit of its own column, however it got
+ * there: opened at a height, or the window made taller or shorter after.
+ * The true fit: the rows shown and the pager end within the budget, and one
+ * row more would not (or every row is shown). Returns what failed.
+ */
+async function shellPagerChecks(browser, base, shots) {
+  const failed = [];
+  const url = `${base}gallery/shell-pager.html`;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.route(url, (route) => route.fulfill({ status: 200, contentType: "text/html", body: SHELL_PAGER }));
+  const page = await context.newPage();
+  page.on("pageerror", (e) => failed.push(`a pager in the shell: the page threw: ${e.message}`));
+  const measure = () => page.evaluate(() => {
+    const pager = document.querySelector("om-pager");
+    const nav = document.querySelector("om-sidebar > .om-sidebar-nav");
+    const main = document.querySelector(".om-shell-main");
+    const budget = innerHeight;
+    const rows = [...pager.querySelectorAll("tbody tr")].filter((r) => !r.hidden);
+    const tallest = Math.max(...rows.map((r) => r.getBoundingClientRect().height));
+    const end = pager.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(main).paddingBottom) || 0);
+    return {
+      budget,
+      shown: pager.shown,
+      end: Math.round(end),
+      tallest: Math.round(tallest),
+      // The premise: the sidebar is taller than the room under the header.
+      sidebarHeld: !!nav && nav.scrollHeight > nav.clientHeight + 1,
+      fits: end <= budget + 0.5,
+      oneMoreFits: end + tallest <= budget + 0.5,
+    };
+  });
+  const check = (m, how) => {
+    const at = `a pager in the shell, ${how}`;
+    if (!m.sidebarHeld) failed.push(`${at}: the sidebar is not taller than the window: ${JSON.stringify(m)}`);
+    const all = m.shown.last - m.shown.first + 1 === m.shown.total;
+    if (!m.fits) failed.push(`${at}: the pager ends at ${m.end} of ${m.budget}, past the screen: ${JSON.stringify(m.shown)}`);
+    else if (!all && m.oneMoreFits) failed.push(`${at}: ${m.shown.size} rows end at ${m.end} of ${m.budget}, room for one more of ${m.tallest}: not the true fit`);
+  };
+  const resize = async (height) => {
+    await page.setViewportSize({ width: 1280, height });
+    await settled(page);
+  };
+  await page.goto(url);
+  await settled(page);
+  check(await measure(), "opened at 1280×800");
+  if (shots) await page.screenshot({ path: join(shots, "shell-pager-800.png") });
+  await resize(600);
+  await page.goto(url);
+  await settled(page);
+  check(await measure(), "opened at 1280×600");
+  await resize(800);
+  check(await measure(), "made 1280×800 from 600");
+  await resize(1080);
+  check(await measure(), "made 1280×1080 from 800");
+  await resize(700);
+  check(await measure(), "made 1280×700 from 1080");
+  await context.close();
+  return failed;
+}
+
 /**
  * The entry grid on a phone (ruled 2026-10-05), in a real browser: each row
  * one line, its number, the first two columns and "…"; "…" opens the row
@@ -885,6 +992,9 @@ async function main() {
     const sidebar = await sidebarChecks(browser, base, shots);
     console.log(sidebar.length ? `kit 0.13.0, the sidebar: FAILED\n  ${sidebar.join("\n  ")}` : `kit 0.13.0, the sidebar: at ${SIDEBAR_WIDTHS.join(", ")} px, light and dark, nothing sideways and the page fitting; one item aria-current by hash, by query and on a Manage page by its attribute, which keeps its own tabs under one sidebar; on a desktop Tab goes collapse then the items in order, each with its focus ring, Enter collapses it to icons with tooltips, remembered across a reload; below 768 px the bar names the current item, Menu opens the drawer, with no collapse button, with focus on it and Tab never reaching the page under it, Escape closes it with focus back on Menu, and an item followed shuts it`);
     failed.push(...sidebar);
+    const shell = await shellPagerChecks(browser, base, shots);
+    console.log(shell.length ? `a pager in the shell: FAILED\n  ${shell.join("\n  ")}` : "a pager in the shell: with the sidebar taller than the window, om-pager shows the true fit of its own column, opened at 800 and 600 tall, and made 800, 1080 and 700 tall after");
+    failed.push(...shell);
   } finally {
     await browser.close();
     server.close();

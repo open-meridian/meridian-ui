@@ -26,6 +26,10 @@ Settings › Plugins; every rule scheme properties and brand tokens only.
   so no table cuts it off.
 - **`tr.attention`**: a bar at the start of a row that needs a person.
 - **A one-line table's cell holding an `om-status`** lets its note out.
+- **A pager in the shell fits its own column**: in `.om-shell` laid out as a
+  row, om-pager (and om-entry-grid's and om-account-map's pages) measure the
+  page's column beside the sidebar, not the shell, which a sidebar taller
+  than the window holds to the budget; the rows shown follow the window.
 
 ## 0.16.0
 

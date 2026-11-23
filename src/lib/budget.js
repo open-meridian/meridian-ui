@@ -25,20 +25,56 @@ export function pageBudget(doc = document) {
 /** How tall the page's content is, in CSS pixels, however tall the viewport:
  * the furthest a child of the body reaches, with its margin and the body's
  * padding under it. A body held to the viewport's height (min-height: 100vh)
- * does not count, only what is in it. */
+ * does not count, only what is in it.
+ *
+ * In the kit's shell laid out as a row (.om-shell: om-sidebar beside the
+ * page's own column), the shell ends where its column's content does, not
+ * where its box does: the sidebar is held to the budget and stretches the
+ * shell to it, so the box says nothing of the rows in the column. An element
+ * holding such a shell likewise ends where its content does. Pages without a
+ * shell, and a shell laid out as a column (a phone's), are measured as ever. */
 export function contentHeight(doc = document) {
   const win = doc.defaultView || globalThis;
   const body = doc.body;
   if (!body) return 0;
   const style = (el) => (win.getComputedStyle ? win.getComputedStyle(el) : { marginBottom: "0", paddingBottom: "0", position: "static", display: "block" });
-  let bottom = 0;
-  for (const child of body.children) {
-    const st = style(child);
-    if (st.display === "none" || st.position === "fixed" || st.position === "absolute") continue;
-    const r = child.getBoundingClientRect();
-    if (!r.width && !r.height) continue;
-    bottom = Math.max(bottom, r.bottom + (parseFloat(st.marginBottom) || 0));
-  }
+  const px = (v) => parseFloat(v) || 0;
+  // The furthest the laid-out children of `el` reach, each with its margin
+  // under it; -Infinity when none is laid out.
+  const under = (el) => {
+    let bottom = -Infinity;
+    for (const child of el.children) {
+      const st = style(child);
+      if (st.display === "none" || st.position === "fixed" || st.position === "absolute") continue;
+      const r = child.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      bottom = Math.max(bottom, reach(child, st, r) + px(st.marginBottom));
+    }
+    return bottom;
+  };
+  // Where the content of `el` ends: its children's reach (or its top, with
+  // none), and its padding and border under them.
+  const inner = (el, st, r) => {
+    const kids = under(el);
+    const top = r.top + px(st.borderTopWidth) + px(st.paddingTop);
+    return Math.max(top, kids) + px(st.paddingBottom) + px(st.borderBottomWidth);
+  };
+  // Where `el` ends, for the page's height.
+  const reach = (el, st, r) => {
+    if (el.classList?.contains("om-shell") && /flex$/.test(st.display || "") && !/^column/.test(st.flexDirection || "")) {
+      let bottom = -Infinity;
+      for (const column of el.children) {
+        if (column.localName === "om-sidebar") continue;
+        const cs = style(column);
+        if (cs.display === "none" || cs.position === "fixed" || cs.position === "absolute") continue;
+        bottom = Math.max(bottom, inner(column, cs, column.getBoundingClientRect()) + px(cs.marginBottom));
+      }
+      return bottom === -Infinity ? r.bottom : bottom + px(st.paddingBottom) + px(st.borderBottomWidth);
+    }
+    if (el.querySelector?.(".om-shell")) return inner(el, st, r);
+    return r.bottom;
+  };
+  const bottom = Math.max(0, under(body));
   const scroll = win.scrollY || 0;
   const measured = bottom + scroll + (parseFloat(style(body).paddingBottom) || 0) + (parseFloat(style(body).marginBottom) || 0);
   // What spills out of a box held to a height (a page laid out to the
