@@ -764,7 +764,9 @@ the pager under them: Previous, "Rows 1–12 of 240", Next, on one line.
 Rows that sit in a CSS grid, [things to open](#things-to-open) say, are paged
 by whole grid rows (0.17.0): a page is as many of the grid's rows as fit,
 times its columns, read from its `grid-template-columns` as laid out. The
-pager is drawn only when there is more than one page.
+pager is drawn only when there is more than one page. In the
+[shell](#om-sidebar) it fits the page's own column beside the sidebar
+(0.17.0), however tall the sidebar is.
 
 ```html
 <om-pager total="240" offset="0" size="25">
