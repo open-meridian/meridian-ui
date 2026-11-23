@@ -19,6 +19,13 @@
 // What the page puts inside is shown, beside a dot the kit's CSS draws from
 // `state`, until the kit draws it, so the same words serve a browser without
 // the kit's script.
+//
+// `badge` (0.17.0) draws the label itself, as a badge toned by `state` (ok
+// good, warn warn, error bad; busy and any other neutral) in place of the
+// dot: one status word, its note on hover, focus or a tap as the dot's. The
+// note is placed over the page, below the badge or, where the window's
+// bottom is near, above it (`data-up`), so a table or a scrolling box never
+// cuts it off.
 
 import { whenParsed } from "../lib/declared.js";
 import { formatMoment } from "./om-moment.js";
@@ -26,11 +33,14 @@ import { formatMoment } from "./om-moment.js";
 /** Each state the element draws, and the name its dot has when the page gives no label. */
 export const STATES = Object.freeze({ ok: "Up to date", busy: "Updating", warn: "Needs attention", error: "Failed" });
 
+/** A badge's tone for each state; any other state's badge is neutral. */
+export const TONES = Object.freeze({ ok: "good", warn: "warn", error: "bad" });
+
 let made = 0;
 
 export class OmStatus extends HTMLElement {
   static get observedAttributes() {
-    return ["state", "label", "detail", "at", "at-label", "zone"];
+    return ["state", "label", "detail", "at", "at-label", "zone", "badge"];
   }
 
   #drawn = false;
@@ -40,6 +50,7 @@ export class OmStatus extends HTMLElement {
   #label = null;
   #detail = null;
   #at = null;
+  #onScroll = () => this.#follow();
 
   connectedCallback() {
     // After the page's own words inside it are parsed, so they are replaced, not joined.
@@ -49,6 +60,13 @@ export class OmStatus extends HTMLElement {
       this.#drawn = true;
       this.#render();
     });
+    globalThis.addEventListener?.("scroll", this.#onScroll, { capture: true, passive: true });
+    globalThis.addEventListener?.("resize", this.#onScroll);
+  }
+
+  disconnectedCallback() {
+    globalThis.removeEventListener?.("scroll", this.#onScroll, { capture: true });
+    globalThis.removeEventListener?.("resize", this.#onScroll);
   }
 
   attributeChangedCallback() {
@@ -123,6 +141,9 @@ export class OmStatus extends HTMLElement {
     const detail = (this.getAttribute("detail") || "").trim();
     const shown = formatMoment(this.getAttribute("at"), this.getAttribute("zone") || "utc");
 
+    const badge = this.hasAttribute("badge");
+    this.#dot.className = badge ? `om-status-badge badge ${TONES[state] || ""}`.trim() : "om-status-dot";
+    this.#name.className = badge ? "om-status-word" : "visually-hidden";
     this.#name.textContent = label;
     this.#label.textContent = label;
     this.#detail.textContent = detail;
@@ -142,10 +163,20 @@ export class OmStatus extends HTMLElement {
     else this.#dot.removeAttribute("aria-describedby");
   }
 
+  /** A badge's note, shown now, follows its badge as the page scrolls. */
+  #follow() {
+    if (!this.hasAttribute("badge") || !this.#note) return;
+    if (this.matches(":hover, :focus-within, [open]")) this.#place();
+  }
+
   /** Keep the note inside the window: shifted left where it would run off the right edge. */
   #place() {
     const note = this.#note;
     if (!note) return;
+    if (this.hasAttribute("badge")) {
+      this.#placeOver();
+      return;
+    }
     note.style.left = "";
     const frame = globalThis.requestAnimationFrame || ((f) => setTimeout(f, 0));
     frame(() => {
@@ -154,6 +185,25 @@ export class OmStatus extends HTMLElement {
       if (!r.width || !width) return;
       const over = r.right - (width - 8);
       if (over > 0) note.style.left = `${-Math.min(over, Math.max(0, r.left - 8))}px`;
+    });
+  }
+
+  /** A badge's note, over the page: under the badge, or above it where the
+   * window's bottom is too near; never past the window's left or right. */
+  #placeOver() {
+    const note = this.#note;
+    const frame = globalThis.requestAnimationFrame || ((f) => setTimeout(f, 0));
+    frame(() => {
+      const b = this.#dot.getBoundingClientRect();
+      const n = note.getBoundingClientRect();
+      const width = document.documentElement.clientWidth || globalThis.innerWidth || 0;
+      const height = document.documentElement.clientHeight || globalThis.innerHeight || 0;
+      if (!n.width || !width || !height) return;
+      const gap = 6;
+      const up = b.bottom + gap + n.height > height - 8 && b.top - gap - n.height >= 8;
+      this.toggleAttribute("data-up", up);
+      note.style.top = `${Math.round(up ? b.top - gap - n.height : b.bottom + gap)}px`;
+      note.style.left = `${Math.round(Math.max(8, Math.min(b.left, width - 8 - n.width)))}px`;
     });
   }
 }

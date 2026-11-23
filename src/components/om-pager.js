@@ -7,12 +7,19 @@
 //   </om-pager>
 //
 // It pages the rows inside it: the first table's body rows (an om-grid's
-// too), or else its .list-row elements. How many a page is it works out from
+// too), or else its .list-row elements, or else the items of its .open-grid
+// (0.17.0). How many a page is it works out from
 // the space it is given: the page's height budget (--om-page-height, the
 // page's own viewport; framed, the frame's), less everything else on the
 // page, over the tallest row, so the page fits one screen. `rows="12"` fixes
 // the number instead. It draws the pager under them: Previous, "Rows 1–12 of
-// 240" and Next, one line.
+// 240" and Next, one line. `label` (0.17.0) is the word before the range,
+// "Rows" when it is not given; `label=""` says "1–8 of 21".
+//
+// Rows that sit in a CSS grid (0.17.0), tiles say, are paged by whole grid
+// rows: a page is as many of the grid's rows as fit, times its columns, read
+// from its `grid-template-columns` as laid out. The pager is drawn only when
+// there is more than one page.
 //
 // Two ways, by what the page holds:
 //
@@ -53,7 +60,7 @@ const PAGED = "data-om-paged";
 
 export class OmPager extends HTMLElement {
   static get observedAttributes() {
-    return ["total", "offset", "size", "rows", "offset-param", "size-param", "search", "search-param"];
+    return ["total", "offset", "size", "rows", "offset-param", "size-param", "search", "search-param", "label"];
   }
 
   #built = false;
@@ -233,9 +240,10 @@ export class OmPager extends HTMLElement {
   #candidates() {
     const table = this.querySelector("table");
     const body = table && table.querySelector(":scope > tbody");
-    const rows = table
+    let rows = table
       ? [...(body ? body.children : [])].filter((tr) => tr.localName === "tr" && !tr.classList.contains("om-grid-empty") && !tr.classList.contains("om-grid-spacer"))
       : [...this.querySelectorAll(".list-row")];
+    if (!table && !rows.length) rows = [...this.querySelectorAll(".open-grid > li")];
     // A row the page hid itself is not one to page.
     return rows.filter((r) => !r.hidden || r.hasAttribute(PAGED));
   }
@@ -284,12 +292,43 @@ export class OmPager extends HTMLElement {
     const firstShown = rows.findIndex((r) => !r.hidden);
     if (firstShown < 0) this.#apply(Math.min(rows.length, this.#fit || 10));
     this.#nav.hidden = false;
-    let fit = rowsThatFit(rows.filter((r) => !r.hidden)) ?? rows.length;
+    const grid = this.#grid(rows);
+    const step = grid ? grid.columns : 1;
+    let fit = (grid ? this.#gridRowsThatFit(rows, grid) : rowsThatFit(rows.filter((r) => !r.hidden))) ?? rows.length;
     this.#apply(fit);
-    // Rows are not all one height: while the page is still too tall, one fewer.
+    // Rows are not all one height: while the page is still too tall, one fewer
+    // (a grid's whole row fewer).
     const budget = pageBudget();
-    for (let i = 0; i < 200 && fit > 1 && contentHeight() > budget + 0.5; i++) this.#apply(--fit);
+    for (let i = 0; i < 200 && fit > step && contentHeight() > budget + 0.5; i++) this.#apply((fit -= step));
     this.#fit = fit;
+  }
+
+  /** Where the rows sit in a CSS grid: its columns and the gap between its
+   * rows, as laid out; null where they do not. */
+  #grid(rows) {
+    const parent = rows[0]?.parentElement;
+    if (!parent || !globalThis.getComputedStyle) return null;
+    const st = globalThis.getComputedStyle(parent);
+    if (!/(^|-)grid$/.test(st.display || "")) return null;
+    const tracks = (st.gridTemplateColumns || "")
+      .replace(/\[[^\]]*\]/g, " ")
+      .trim()
+      .split(/\s+(?![^(]*\))/)
+      .filter((t) => t && t !== "none");
+    return { columns: Math.max(1, tracks.length), gap: parseFloat(st.rowGap) || 0 };
+  }
+
+  /** How many fit of rows in a grid: whole grid rows of the tallest item
+   * shown, with the gap between them, times the columns. */
+  #gridRowsThatFit(rows, grid) {
+    const shown = rows.filter((r) => !r.hidden);
+    let tall = 0;
+    for (const item of shown) tall = Math.max(tall, item.getBoundingClientRect().height);
+    if (!(tall > 0)) return null;
+    const lines = Math.ceil(shown.length / grid.columns);
+    const rest = contentHeight() - (lines * tall + Math.max(0, lines - 1) * grid.gap);
+    const fit = Math.max(1, Math.floor((pageBudget() - rest + grid.gap + 0.5) / (tall + grid.gap)));
+    return fit * grid.columns;
   }
 
   /** What a page of `size` shows, from where the pager is. */
@@ -341,7 +380,9 @@ export class OmPager extends HTMLElement {
     const { first, last, total } = v.said;
     const one = v.server ? first <= 1 && last >= total : (v.pages || 1) <= 1;
     this.#nav.hidden = one;
-    this.#said.textContent = total ? `Rows ${count(first)}–${count(last)} of ${count(total)}` : "No rows";
+    const label = this.hasAttribute("label") ? this.getAttribute("label").trim() : "Rows";
+    const range = `${count(first)}–${count(last)} of ${count(total)}`;
+    this.#said.textContent = total ? (label ? `${label} ${range}` : range) : "No rows";
     if (v.server) {
       const at = (offset) => {
         const url = new URL(globalThis.location.href);
