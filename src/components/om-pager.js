@@ -8,7 +8,7 @@
 //
 // It pages the rows inside it: the first table's body rows (an om-grid's
 // too), or else its .list-row elements, or else the items of its .open-grid
-// (0.17.0). How many a page is it works out from
+// (0.17.0; its tiles by whole grid rows, its list by rows). How many a page is it works out from
 // the space it is given: the page's height budget (--om-page-height, the
 // page's own viewport; framed, the frame's), less everything else on the
 // page, over the tallest row, so the page fits one screen. `rows="12"` fixes

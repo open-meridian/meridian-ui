@@ -192,11 +192,13 @@ keeps them.
 ### Things to open
 
 A grid of things to open (0.17.0): equal tiles, each its mark,
-its name on one line and Open, or one-line rows (`.open-grid.list`). The
+its name on one line and Open, or a list (`.open-grid.list`): one a row, full
+width, its mark and name at the start and Open at the end, each row a
+one-line `.list-row`'s height. The
 whole item is one link and one tab stop, named by its `aria-label`; its
 `.button` is the link's look, not a second control. A second line, where two
-items would read the same, is a `.hint`. Paged by `om-pager` in whole grid
-rows.
+items would read the same, is a `.hint`. Paged by `om-pager`: the tiles in
+whole grid rows, the list by rows.
 
 ```html
 <om-pager label=""><ul class="open-grid" aria-label="Your plugins">
@@ -761,9 +763,10 @@ page's [height budget](#one-screen), so the page fits one screen. It pages
 the rows inside it: the first table's body rows (an `om-grid`'s too), or else
 its `.list-row`s, or else the items of its `.open-grid` (0.17.0); and draws
 the pager under them: Previous, "Rows 1–12 of 240", Next, on one line.
-Rows that sit in a CSS grid, [things to open](#things-to-open) say, are paged
-by whole grid rows (0.17.0): a page is as many of the grid's rows as fit,
-times its columns, read from its `grid-template-columns` as laid out. The
+Rows that sit in a CSS grid, [things to open](#things-to-open)' tiles say, are
+paged by whole grid rows (0.17.0): a page is as many of the grid's rows as fit,
+times its columns, read from its `grid-template-columns` as laid out; their
+list, one a row, is paged as rows. The
 pager is drawn only when there is more than one page. In the
 [shell](#om-sidebar) it fits the page's own column beside the sidebar
 (0.17.0), however tall the sidebar is.
