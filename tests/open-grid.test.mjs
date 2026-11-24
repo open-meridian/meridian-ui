@@ -145,7 +145,7 @@ test("the CSS: open grid, monogram, segmented, empty icon, attention bar, a stat
     ".open-grid {",
     ".open-item {",
     ".open-item:focus-visible",
-    ".open-grid.list {",
+    ".open-grid.list { display: block;",
     ".monogram {",
     ".monogram.small {",
     ".segmented {",

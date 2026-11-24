@@ -11,7 +11,9 @@ Settings › Plugins; every rule scheme properties and brand tokens only.
 
 - **`.open-grid`, `.open-item`**: a grid of equal tiles to open, each a mark,
   a name on one line and Open (`.button`), a second line a `.hint`; and
-  `.open-grid.list`, one-line rows. Hover lifts a tile 1 px (not under
+  `.open-grid.list`, a list: one a row, full width, mark and name at the
+  start and Open at the end, each row a one-line `.list-row`'s height (2.75rem),
+  paged by om-pager as rows. Hover lifts a tile 1 px (not under
   reduced motion); focus is a 2 px accent outline.
 - **`.monogram`, `.monogram.small`**: a thing's initials, or an image inside.
 - **`.segmented`**: a choice of views, icon and word, `aria-pressed`; the

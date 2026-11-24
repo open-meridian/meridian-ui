@@ -1083,10 +1083,10 @@ om-sidebar .om-sidebar-drawer button.om-sidebar-close { min-width: 2.75rem; just
 /* ── Things to open (0.17.0) ─────────────────────────────────────────────── */
 
 /* A grid of things to open: equal tiles, each its mark, its name on one line
- * and Open (.open-grid, .open-item), or one-line rows (.open-grid.list). The
+ * and Open (.open-grid, .open-item), or a list of one-line rows (.open-grid.list). The
  * whole item is one link and one tab stop; its .button is the link's look,
  * not a second control. A second line, where two items would read the same,
- * is a .hint. om-pager pages it by whole grid rows. */
+ * is a .hint. om-pager pages the tiles by whole grid rows. */
 .open-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3);
   grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); }
 .open-grid > li { min-width: 0; }
@@ -1107,19 +1107,20 @@ om-sidebar .om-sidebar-drawer button.om-sidebar-close { min-width: 2.75rem; just
   .open-item { padding: var(--space-3); }
   .open-grid .monogram { width: 2.25rem; height: 2.25rem; }
 }
-/* The list: one card of one-line rows, as many columns as fit (16rem each). */
-.open-grid.list { gap: 0; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+/* The list: one card of one-line rows, one thing a row and full width, its
+ * mark and name at the start and Open at the end, each a one-line .list-row's
+ * height. Not a grid: om-pager pages it by rows' heights, as a list. */
+.open-grid.list { display: block;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
 .open-grid.list > li { border-top: 1px solid var(--line-soft); margin-top: -1px; }
-.open-grid.list .open-item { flex-direction: row; gap: var(--space-3); height: auto; min-height: 3rem;
-  padding: var(--space-2) var(--space-4); background: none; border: 0; border-radius: 0; box-shadow: none; }
+.open-grid.list .open-item { flex-direction: row; gap: var(--space-3); height: auto; min-height: 2.75rem;
+  padding: .3rem var(--space-4); background: none; border: 0; border-radius: 0; box-shadow: none; }
 .open-grid.list .open-item:hover { transform: none; background: var(--hover); }
 .open-grid.list .open-item:focus-visible { outline-offset: -2px; }
 .open-grid.list .open-item > strong { flex: 1 1 0; min-width: 0; text-align: left; }
 .open-grid.list .open-item > .hint { display: none; }
 .open-grid.list .open-item > .button { width: auto; margin: 0; padding: .22rem .7rem; font-size: .86rem; }
 .open-grid.list .monogram { width: 2rem; height: 2rem; font-size: .78rem; }
-@media (max-width: 40rem) { .open-grid.list .open-item { min-height: 2.75rem; } }
 
 /* A thing's mark (.monogram): its initials, upper-cased here, until it
  * declares an image, which fills it. .small beside a name in a row. */

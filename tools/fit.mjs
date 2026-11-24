@@ -497,6 +497,124 @@ async function shellPagerChecks(browser, base, shots) {
   return failed;
 }
 
+/** Things to open (0.17.0), the dashboard's home: `n` plugins in an om-pager,
+ * as tiles or (`list`) as the list. Served by the check itself, beside the
+ * gallery. */
+const NAMES = ["alpaca", "coinbase", "ecb", "fed-board", "fred", "kalshi", "kraken", "ny-fed", "oanda", "polymarket",
+  "polymarket-us", "pyth", "sample-multi-asset", "sample-pricing", "sample-reporting", "snaptrade", "tiingo", "tradier",
+  "truefx", "us-treasury", "workspace"];
+const openPage = (n, list) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Things to open</title>
+<link rel="stylesheet" href="../meridian.css">
+<script src="../meridian.js"></script>
+<script type="module" src="../components/om-pager.js"></script>
+</head>
+<body>
+<main class="page wide">
+  <div class="page-head"><div><h1>Home</h1><p>Your plugins.</p></div></div>
+  <om-pager label=""><ul class="open-grid${list ? " list" : ""}" aria-label="Your plugins">${NAMES.slice(0, n)
+    .map((name) => `<li><a class="open-item" href="#${name}" aria-label="Open ${name}"><span class="monogram" aria-hidden="true">${name
+      .split("-").map((w) => w[0]).join("").slice(0, 2)}</span><strong>${name}</strong><span class="button" aria-hidden="true">Open</span></a></li>`)
+    .join("")}</ul></om-pager>
+</main>
+</body>
+</html>`;
+
+/** The widths the list is held to: a phone, the designer's 582 and a desktop. */
+const OPEN_WIDTHS = [375, 582, 1280];
+
+/**
+ * Things to open as a list, in a real browser: one plugin a row, full width,
+ * its mark and name at the start and Open at the end, each row one line at
+ * the height of a one-line .list-row (2.75rem); with 4 or 21, at each width,
+ * light and dark, nothing sideways, and paged to its true fit (the pager ends
+ * within the budget and one row more would not). The tiles beside it are
+ * still a grid: 4 at 1280 sit on one row. Returns what failed.
+ */
+async function openListChecks(browser, base, shots) {
+  const failed = [];
+  for (const mode of ["light", "dark"]) {
+    for (const n of [4, 21]) {
+      for (const width of OPEN_WIDTHS) {
+        const at = `things to open as a list, ${n} at ${width} ${mode}`;
+        const url = `${base}gallery/open-list-${n}.html`;
+        const context = await browser.newContext({ viewport: { width, height: 800 } });
+        await context.route((u) => u.href.startsWith(`${url}?`), (route) => route.fulfill({ status: 200, contentType: "text/html", body: openPage(n, true) }));
+        const page = await context.newPage();
+        page.on("pageerror", (e) => failed.push(`${at}: the page threw: ${e.message}`));
+        await page.goto(`${url}?om-mode=${mode}`);
+        await settled(page);
+        const m = await page.evaluate(() => {
+          const list = document.querySelector("ul.open-grid.list");
+          const pager = document.querySelector("om-pager");
+          const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+          const box = list.getBoundingClientRect();
+          const rows = [...list.children].filter((li) => !li.hidden).map((li) => {
+            const r = li.getBoundingClientRect();
+            const a = li.querySelector(".open-item");
+            const mark = a.querySelector(".monogram").getBoundingClientRect();
+            const name = a.querySelector("strong").getBoundingClientRect();
+            const open = a.querySelector(".button").getBoundingClientRect();
+            return {
+              top: Math.round(r.top),
+              left: Math.round(r.left - box.left - list.clientLeft),
+              width: Math.round(r.width),
+              height: Math.round(a.getBoundingClientRect().height),
+              order: mark.right <= name.left + 0.5 && name.right <= open.left + 0.5,
+              openAtEnd: Math.abs(box.right - open.right) <= 2.5 * rem,
+              oneLine: Math.abs(name.top + name.height / 2 - (open.top + open.height / 2)) < 2,
+            };
+          });
+          const tallest = Math.max(...rows.map((r) => r.height));
+          // The page ends below the pager by the page's own padding.
+          const end = pager.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(document.querySelector("main")).paddingBottom) || 0);
+          return {
+            mode: document.documentElement.getAttribute("data-om-mode"),
+            listWidth: list.clientWidth,
+            rows,
+            rowsOnALine: new Set(rows.map((r) => r.top)).size,
+            rowHeight: 2.75 * rem,
+            shown: pager.shown,
+            sideways: document.documentElement.scrollWidth > innerWidth,
+            fits: end <= innerHeight + 0.5,
+            oneMoreFits: end + tallest <= innerHeight + 0.5,
+            end: Math.round(end),
+          };
+        });
+        if (m.mode !== mode) failed.push(`${at}: the page is in ${m.mode} mode`);
+        if (m.rowsOnALine !== m.rows.length) failed.push(`${at}: ${m.rows.length} plugins sit on ${m.rowsOnALine} line(s), not one a row: ${JSON.stringify(m.rows.map((r) => [r.left, r.top]))}`);
+        for (const [i, r] of m.rows.entries()) {
+          if (r.left !== 0 || Math.abs(r.width - m.listWidth) > 1) failed.push(`${at}: row ${i + 1} is ${r.width} wide at ${r.left}, not the list's full ${m.listWidth}`);
+          if (Math.abs(r.height - m.rowHeight) > 1) failed.push(`${at}: row ${i + 1} is ${r.height} tall, not a one-line row's ${m.rowHeight}`);
+          if (!r.order || !r.openAtEnd || !r.oneLine) failed.push(`${at}: row ${i + 1} is not its mark, its name and Open at the end, on one line: ${JSON.stringify(r)}`);
+        }
+        if (m.sideways) failed.push(`${at}: the page scrolls sideways`);
+        const all = m.shown.last - m.shown.first + 1 === m.shown.total;
+        if (!m.fits) failed.push(`${at}: the pager ends at ${m.end}, past the screen: ${JSON.stringify(m.shown)}`);
+        else if (!all && m.oneMoreFits) failed.push(`${at}: ${m.shown.size} rows end at ${m.end}, room for one more: not the true fit`);
+        if (shots) await page.screenshot({ path: join(shots, `open-list-${n}-${width}-${mode}.png`) });
+        await context.close();
+      }
+    }
+  }
+  // The tiles are unchanged: a grid, 4 at 1280 on one row.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const url = `${base}gallery/open-tiles-4.html`;
+  await context.route(url, (route) => route.fulfill({ status: 200, contentType: "text/html", body: openPage(4, false) }));
+  const page = await context.newPage();
+  await page.goto(url);
+  await settled(page);
+  const tops = await page.evaluate(() => new Set([...document.querySelectorAll(".open-grid > li")].map((li) => Math.round(li.getBoundingClientRect().top))).size);
+  if (tops !== 1) failed.push(`things to open as tiles, 4 at 1280: on ${tops} rows, not one`);
+  if (shots) await page.screenshot({ path: join(shots, "open-tiles-4-1280-light.png") });
+  await context.close();
+  return failed;
+}
+
 /**
  * The entry grid on a phone (ruled 2026-10-05), in a real browser: each row
  * one line, its number, the first two columns and "…"; "…" opens the row
@@ -995,6 +1113,9 @@ async function main() {
     const shell = await shellPagerChecks(browser, base, shots);
     console.log(shell.length ? `a pager in the shell: FAILED\n  ${shell.join("\n  ")}` : "a pager in the shell: with the sidebar taller than the window, om-pager shows the true fit of its own column, opened at 800 and 600 tall, and made 800, 1080 and 700 tall after");
     failed.push(...shell);
+    const open = await openListChecks(browser, base, shots);
+    console.log(open.length ? `things to open as a list: FAILED\n  ${open.join("\n  ")}` : `things to open as a list: 4 and 21 plugins at ${OPEN_WIDTHS.join(", ")} px, light and dark, one a row and full width, mark and name at the start and Open at the end on one line, each a one-line row's height, nothing sideways, paged to the true fit; 4 tiles at 1280 still on one row`);
+    failed.push(...open);
   } finally {
     await browser.close();
     server.close();
